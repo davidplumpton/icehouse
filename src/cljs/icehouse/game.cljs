@@ -184,6 +184,7 @@
       "3" (swap! state/selected-piece assoc :size :large)
       ("a" "A") (swap! state/selected-piece assoc :orientation :pointing)
       ("d" "D") (swap! state/selected-piece assoc :orientation :standing)
+      "Escape" (reset! state/drag-state nil)
       nil)))
 
 (defn piece-selector []
@@ -195,7 +196,7 @@
       [:span.separator " | "]
       [:span.current-mode
        (if (= orientation :standing) "Defend (D)" "Attack (A)")]]
-     [:div.hotkey-hint "Press 1/2/3 for size, A/D for mode"]]))
+     [:div.hotkey-hint "Press 1/2/3 for size, A/D for mode, Esc to cancel"]]))
 
 (defn draw-stash-pyramid [size colour]
   "Returns SVG element for a pyramid in the stash"
