@@ -239,3 +239,57 @@
                 :board [existing]}
           new-piece {:x 100 :y 100 :size :small :orientation :standing :angle 0}]
       (is (not (game/valid-placement? game "p1" new-piece))))))
+
+(deftest attack-validation-error-messages-test
+  (testing "attack not pointed at any enemy piece"
+    ;; Attacker pointing away from the defender (angle = PI, pointing left)
+    ;; Defender is to the right at x=200
+    (let [defender {:id "d1" :player-id "p2" :x 200 :y 100 :size :small :orientation :standing :angle 0}
+          game {:players {"p1" {:pieces {:small 5 :medium 5 :large 5}}}
+                :board [defender]}
+          ;; Attacker at x=100, pointing left (angle = PI), defender is to the right
+          attacker {:x 100 :y 100 :size :small :orientation :pointing :angle Math/PI}]
+      (is (= "Attacking piece must be pointed at an opponent's piece"
+             (game/validate-placement game "p1" attacker)))))
+
+  (testing "attack pointed at enemy but out of range"
+    ;; Small piece has range of 30px
+    ;; Place defender 100px away (well out of range) but in trajectory
+    (let [defender {:id "d1" :player-id "p2" :x 200 :y 100 :size :small :orientation :standing :angle 0}
+          game {:players {"p1" {:pieces {:small 5 :medium 5 :large 5}}}
+                :board [defender]}
+          ;; Attacker at x=100, pointing right (angle = 0) at defender 100px away
+          attacker {:x 100 :y 100 :size :small :orientation :pointing :angle 0}]
+      (is (= "Target is out of range"
+             (game/validate-placement game "p1" attacker)))))
+
+  (testing "valid attack in trajectory and in range"
+    ;; Large piece has range of 70px, tip extends 52.5px from center
+    ;; Position attacker so tip doesn't overlap defender but is in range
+    (let [defender {:id "d1" :player-id "p2" :x 200 :y 100 :size :small :orientation :standing :angle 0}
+          game {:players {"p1" {:pieces {:small 5 :medium 5 :large 5}}}
+                :board [defender]}
+          ;; Large attacker at x=131, tip at x=183.5 (before defender left edge at 185)
+          ;; Distance = 69px < 70px range
+          attacker {:x 131 :y 100 :size :large :orientation :pointing :angle 0}]
+      (is (nil? (game/validate-placement game "p1" attacker)))))
+
+  (testing "cannot attack own piece"
+    ;; Attacker pointing at own piece should fail with trajectory error
+    ;; Use large attacker positioned so it doesn't overlap
+    (let [own-piece {:id "d1" :player-id "p1" :x 200 :y 100 :size :small :orientation :standing :angle 0}
+          game {:players {"p1" {:pieces {:small 5 :medium 5 :large 5}}}
+                :board [own-piece]}
+          attacker {:x 131 :y 100 :size :large :orientation :pointing :angle 0}]
+      (is (= "Attacking piece must be pointed at an opponent's piece"
+             (game/validate-placement game "p1" attacker)))))
+
+  (testing "cannot attack pointing piece (must target standing)"
+    ;; Attacker pointing at enemy's attacking piece should fail
+    ;; Enemy pointing up (angle = -PI/2) so its back doesn't face attacker
+    (let [enemy-attacker {:id "d1" :player-id "p2" :x 200 :y 100 :size :small :orientation :pointing :angle (- (/ Math/PI 2))}
+          game {:players {"p1" {:pieces {:small 5 :medium 5 :large 5}}}
+                :board [enemy-attacker]}
+          attacker {:x 131 :y 100 :size :large :orientation :pointing :angle 0}]
+      (is (= "Attacking piece must be pointed at an opponent's piece"
+             (game/validate-placement game "p1" attacker))))))

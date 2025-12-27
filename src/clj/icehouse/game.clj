@@ -174,14 +174,30 @@
         range (attack-range attacker)]
     (<= dist range)))
 
+(defn potential-target?
+  "Check if target could be attacked based on trajectory only (ignoring range).
+   Returns true if the target is an opponent's standing piece in the attack path."
+  [attacker target attacker-player-id]
+  (and (not= (:player-id target) attacker-player-id)  ;; Different player
+       (= (:orientation target) :standing)             ;; Must be a defender (standing)
+       (in-front-of? attacker target)))                ;; In trajectory
+
 (defn valid-target?
   "Check if target is a valid attack target for the attacker.
    Per Icehouse rules, can only target standing (defending) opponent pieces."
   [attacker target attacker-player-id]
-  (and (not= (:player-id target) attacker-player-id)  ;; Different player
-       (= (:orientation target) :standing)             ;; Must be a defender (standing)
-       (in-front-of? attacker target)                  ;; In front
+  (and (potential-target? attacker target attacker-player-id)
        (within-range? attacker target)))               ;; Within range
+
+(defn find-potential-targets
+  "Find all targets in the attack trajectory (ignoring range)"
+  [attacker player-id board]
+  (filter #(potential-target? attacker % player-id) board))
+
+(defn has-potential-target?
+  "Check if an attacking piece has at least one target in its trajectory"
+  [piece player-id board]
+  (seq (find-potential-targets piece player-id board)))
 
 (defn find-valid-targets
   "Find all valid targets for an attacking piece"
@@ -235,8 +251,11 @@
       (intersects-any-piece? piece board)
       "Piece would overlap with existing piece"
 
+      (and is-attacking? (not (has-potential-target? piece player-id board)))
+      "Attacking piece must be pointed at an opponent's piece"
+
       (and is-attacking? (not (has-valid-target? piece player-id board)))
-      "Attacking piece must target an opponent's piece within range"
+      "Target is out of range"
 
       :else nil)))
 
