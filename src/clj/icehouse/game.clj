@@ -9,6 +9,10 @@
 ;; Piece sizes in pixels (must match frontend)
 (def piece-sizes {:small 30 :medium 50 :large 70})
 
+;; Play area dimensions (must match frontend canvas)
+(def play-area-width 800)
+(def play-area-height 600)
+
 ;; Collision detection using Separating Axis Theorem (SAT)
 
 (defn rotate-point
@@ -95,6 +99,18 @@
   "Check if a piece intersects any piece on the board"
   [piece board]
   (some #(pieces-intersect? piece %) board))
+
+(defn within-play-area?
+  "Check if all vertices of a piece are within the play area bounds.
+   Returns true if piece has no position (for backwards compatibility with tests)."
+  [piece]
+  (if (and (:x piece) (:y piece))
+    (let [vertices (piece-vertices piece)]
+      (every? (fn [[x y]]
+                (and (>= x 0) (<= x play-area-width)
+                     (>= y 0) (<= y play-area-height)))
+              vertices))
+    true))
 
 ;; Attacking piece validation
 
@@ -247,6 +263,9 @@
     (cond
       (not (pos? remaining))
       "No pieces of that size remaining"
+
+      (not (within-play-area? piece))
+      "Piece must be placed within the play area"
 
       (intersects-any-piece? piece board)
       "Piece would overlap with existing piece"

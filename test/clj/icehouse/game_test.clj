@@ -293,3 +293,48 @@
           attacker {:x 131 :y 100 :size :large :orientation :pointing :angle 0}]
       (is (= "Attacking piece must be pointed at an opponent's piece"
              (game/validate-placement game "p1" attacker))))))
+
+(deftest bounds-validation-test
+  (testing "piece within play area is valid"
+    (let [game {:players {"p1" {:pieces {:small 5 :medium 5 :large 5}}}
+                :board []}
+          piece {:x 400 :y 300 :size :small :orientation :standing :angle 0}]
+      (is (nil? (game/validate-placement game "p1" piece)))))
+
+  (testing "piece partially outside left edge is invalid"
+    (let [game {:players {"p1" {:pieces {:small 5 :medium 5 :large 5}}}
+                :board []}
+          ;; Small piece is 30x30, so at x=10 the left edge would be at x=-5
+          piece {:x 10 :y 300 :size :small :orientation :standing :angle 0}]
+      (is (= "Piece must be placed within the play area"
+             (game/validate-placement game "p1" piece)))))
+
+  (testing "piece partially outside top edge is invalid"
+    (let [game {:players {"p1" {:pieces {:small 5 :medium 5 :large 5}}}
+                :board []}
+          piece {:x 400 :y 10 :size :small :orientation :standing :angle 0}]
+      (is (= "Piece must be placed within the play area"
+             (game/validate-placement game "p1" piece)))))
+
+  (testing "piece partially outside right edge is invalid"
+    (let [game {:players {"p1" {:pieces {:small 5 :medium 5 :large 5}}}
+                :board []}
+          ;; At x=795, right edge would be at 795+15=810 which exceeds 800
+          piece {:x 795 :y 300 :size :small :orientation :standing :angle 0}]
+      (is (= "Piece must be placed within the play area"
+             (game/validate-placement game "p1" piece)))))
+
+  (testing "piece partially outside bottom edge is invalid"
+    (let [game {:players {"p1" {:pieces {:small 5 :medium 5 :large 5}}}
+                :board []}
+          piece {:x 400 :y 595 :size :small :orientation :standing :angle 0}]
+      (is (= "Piece must be placed within the play area"
+             (game/validate-placement game "p1" piece)))))
+
+  (testing "large piece near edge is invalid"
+    (let [game {:players {"p1" {:pieces {:small 5 :medium 5 :large 5}}}
+                :board []}
+          ;; Large piece is 70x70, so at x=30 left edge would be at x=-5
+          piece {:x 30 :y 300 :size :large :orientation :standing :angle 0}]
+      (is (= "Piece must be placed within the play area"
+             (game/validate-placement game "p1" piece))))))
