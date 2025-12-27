@@ -193,6 +193,18 @@
   [piece player-id board]
   (seq (find-valid-targets piece player-id board)))
 
+(defn find-closest-target
+  "Find the closest valid target for an attacking piece"
+  [piece player-id board]
+  (let [targets (find-valid-targets piece player-id board)]
+    (when (seq targets)
+      (->> targets
+           (map (fn [t] {:target t
+                         :dist (distance (piece-center piece) (piece-center t))}))
+           (sort-by :dist)
+           first
+           :target))))
+
 ;; Starting piece counts per player
 (def initial-piece-counts {:small 5 :medium 5 :large 5})
 
@@ -287,15 +299,23 @@
         player-id (str (hash channel))
         game (get @games room-id)
         player-colour (get-in game [:players player-id :colour])
-        piece {:id (str (java.util.UUID/randomUUID))
-               :player-id player-id
-               :colour player-colour
-               :x (:x msg)
-               :y (:y msg)
-               :size (keyword (:size msg))
-               :orientation (keyword (:orientation msg))
-               :angle (:angle msg)
-               :target-id (:target-id msg)}
+        base-piece {:id (str (java.util.UUID/randomUUID))
+                    :player-id player-id
+                    :colour player-colour
+                    :x (:x msg)
+                    :y (:y msg)
+                    :size (keyword (:size msg))
+                    :orientation (keyword (:orientation msg))
+                    :angle (:angle msg)
+                    :target-id (:target-id msg)}
+        ;; Auto-assign target-id for attacking pieces if not provided
+        piece (if (and (= (:orientation base-piece) :pointing)
+                       (nil? (:target-id base-piece))
+                       game)
+                (if-let [target (find-closest-target base-piece player-id (:board game))]
+                  (assoc base-piece :target-id (:id target))
+                  base-piece)
+                base-piece)
         error (when game (validate-placement game player-id piece))]
     (if (and game (nil? error))
       (do
