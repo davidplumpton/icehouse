@@ -176,19 +176,27 @@
             (fn [e]
               (reset! state/drag-state nil))}]))})))
 
+(defn can-attack? []
+  "Returns true if attacking is allowed (after first 2 moves)"
+  (let [game @state/game-state
+        board-count (count (:board game))]
+    (>= board-count 2)))
+
 (defn handle-keydown [e]
   (let [key (.-key e)]
     (case key
       "1" (swap! state/selected-piece assoc :size :small)
       "2" (swap! state/selected-piece assoc :size :medium)
       "3" (swap! state/selected-piece assoc :size :large)
-      ("a" "A") (swap! state/selected-piece assoc :orientation :pointing)
+      ("a" "A") (when (can-attack?)
+                  (swap! state/selected-piece assoc :orientation :pointing))
       ("d" "D") (swap! state/selected-piece assoc :orientation :standing)
       "Escape" (reset! state/drag-state nil)
       nil)))
 
 (defn piece-selector []
-  (let [{:keys [size orientation]} @state/selected-piece]
+  (let [{:keys [size orientation]} @state/selected-piece
+        attack-allowed (can-attack?)]
     [:div.piece-selector
      [:div.hotkey-display
       [:span.current-size
@@ -196,7 +204,10 @@
       [:span.separator " | "]
       [:span.current-mode
        (if (= orientation :standing) "Defend (D)" "Attack (A)")]]
-     [:div.hotkey-hint "Press 1/2/3 for size, A/D for mode, Esc to cancel"]]))
+     [:div.hotkey-hint
+      (if attack-allowed
+        "Press 1/2/3 for size, A/D for mode, Esc to cancel"
+        "Press 1/2/3 for size, D for defend, Esc to cancel (attack unlocks after 2 moves)")]]))
 
 (defn draw-stash-pyramid [size colour]
   "Returns SVG element for a pyramid in the stash"

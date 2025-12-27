@@ -52,6 +52,7 @@
       (js/console.log "Unknown message:" msg-type))))
 
 (defn connect! []
+  (reset! state/ws-status :connecting)
   (let [url (get-ws-url)
         socket (js/WebSocket. url)]
     (reset! ws socket)
@@ -59,6 +60,7 @@
     (set! (.-onopen socket)
           (fn [_]
             (js/console.log "WebSocket connected")
+            (reset! state/ws-status :connected)
             (send! {:type "join"})))
 
     (set! (.-onmessage socket) handle-message)
@@ -66,6 +68,7 @@
     (set! (.-onclose socket)
           (fn [_]
             (js/console.log "WebSocket disconnected")
+            (reset! state/ws-status :disconnected)
             (js/setTimeout connect! 3000)))
 
     (set! (.-onerror socket)

@@ -24,6 +24,9 @@
 ;; Error message to display to the user (auto-clears after a few seconds)
 (defonce error-message (r/atom nil))
 
+;; WebSocket connection status: :connected, :disconnected, :connecting
+(defonce ws-status (r/atom :connecting))
+
 (def colours
   ["#ff6b6b"   ; red
    "#4ecdc4"   ; teal

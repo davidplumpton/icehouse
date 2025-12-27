@@ -3,7 +3,7 @@
             [icehouse.utils :as utils]))
 
 (def default-names
-  ["Alice" "Bob" "Carol" "Dave" "Eve" "Frank" "Grace" "Henry"])
+  ["Alice" "Bob" "Charles" "Dave" "Eve" "Frank" "Grace" "Henry"])
 
 (def colours
   ["#ff6b6b"   ; red

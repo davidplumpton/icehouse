@@ -6,9 +6,23 @@
             [icehouse.lobby :as lobby]
             [icehouse.game :as game]))
 
+(defn connection-warning []
+  (let [status @state/ws-status]
+    (when (not= status :connected)
+      [:div.connection-warning
+       {:style {:background (if (= status :connecting) "#ffc107" "#dc3545")
+                :color (if (= status :connecting) "#000" "#fff")
+                :padding "0.5rem 1rem"
+                :text-align "center"
+                :font-weight "bold"}}
+       (if (= status :connecting)
+         "Connecting to server..."
+         "Disconnected from server. Reconnecting...")])))
+
 (defn app []
   (let [view @state/current-view]
     [:div.app
+     [connection-warning]
      (case view
        :lobby [lobby/lobby-view]
        :game [game/game-view]
