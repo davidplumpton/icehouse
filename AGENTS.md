@@ -14,14 +14,13 @@ bd sync               # Sync with git
 
 ## Landing the Plane (Session Completion)
 
-**When ending a work session**, you MUST complete ALL steps below. Work is NOT complete until `git push` succeeds.
-
 **MANDATORY WORKFLOW:**
 
 1. **Create tests** - If appropriate
+2. **Only work on one issue at a time**
 2. **File issues for remaining work** - Create issues for anything that needs follow-up
 3. **Run quality gates** (if code changed) - Tests, linters, builds
-4. **Commit to version control**
+4. **Commit to version control, and only commit one issue at time**
 5. **Update issue status** - Close finished work, update in-progress items
 6. **Hand off** - Provide context for next session
 
