@@ -32,8 +32,8 @@
                        [half (- half)]
                        [half half]
                        [(- half) half]]
-                      ;; Pointing: triangle (2:3 aspect ratio to match frontend)
-                      (let [half-width (/ base-size 3)]
+                      ;; Pointing: triangle (3:2 length:base ratio to match frontend)
+                      (let [half-width (* base-size 0.75)]
                         [[half-width 0]
                          [(- half-width) (- half)]
                          [(- half-width) half]]))]
@@ -119,7 +119,7 @@
   "Get the tip position of a pointing piece (where the attack ray originates)"
   [piece]
   (let [base-size (get piece-sizes (:size piece) 30)
-        tip-offset (/ base-size 3)  ;; Tip is at 1/3 of base-size from center
+        tip-offset (* base-size 0.75)  ;; Tip is at 3/4 of base-size from center
         angle (or (:angle piece) 0)
         [dx dy] [(Math/cos angle) (Math/sin angle)]]
     [(+ (:x piece) (* dx tip-offset))

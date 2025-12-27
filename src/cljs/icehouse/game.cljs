@@ -51,8 +51,8 @@
         (.moveTo ctx half-size (- half-size))
         (.lineTo ctx (- half-size) half-size)
         (.stroke ctx))
-      ;; Pointing/attacking: side view triangle pointing right (2:3 aspect ratio like stash)
-      (let [half-width (/ base-size 3)]
+      ;; Pointing/attacking: side view triangle pointing right (3:2 length:base ratio like stash)
+      (let [half-width (* base-size 0.75)]
         (.beginPath ctx)
         (.moveTo ctx half-width 0)                    ; tip pointing right
         (.lineTo ctx (- half-width) (- half-size))    ; top-left corner
