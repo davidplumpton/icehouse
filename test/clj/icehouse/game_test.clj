@@ -34,44 +34,75 @@
     (testing "invalid placement for unknown player"
       (is (not (game/valid-placement? game "p2" {:size :small}))))))
 
-(deftest calculate-attacks-test
-  (testing "no attacks when no pointing pieces"
-    (let [board [{:id "piece1" :orientation :standing}
-                 {:id "piece2" :orientation :standing}]]
-      (is (= #{} (game/calculate-attacks board)))))
+(deftest calculate-iced-pieces-test
+  (testing "no icing when no pointing pieces"
+    (let [board [{:id "piece1" :orientation :standing :size :small}
+                 {:id "piece2" :orientation :standing :size :medium}]]
+      (is (= #{} (game/calculate-iced-pieces board)))))
 
-  (testing "pointing pieces with targets create attacks"
-    (let [board [{:id "piece1" :orientation :pointing :target-id "piece2"}
-                 {:id "piece2" :orientation :standing}]]
-      (is (= #{"piece2"} (game/calculate-attacks board)))))
+  (testing "single attacker must exceed defender pips to ice"
+    ;; Small attacker (1 pip) vs Small defender (1 pip) - no ice (must exceed)
+    (let [board [{:id "a1" :orientation :pointing :target-id "d1" :size :small}
+                 {:id "d1" :orientation :standing :size :small}]]
+      (is (= #{} (game/calculate-iced-pieces board))))
+    ;; Medium attacker (2 pips) vs Small defender (1 pip) - iced!
+    (let [board [{:id "a1" :orientation :pointing :target-id "d1" :size :medium}
+                 {:id "d1" :orientation :standing :size :small}]]
+      (is (= #{"d1"} (game/calculate-iced-pieces board)))))
 
-  (testing "pointing pieces without targets don't create attacks"
-    (let [board [{:id "piece1" :orientation :pointing :target-id nil}
-                 {:id "piece2" :orientation :standing}]]
-      (is (= #{} (game/calculate-attacks board)))))
+  (testing "multiple attackers combine pips"
+    ;; Two small attackers (2 pips total) vs Medium defender (2 pips) - no ice
+    (let [board [{:id "a1" :orientation :pointing :target-id "d1" :size :small}
+                 {:id "a2" :orientation :pointing :target-id "d1" :size :small}
+                 {:id "d1" :orientation :standing :size :medium}]]
+      (is (= #{} (game/calculate-iced-pieces board))))
+    ;; Three small attackers (3 pips total) vs Medium defender (2 pips) - iced!
+    (let [board [{:id "a1" :orientation :pointing :target-id "d1" :size :small}
+                 {:id "a2" :orientation :pointing :target-id "d1" :size :small}
+                 {:id "a3" :orientation :pointing :target-id "d1" :size :small}
+                 {:id "d1" :orientation :standing :size :medium}]]
+      (is (= #{"d1"} (game/calculate-iced-pieces board)))))
 
-  (testing "multiple attacks"
-    (let [board [{:id "a1" :orientation :pointing :target-id "d1"}
-                 {:id "a2" :orientation :pointing :target-id "d2"}
-                 {:id "d1" :orientation :standing}
-                 {:id "d2" :orientation :standing}]]
-      (is (= #{"d1" "d2"} (game/calculate-attacks board))))))
+  (testing "large defender needs 4+ pips to ice"
+    ;; Large attacker (3 pips) vs Large defender (3 pips) - no ice
+    (let [board [{:id "a1" :orientation :pointing :target-id "d1" :size :large}
+                 {:id "d1" :orientation :standing :size :large}]]
+      (is (= #{} (game/calculate-iced-pieces board))))
+    ;; Large + Small attackers (4 pips) vs Large defender (3 pips) - iced!
+    (let [board [{:id "a1" :orientation :pointing :target-id "d1" :size :large}
+                 {:id "a2" :orientation :pointing :target-id "d1" :size :small}
+                 {:id "d1" :orientation :standing :size :large}]]
+      (is (= #{"d1"} (game/calculate-iced-pieces board)))))
+
+  (testing "pointing pieces without targets don't contribute"
+    (let [board [{:id "a1" :orientation :pointing :target-id nil :size :large}
+                 {:id "d1" :orientation :standing :size :small}]]
+      (is (= #{} (game/calculate-iced-pieces board))))))
 
 (deftest calculate-scores-test
-  (testing "unattacked pieces score points"
-    (let [game {:board [{:id "p1" :player-id "alice" :size :small}
-                        {:id "p2" :player-id "alice" :size :medium}
-                        {:id "p3" :player-id "bob" :size :large}]}
+  (testing "standing pieces score points"
+    (let [game {:board [{:id "p1" :player-id "alice" :size :small :orientation :standing}
+                        {:id "p2" :player-id "alice" :size :medium :orientation :standing}
+                        {:id "p3" :player-id "bob" :size :large :orientation :standing}]}
           scores (game/calculate-scores game)]
       (is (= 3 (get scores "alice")))  ; 1 + 2 = 3
       (is (= 3 (get scores "bob")))))  ; 3
 
-  (testing "attacked pieces don't score"
-    (let [game {:board [{:id "p1" :player-id "alice" :size :large :orientation :standing}
-                        {:id "p2" :player-id "bob" :size :small :orientation :pointing :target-id "p1"}]}
+  (testing "attacking pieces don't score"
+    (let [game {:board [{:id "a1" :player-id "bob" :size :medium :orientation :pointing :target-id "d1"}
+                        {:id "d1" :player-id "alice" :size :small :orientation :standing}]}
           scores (game/calculate-scores game)]
-      (is (= 0 (get scores "alice" 0)))  ; attacked, no points
-      (is (= 1 (get scores "bob")))))    ; attacker scores
+      ;; Medium (2 pips) > Small (1 pip), so defender is iced
+      (is (= 0 (get scores "alice" 0)))  ; iced, no points
+      (is (= 0 (get scores "bob" 0)))))  ; attacker is pointing, doesn't score
+
+  (testing "weak attack doesn't ice defender"
+    (let [game {:board [{:id "a1" :player-id "bob" :size :small :orientation :pointing :target-id "d1"}
+                        {:id "d1" :player-id "alice" :size :large :orientation :standing}]}
+          scores (game/calculate-scores game)]
+      ;; Small (1 pip) <= Large (3 pips), defender NOT iced
+      (is (= 3 (get scores "alice")))    ; not iced, scores 3
+      (is (= 0 (get scores "bob" 0)))))  ; attacker doesn't score
 
   (testing "empty board returns empty scores"
     (let [game {:board []}]

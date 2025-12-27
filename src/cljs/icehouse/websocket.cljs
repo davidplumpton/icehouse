@@ -22,7 +22,11 @@
       "joined"
       (do
         (reset! state/player-id (:player-id data))
-        (reset! state/room-id (:room-id data)))
+        (reset! state/room-id (:room-id data))
+        (when-let [name (:name data)]
+          (reset! state/player-name name))
+        (when-let [colour (:colour data)]
+          (reset! state/player-colour colour)))
 
       "players"
       (reset! state/players (:players data))

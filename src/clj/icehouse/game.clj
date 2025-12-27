@@ -175,9 +175,11 @@
     (<= dist range)))
 
 (defn valid-target?
-  "Check if target is a valid attack target for the attacker"
+  "Check if target is a valid attack target for the attacker.
+   Per Icehouse rules, can only target standing (defending) opponent pieces."
   [attacker target attacker-player-id]
   (and (not= (:player-id target) attacker-player-id)  ;; Different player
+       (= (:orientation target) :standing)             ;; Must be a defender (standing)
        (in-front-of? attacker target)                  ;; In front
        (within-range? attacker target)))               ;; Within range
 
@@ -229,23 +231,46 @@
 (defn valid-placement? [game player-id piece]
   (nil? (validate-placement game player-id piece)))
 
-(defn calculate-attacks [board]
-  (let [pointing-pieces (filter #(= (:orientation %) :pointing) board)]
-    (reduce
-     (fn [attacked piece]
-       (let [target-id (:target-id piece)]
-         (if target-id
-           (conj attacked target-id)
-           attacked)))
+(defn attackers-by-target
+  "Returns a map of target-id -> list of attackers targeting that piece"
+  [board]
+  (let [pointing-pieces (filter #(and (= (:orientation %) :pointing)
+                                      (:target-id %))
+                                board)]
+    (group-by :target-id pointing-pieces)))
+
+(defn attack-strength
+  "Sum of pip values of all attackers targeting a piece"
+  [attackers]
+  (reduce + (map #(get pips (:size %) 0) attackers)))
+
+(defn find-piece-by-id [board id]
+  (first (filter #(= (:id %) id) board)))
+
+(defn calculate-iced-pieces
+  "Returns set of piece IDs that are successfully iced.
+   Per Icehouse rules: a defender is iced when total attacker pips > defender pips"
+  [board]
+  (let [attacks (attackers-by-target board)]
+    (reduce-kv
+     (fn [iced target-id attackers]
+       (let [defender (find-piece-by-id board target-id)
+             defender-pips (get pips (:size defender) 0)
+             attacker-pips (attack-strength attackers)]
+         (if (and defender (> attacker-pips defender-pips))
+           (conj iced target-id)
+           iced)))
      #{}
-     pointing-pieces)))
+     attacks)))
 
 (defn calculate-scores [game]
   (let [board (:board game)
-        attacked (calculate-attacks board)]
+        iced (calculate-iced-pieces board)]
     (reduce
      (fn [scores piece]
-       (if (contains? attacked (:id piece))
+       ;; Only standing (defending) pieces that aren't iced score points
+       (if (or (= (:orientation piece) :pointing)
+               (contains? iced (:id piece)))
          scores
          (let [points (get pips (:size piece) 0)]
            (update scores (:player-id piece) (fnil + 0) points))))

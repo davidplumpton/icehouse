@@ -2,6 +2,45 @@
   (:require [icehouse.game :as game]
             [icehouse.utils :as utils]))
 
+(def default-names
+  ["Alice" "Bob" "Carol" "Dave" "Eve" "Frank" "Grace" "Henry"])
+
+(def colours
+  ["#ff6b6b"   ; red
+   "#4ecdc4"   ; teal
+   "#ffe66d"   ; yellow
+   "#95e1d3"   ; mint
+   "#f38181"   ; coral
+   "#aa96da"   ; lavender
+   "#fcbad3"   ; pink
+   "#a8d8ea"]) ; sky blue
+
+(defn get-taken-names [clients room-id]
+  "Returns set of names already taken in the room"
+  (->> @clients
+       (filter (fn [[_ c]] (= (:room-id c) room-id)))
+       (map (fn [[_ c]] (:name c)))
+       (remove nil?)
+       set))
+
+(defn get-taken-colours [clients room-id]
+  "Returns set of colours already taken in the room"
+  (->> @clients
+       (filter (fn [[_ c]] (= (:room-id c) room-id)))
+       (map (fn [[_ c]] (:colour c)))
+       (remove nil?)
+       set))
+
+(defn next-available-name [clients room-id]
+  "Returns the first available default name for the room"
+  (let [taken (get-taken-names clients room-id)]
+    (first (remove taken default-names))))
+
+(defn next-available-colour [clients room-id]
+  "Returns the first available colour for the room"
+  (let [taken (get-taken-colours clients room-id)]
+    (first (remove taken colours))))
+
 (defn get-room-players [clients room-id]
   (->> @clients
        (filter (fn [[_ c]] (= (:room-id c) room-id)))
@@ -24,9 +63,18 @@
          (some (fn [[_ c]] (:ready c)) players))))
 
 (defn handle-join [clients channel msg]
-  (let [room-id (or (:room-id msg) "default")]
-    (swap! clients assoc-in [channel :room-id] room-id)
-    (utils/send-msg! channel {:type "joined" :room-id room-id :player-id (str (hash channel))})
+  (let [room-id (or (:room-id msg) "default")
+        default-name (next-available-name clients room-id)
+        default-colour (next-available-colour clients room-id)]
+    (swap! clients update channel merge
+           {:room-id room-id
+            :name default-name
+            :colour default-colour})
+    (utils/send-msg! channel {:type "joined"
+                              :room-id room-id
+                              :player-id (str (hash channel))
+                              :name default-name
+                              :colour default-colour})
     (broadcast-players! clients room-id)))
 
 (defn handle-set-name [clients channel msg]
