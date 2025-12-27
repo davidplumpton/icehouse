@@ -50,3 +50,6 @@ htmlcov/
 .diagrams
 .claude
 .beads
+
+# bv (beads viewer) local config and caches
+.bv/

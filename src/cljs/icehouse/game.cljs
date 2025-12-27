@@ -106,9 +106,11 @@
   (when drag-state
     (let [{:keys [start-x start-y current-x current-y]} drag-state
           {:keys [size orientation]} selected-piece
+          base-size (get piece-sizes size 30)
           angle (if (and current-x current-y)
                   (calculate-angle start-x start-y current-x current-y)
-                  0)]
+                  0)
+          is-attacking? (= orientation :pointing)]
       ;; Draw a line showing the direction
       (when (and current-x current-y)
         (set! (.-strokeStyle ctx) "rgba(255,255,255,0.5)")
@@ -117,6 +119,27 @@
         (.moveTo ctx start-x start-y)
         (.lineTo ctx current-x current-y)
         (.stroke ctx))
+      ;; Draw attack range indicator for attacking pieces
+      (when (and is-attacking? current-x current-y)
+        (let [;; Calculate tip position (0.75 * base-size from center)
+              tip-offset (* base-size 0.75)
+              tip-x (+ start-x (* (js/Math.cos angle) tip-offset))
+              tip-y (+ start-y (* (js/Math.sin angle) tip-offset))
+              ;; Attack range extends base-size from tip
+              range-end-x (+ tip-x (* (js/Math.cos angle) base-size))
+              range-end-y (+ tip-y (* (js/Math.sin angle) base-size))]
+          ;; Draw range line from tip
+          (set! (.-strokeStyle ctx) "rgba(255,100,100,0.7)")
+          (set! (.-lineWidth ctx) 3)
+          (set! (.-lineCap ctx) "round")
+          (.beginPath ctx)
+          (.moveTo ctx tip-x tip-y)
+          (.lineTo ctx range-end-x range-end-y)
+          (.stroke ctx)
+          ;; Draw range end marker
+          (.beginPath ctx)
+          (.arc ctx range-end-x range-end-y 5 0 (* 2 js/Math.PI))
+          (.stroke ctx)))
       ;; Draw preview piece with transparency
       (.save ctx)
       (set! (.-globalAlpha ctx) 0.6)
