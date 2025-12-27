@@ -316,6 +316,37 @@
      #{}
      attacks)))
 
+(defn calculate-over-ice
+  "Returns a map of defender-id -> {:excess pips :attackers [...] :defender-owner player-id}
+   for each over-iced defender. Excess = attacker-pips - (defender-pips + 1)"
+  [board]
+  (let [attacks (attackers-by-target board)]
+    (reduce-kv
+     (fn [result target-id attackers]
+       (let [defender (find-piece-by-id board target-id)
+             defender-pips (get pips (:size defender) 0)
+             attacker-pips (attack-strength attackers)
+             ;; Minimum to ice is defender-pips + 1, excess is anything beyond that
+             excess (- attacker-pips (+ defender-pips 1))]
+         (if (and defender (> attacker-pips defender-pips) (pos? excess))
+           (assoc result target-id {:excess excess
+                                    :attackers attackers
+                                    :defender-owner (:player-id defender)})
+           result)))
+     {}
+     attacks)))
+
+(defn capturable-attackers
+  "Given over-ice info for a defender, returns attackers that could be captured.
+   An attacker can be captured if its pip value <= remaining excess."
+  [over-ice-info]
+  (let [{:keys [excess attackers]} over-ice-info]
+    ;; Sort by pip value ascending so smaller pieces can be captured first
+    (->> attackers
+         (map (fn [a] {:attacker a :pips (get pips (:size a) 0)}))
+         (filter #(<= (:pips %) excess))
+         (sort-by :pips))))
+
 (defn calculate-scores [game]
   (let [board (:board game)
         iced (calculate-iced-pieces board)]
@@ -368,9 +399,11 @@
                                   :piece piece
                                   :game updated-game})
           (when (game-over? updated-game)
-            (utils/broadcast-room! clients room-id
-                                   {:type "game-over"
-                                    :scores (calculate-scores updated-game)}))))
+            (let [over-ice (calculate-over-ice (:board updated-game))]
+              (utils/broadcast-room! clients room-id
+                                     {:type "game-over"
+                                      :scores (calculate-scores updated-game)
+                                      :over-ice over-ice})))))
       (utils/send-msg! channel {:type "error" :message (or error "Invalid game state")}))))
 
 (defn start-game! [room-id players]

@@ -79,6 +79,41 @@
                  {:id "d1" :orientation :standing :size :small}]]
       (is (= #{} (game/calculate-iced-pieces board))))))
 
+(deftest calculate-over-ice-test
+  (testing "no over-ice when exactly enough pips to ice"
+    ;; Medium attacker (2 pips) vs Small defender (1 pip) - iced with 2 pips, needs 2, no excess
+    (let [board [{:id "a1" :orientation :pointing :target-id "d1" :size :medium :player-id "bob"}
+                 {:id "d1" :orientation :standing :size :small :player-id "alice"}]]
+      (is (= {} (game/calculate-over-ice board)))))
+
+  (testing "over-ice when more pips than needed"
+    ;; Large attacker (3 pips) vs Small defender (1 pip) - needs 2, has 3, excess = 1
+    (let [board [{:id "a1" :orientation :pointing :target-id "d1" :size :large :player-id "bob"}
+                 {:id "d1" :orientation :standing :size :small :player-id "alice"}]
+          over-ice (game/calculate-over-ice board)]
+      (is (= 1 (get-in over-ice ["d1" :excess])))
+      (is (= "alice" (get-in over-ice ["d1" :defender-owner])))))
+
+  (testing "large over-ice with multiple attackers"
+    ;; 2 Large attackers (6 pips) vs Medium defender (2 pips) - needs 3, has 6, excess = 3
+    (let [board [{:id "a1" :orientation :pointing :target-id "d1" :size :large :player-id "bob"}
+                 {:id "a2" :orientation :pointing :target-id "d1" :size :large :player-id "carol"}
+                 {:id "d1" :orientation :standing :size :medium :player-id "alice"}]
+          over-ice (game/calculate-over-ice board)]
+      (is (= 3 (get-in over-ice ["d1" :excess])))))
+
+  (testing "capturable-attackers returns valid options"
+    ;; 2 Large attackers (6 pips) vs Small defender (1 pip) - needs 2, has 6, excess = 4
+    ;; Can capture up to 4 pips worth of attackers
+    (let [board [{:id "a1" :orientation :pointing :target-id "d1" :size :large :player-id "bob"}
+                 {:id "a2" :orientation :pointing :target-id "d1" :size :large :player-id "carol"}
+                 {:id "d1" :orientation :standing :size :small :player-id "alice"}]
+          over-ice (game/calculate-over-ice board)
+          capturable (game/capturable-attackers (get over-ice "d1"))]
+      ;; With 4 excess, can capture a large (3 pips) attacker
+      (is (= 2 (count capturable)))
+      (is (every? #(= 3 (:pips %)) capturable)))))
+
 (deftest calculate-scores-test
   (testing "standing pieces score points"
     (let [game {:board [{:id "p1" :player-id "alice" :size :small :orientation :standing}
