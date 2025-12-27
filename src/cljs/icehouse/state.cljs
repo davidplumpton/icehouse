@@ -33,13 +33,3 @@
    "#aa96da"   ; lavender
    "#fcbad3"   ; pink
    "#a8d8ea"]) ; sky blue
-
-(defn reset-state! []
-  (reset! current-view :lobby)
-  (reset! player-id nil)
-  (reset! room-id nil)
-  (reset! player-name "")
-  (reset! player-colour "#ff6b6b")
-  (reset! players [])
-  (reset! game-state nil)
-  (reset! error-message nil))

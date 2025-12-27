@@ -207,6 +207,13 @@
                 :stroke "#000"
                 :stroke-width "1"}]]))
 
+(defn piece-size-row [size label pieces colour]
+  [:div.piece-row
+   [:span.size-label label]
+   (for [i (range (get pieces size 0))]
+     ^{:key (str (name size) "-" i)}
+     [draw-stash-pyramid size colour])])
+
 (defn player-stash [player-id player-data]
   "Renders a single player's stash of unplayed pieces"
   (let [pieces (or (:pieces player-data) default-pieces)
@@ -218,21 +225,9 @@
       player-name
       (when is-me " (you)")]
      [:div.stash-pieces
-      [:div.piece-row
-       [:span.size-label "L"]
-       (for [i (range (:large pieces 0))]
-         ^{:key (str "large-" i)}
-         [draw-stash-pyramid :large colour])]
-      [:div.piece-row
-       [:span.size-label "M"]
-       (for [i (range (:medium pieces 0))]
-         ^{:key (str "medium-" i)}
-         [draw-stash-pyramid :medium colour])]
-      [:div.piece-row
-       [:span.size-label "S"]
-       (for [i (range (:small pieces 0))]
-         ^{:key (str "small-" i)}
-         [draw-stash-pyramid :small colour])]]]))
+      [piece-size-row :large "L" pieces colour]
+      [piece-size-row :medium "M" pieces colour]
+      [piece-size-row :small "S" pieces colour]]]))
 
 (defn stash-panel [position]
   "Renders stash panels for players on left or right side"
@@ -281,30 +276,3 @@
         [game-canvas]
         [stash-panel :right]]])}))
 
-;; CSS styles moved to resources/public/css/style.css
-
-(comment
-  "Old inline styles - now in CSS file:"
-  "
-         .game { text-align: center; }
-         .game h2 { margin-bottom: 1rem; }
-         .piece-selector { margin-bottom: 1rem; display: flex; flex-direction: column; align-items: center; gap: 0.25rem; }
-         .hotkey-display { font-size: 1.2rem; color: #4ecdc4; }
-         .hotkey-display .separator { color: #666; }
-         .hotkey-hint { font-size: 0.8rem; color: #666; }
-
-         .game-area { display: flex; justify-content: center; align-items: flex-start; gap: 1rem; }
-
-         .stash-panel { display: flex; flex-direction: column; gap: 1rem; min-width: 140px; }
-         .stash-panel.left { align-items: flex-end; }
-         .stash-panel.right { align-items: flex-start; }
-
-         .player-stash { background: #1a1a2e; border: 1px solid #3a3a4e; border-radius: 8px; padding: 0.75rem; min-width: 130px; }
-         .player-stash.is-me { border-color: #4ecdc4; box-shadow: 0 0 8px rgba(78, 205, 196, 0.3); }
-
-         .stash-header { font-weight: bold; margin-bottom: 0.5rem; font-size: 0.9rem; text-align: center; }
-
-         .stash-pieces { display: flex; flex-direction: column; gap: 4px; }
-         .piece-row { display: flex; align-items: center; min-height: 76px; }
-         .size-label { width: 20px; font-size: 0.75rem; color: #666; font-weight: bold; }
-       ")

@@ -2,21 +2,15 @@
   (:require [org.httpkit.server :as http]
             [cheshire.core :as json]
             [icehouse.lobby :as lobby]
-            [icehouse.game :as game]))
+            [icehouse.game :as game]
+            [icehouse.utils :as utils]))
 
 (defonce clients (atom {}))
-
-(defn send-msg! [channel msg]
-  (http/send! channel (json/generate-string msg)))
 
 (defn broadcast! [room-id msg]
   (doseq [[ch client] @clients
           :when (= (:room-id client) room-id)]
-    (send-msg! ch msg)))
-
-(defn broadcast-all! [msg]
-  (doseq [[ch _] @clients]
-    (send-msg! ch msg)))
+    (utils/send-msg! ch msg)))
 
 (defn handle-message [channel data]
   (let [msg (json/parse-string data true)
@@ -33,7 +27,7 @@
       "place-piece" (game/handle-place-piece clients channel msg)
 
       ;; Unknown
-      (send-msg! channel {:type "error" :message "Unknown message type"}))))
+      (utils/send-msg! channel {:type "error" :message "Unknown message type"}))))
 
 (defn handler [req]
   (http/with-channel req channel
