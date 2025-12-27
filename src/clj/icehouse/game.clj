@@ -184,9 +184,12 @@
   (get piece-sizes (:size piece) 30))
 
 (defn within-range?
-  "Check if target is within attack range of attacker"
+  "Check if target is within attack range of attacker.
+   Per Icehouse rules, range is measured from the attacker's tip."
   [attacker target]
-  (let [dist (distance (piece-center attacker) (piece-center target))
+  (let [tip (attacker-tip attacker)
+        target-center (piece-center target)
+        dist (distance tip target-center)
         range (attack-range attacker)]
     (<= dist range)))
 
