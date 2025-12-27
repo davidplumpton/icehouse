@@ -347,17 +347,51 @@
          (filter #(<= (:pips %) excess))
          (sort-by :pips))))
 
+(defn pieces-placed-by-player
+  "Count pieces placed by a player"
+  [board player-id]
+  (count (filter #(= (:player-id %) player-id) board)))
+
+(defn player-defenders
+  "Get all standing (defender) pieces for a player"
+  [board player-id]
+  (filter #(and (= (:player-id %) player-id)
+                (= (:orientation %) :standing))
+          board))
+
+(defn in-icehouse?
+  "Check if a player is 'in the Icehouse' - all defenders iced after playing 8+ pieces.
+   Per official rules, this is an instant loss with zero score."
+  [board iced-set player-id]
+  (let [pieces-placed (pieces-placed-by-player board player-id)
+        defenders (player-defenders board player-id)]
+    (and (>= pieces-placed 8)                              ;; Must have placed at least 8 pieces
+         (seq defenders)                                    ;; Must have at least one defender
+         (every? #(contains? iced-set (:id %)) defenders)))) ;; All defenders are iced
+
+(defn calculate-icehouse-players
+  "Returns set of player-ids who are 'in the Icehouse'"
+  [board]
+  (let [iced (calculate-iced-pieces board)
+        player-ids (distinct (map :player-id board))]
+    (set (filter #(in-icehouse? board iced %) player-ids))))
+
 (defn calculate-scores [game]
   (let [board (:board game)
-        iced (calculate-iced-pieces board)]
+        iced (calculate-iced-pieces board)
+        icehouse-players (calculate-icehouse-players board)]
     (reduce
      (fn [scores piece]
-       ;; Only standing (defending) pieces that aren't iced score points
-       (if (or (= (:orientation piece) :pointing)
-               (contains? iced (:id piece)))
-         scores
-         (let [points (get pips (:size piece) 0)]
-           (update scores (:player-id piece) (fnil + 0) points))))
+       (let [player-id (:player-id piece)]
+         ;; Players in the Icehouse get zero (handled by not adding points)
+         (if (contains? icehouse-players player-id)
+           (assoc scores player-id 0)
+           ;; Only standing (defending) pieces that aren't iced score points
+           (if (or (= (:orientation piece) :pointing)
+                   (contains? iced (:id piece)))
+             scores
+             (let [points (get pips (:size piece) 0)]
+               (update scores player-id (fnil + 0) points))))))
      {}
      board)))
 
@@ -399,11 +433,14 @@
                                   :piece piece
                                   :game updated-game})
           (when (game-over? updated-game)
-            (let [over-ice (calculate-over-ice (:board updated-game))]
+            (let [board (:board updated-game)
+                  over-ice (calculate-over-ice board)
+                  icehouse-players (calculate-icehouse-players board)]
               (utils/broadcast-room! clients room-id
                                      {:type "game-over"
                                       :scores (calculate-scores updated-game)
-                                      :over-ice over-ice})))))
+                                      :over-ice over-ice
+                                      :icehouse-players (vec icehouse-players)})))))
       (utils/send-msg! channel {:type "error" :message (or error "Invalid game state")}))))
 
 (defn start-game! [room-id players]

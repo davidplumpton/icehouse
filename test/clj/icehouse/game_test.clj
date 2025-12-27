@@ -143,6 +143,67 @@
     (let [game {:board []}]
       (is (= {} (game/calculate-scores game))))))
 
+(deftest icehouse-rule-test
+  (testing "player not in icehouse with fewer than 8 pieces"
+    ;; Even if all defenders are iced, need 8+ pieces to be in icehouse
+    (let [board [{:id "a1" :player-id "bob" :size :large :orientation :pointing :target-id "d1"}
+                 {:id "d1" :player-id "alice" :size :small :orientation :standing}]
+          icehouse-players (game/calculate-icehouse-players board)]
+      (is (= #{} icehouse-players))))
+
+  (testing "player in icehouse with 8+ pieces and all defenders iced"
+    ;; Create a board where alice has 8 pieces and all her defenders are iced
+    (let [;; Alice's pieces: 5 attackers + 3 defenders (8 total)
+          alice-attackers (for [i (range 5)]
+                            {:id (str "alice-a" i) :player-id "alice"
+                             :size :small :orientation :pointing :target-id (str "bob-d" i)})
+          alice-defenders (for [i (range 3)]
+                            {:id (str "alice-d" i) :player-id "alice"
+                             :size :small :orientation :standing})
+          ;; Bob attacks all of Alice's defenders with large pieces
+          bob-attackers (for [i (range 3)]
+                          {:id (str "bob-a" i) :player-id "bob"
+                           :size :large :orientation :pointing
+                           :target-id (str "alice-d" i)})
+          ;; Bob's defenders (for alice's attackers)
+          bob-defenders (for [i (range 5)]
+                          {:id (str "bob-d" i) :player-id "bob"
+                           :size :large :orientation :standing})
+          board (concat alice-attackers alice-defenders bob-attackers bob-defenders)
+          icehouse-players (game/calculate-icehouse-players board)]
+      ;; Alice has 8 pieces and all 3 defenders are iced by large attackers
+      (is (contains? icehouse-players "alice"))
+      ;; Bob is not in icehouse (has un-iced defenders)
+      (is (not (contains? icehouse-players "bob")))))
+
+  (testing "player in icehouse gets zero score"
+    (let [;; Alice: 8 pieces with all defenders iced
+          alice-attackers (for [i (range 5)]
+                            {:id (str "alice-a" i) :player-id "alice"
+                             :size :small :orientation :pointing :target-id (str "bob-d" i)})
+          alice-defenders (for [i (range 3)]
+                            {:id (str "alice-d" i) :player-id "alice"
+                             :size :large :orientation :standing})  ; Large defenders
+          ;; Bob attacks with enough to ice all alice defenders
+          bob-attackers (for [i (range 3)]
+                          {:id (str "bob-a" i) :player-id "bob"
+                           :size :large :orientation :pointing
+                           :target-id (str "alice-d" i)})
+          bob-extra-attackers (for [i (range 3)]
+                                {:id (str "bob-a-extra" i) :player-id "bob"
+                                 :size :medium :orientation :pointing
+                                 :target-id (str "alice-d" i)})
+          bob-defenders (for [i (range 5)]
+                          {:id (str "bob-d" i) :player-id "bob"
+                           :size :small :orientation :standing})
+          board (concat alice-attackers alice-defenders bob-attackers bob-extra-attackers bob-defenders)
+          game {:board (vec board)}
+          scores (game/calculate-scores game)]
+      ;; Alice is in icehouse, gets 0
+      (is (= 0 (get scores "alice")))
+      ;; Bob gets points from un-iced defenders (5 small = 5 pips, but some may be iced by alice)
+      (is (pos? (get scores "bob" 0))))))
+
 (deftest game-over-test
   (testing "game not over when pieces remain"
     (let [game {:players {"p1" {:pieces {:small 1 :medium 0 :large 0}}
