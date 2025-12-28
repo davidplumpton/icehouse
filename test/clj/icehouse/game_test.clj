@@ -3,8 +3,8 @@
             [icehouse.game :as game]))
 
 (deftest initial-pieces-test
-  (testing "initial-pieces returns correct starting pieces"
-    (let [pieces (game/initial-pieces)]
+  (testing "initial-piece-counts has correct starting pieces"
+    (let [pieces game/initial-piece-counts]
       (is (= 5 (:small pieces)))
       (is (= 5 (:medium pieces)))
       (is (= 5 (:large pieces))))))

@@ -3,7 +3,11 @@
 
 (defonce games (atom {}))
 
-;; Points per piece size
+;; =============================================================================
+;; Game Constants
+;; =============================================================================
+
+;; Points per piece size (pip values)
 (def pips {:small 1 :medium 2 :large 3})
 
 ;; Piece sizes in pixels (must match frontend)
@@ -13,6 +17,14 @@
 ;; Play area dimensions (must match frontend canvas)
 (def play-area-width 800)
 (def play-area-height 600)
+
+;; Geometry constants
+(def tip-offset-ratio 0.75)       ;; Triangle tip extends 0.75 * base-size from center
+(def parallel-threshold 0.0001)   ;; Threshold for detecting parallel lines in ray casting
+
+;; Game rules constants
+(def icehouse-min-pieces 8)       ;; Minimum pieces to trigger icehouse rule
+(def initial-piece-counts {:small 5 :medium 5 :large 5})
 
 ;; Collision detection using Separating Axis Theorem (SAT)
 
@@ -38,7 +50,7 @@
                        [half half]
                        [(- half) half]]
                       ;; Pointing: triangle (3:2 length:base ratio to match frontend)
-                      (let [half-width (* base-size 0.75)]
+                      (let [half-width (* base-size tip-offset-ratio)]
                         [[half-width 0]
                          [(- half-width) (- half)]
                          [(- half-width) half]]))]
@@ -136,7 +148,7 @@
   "Get the tip position of a pointing piece (where the attack ray originates)"
   [piece]
   (let [base-size (get piece-sizes (:size piece) 30)
-        tip-offset (* base-size 0.75)  ;; Tip is at 3/4 of base-size from center
+        tip-offset (* base-size tip-offset-ratio)
         angle (or (:angle piece) 0)
         [dx dy] [(Math/cos angle) (Math/sin angle)]]
     [(+ (:x piece) (* dx tip-offset))
@@ -151,7 +163,7 @@
         sy (- p2y p1y)
         ;; Cross product of directions
         denom (- (* dx sy) (* dy sx))]
-    (if (< (Math/abs denom) 0.0001)
+    (if (< (Math/abs denom) parallel-threshold)
       false  ;; Parallel lines
       (let [;; Vector from ray origin to segment start
             ox-p1x (- p1x ox)
@@ -270,17 +282,11 @@
            first
            :target))))
 
-;; Starting piece counts per player
-(def initial-piece-counts {:small 5 :medium 5 :large 5})
-
-(defn initial-pieces []
-  initial-piece-counts)
-
 (defn create-game [room-id players]
   {:room-id room-id
    :players (into {} (map (fn [p] [(:id p) {:name (:name p)
                                             :colour (:colour p)
-                                            :pieces (initial-pieces)
+                                            :pieces initial-piece-counts
                                             :captured []}])  ;; List of {:size :colour}
                           players))
    :board []
@@ -290,6 +296,14 @@
   "Count captured pieces of a given size"
   [captured size]
   (count (filter #(= (:size %) size) captured)))
+
+(defn remove-first-captured
+  "Remove the first captured piece of the given size from the list"
+  [captured size]
+  (let [idx (first (keep-indexed #(when (= (:size %2) size) %1) captured))]
+    (if idx
+      (vec (concat (subvec captured 0 idx) (subvec captured (inc idx))))
+      captured)))
 
 (defn validate-placement
   "Validate piece placement, returns nil if valid or error message if invalid.
@@ -408,7 +422,7 @@
   [board iced-set player-id]
   (let [pieces-placed (pieces-placed-by-player board player-id)
         defenders (player-defenders board player-id)]
-    (and (>= pieces-placed 8)                              ;; Must have placed at least 8 pieces
+    (and (>= pieces-placed icehouse-min-pieces)            ;; Must have placed at least 8 pieces
          (seq defenders)                                    ;; Must have at least one defender
          (every? #(contains? iced-set (:id %)) defenders)))) ;; All defenders are iced
 
@@ -472,14 +486,8 @@
         (swap! games update-in [room-id :board] conj piece)
         ;; Decrement from captured or regular pieces
         (if using-captured?
-          ;; Remove one piece of matching size from captured list
           (swap! games update-in [room-id :players player-id :captured]
-                 (fn [caps]
-                   (let [size (:size piece)
-                         idx (.indexOf (mapv :size caps) size)]
-                     (if (>= idx 0)
-                       (into (subvec (vec caps) 0 idx) (subvec (vec caps) (inc idx)))
-                       caps))))
+                 remove-first-captured (:size piece))
           (swap! games update-in [room-id :players player-id :pieces (:size piece)] dec))
         (let [updated-game (get @games room-id)]
           (utils/broadcast-room! clients room-id

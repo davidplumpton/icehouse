@@ -3,7 +3,11 @@
             [icehouse.state :as state]
             [icehouse.websocket :as ws]))
 
-;; Canvas dimensions
+;; =============================================================================
+;; Game Constants (should match backend)
+;; =============================================================================
+
+;; Canvas/play area dimensions
 (def canvas-width 800)
 (def canvas-height 600)
 (def grid-size 50)
@@ -19,13 +23,28 @@
 ;; Default piece counts per player
 (def default-pieces {:small 5 :medium 5 :large 5})
 
+;; Points per piece size (pip values)
+(def pips {:small 1 :medium 2 :large 3})
+
+;; Geometry constants
+(def tip-offset-ratio 0.75)        ;; Triangle tip extends 0.75 * base-size from center
+
+;; Rendering constants
+(def preview-alpha 0.6)            ;; Transparency for piece preview
+(def direction-line-alpha 0.5)     ;; Transparency for direction indicator line
+(def range-indicator-alpha 0.7)    ;; Transparency for attack range indicator
+
+;; Game rules
+(def attack-unlock-threshold 2)    ;; Number of pieces before attacking is allowed
+
+;; =============================================================================
+;; Utility Functions
+;; =============================================================================
+
 (defn calculate-angle
   "Calculate angle in radians from point (x1,y1) to (x2,y2)"
   [x1 y1 x2 y2]
   (js/Math.atan2 (- y2 y1) (- x2 x1)))
-
-;; Pips per piece size (for over-ice calculation)
-(def pips {:small 1 :medium 2 :large 3})
 
 (defn rotate-point
   "Rotate point [x y] around origin by angle (radians)"
@@ -46,7 +65,7 @@
                        [half (- half)]
                        [half half]
                        [(- half) half]]
-                      (let [half-width (* base-size 0.75)]
+                      (let [half-width (* base-size tip-offset-ratio)]
                         [[half-width 0]
                          [(- half-width) (- half)]
                          [(- half-width) half]]))]
@@ -166,7 +185,7 @@
         (.lineTo ctx (- half-size) half-size)
         (.stroke ctx))
       ;; Pointing/attacking: side view triangle pointing right (3:2 length:base ratio like stash)
-      (let [half-width (* base-size 0.75)]
+      (let [half-width (* base-size tip-offset-ratio)]
         (.beginPath ctx)
         (.moveTo ctx half-width 0)                    ; tip pointing right
         (.lineTo ctx (- half-width) (- half-size))    ; top-left corner
@@ -266,8 +285,7 @@
         (.stroke ctx))
       ;; Draw attack range indicator for attacking pieces
       (when (and is-attacking? current-x current-y)
-        (let [;; Calculate tip position (0.75 * base-size from center)
-              tip-offset (* base-size 0.75)
+        (let [tip-offset (* base-size tip-offset-ratio)
               tip-x (+ start-x (* (js/Math.cos angle) tip-offset))
               tip-y (+ start-y (* (js/Math.sin angle) tip-offset))
               ;; Attack range extends base-size from tip
@@ -287,7 +305,7 @@
           (.stroke ctx)))
       ;; Draw preview piece with transparency
       (.save ctx)
-      (set! (.-globalAlpha ctx) 0.6)
+      (set! (.-globalAlpha ctx) preview-alpha)
       (draw-pyramid ctx start-x start-y size player-colour orientation angle)
       (.restore ctx))))
 
@@ -376,10 +394,10 @@
               (reset! state/drag-state nil))}]))})))
 
 (defn can-attack? []
-  "Returns true if attacking is allowed (after first 2 moves)"
+  "Returns true if attacking is allowed (after first few moves)"
   (let [game @state/game-state
         board-count (count (:board game))]
-    (>= board-count 2)))
+    (>= board-count attack-unlock-threshold)))
 
 (defn has-captured-pieces? []
   "Returns true if current player has any captured pieces"
