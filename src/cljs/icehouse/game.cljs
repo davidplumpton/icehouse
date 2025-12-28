@@ -534,6 +534,32 @@
               :font-weight "bold"}}
      error]))
 
+(defn format-time
+  "Format milliseconds as MM:SS"
+  [ms]
+  (let [total-seconds (quot ms 1000)
+        minutes (quot total-seconds 60)
+        seconds (mod total-seconds 60)]
+    (str (when (< minutes 10) "0") minutes
+         ":"
+         (when (< seconds 10) "0") seconds)))
+
+(defn game-timer []
+  "Display elapsed game time"
+  (let [game @state/game-state
+        current @state/current-time]
+    (when-let [started-at (:started-at game)]
+      (let [elapsed (- current started-at)]
+        [:div.game-timer
+         {:style {:font-family "monospace"
+                  :font-size "1.2rem"
+                  :padding "0.25rem 0.5rem"
+                  :background "#333"
+                  :color "#fff"
+                  :border-radius "4px"
+                  :display "inline-block"}}
+         (format-time elapsed)]))))
+
 (defn game-results-overlay []
   "Display final scores when game ends"
   (when-let [result @state/game-result]
@@ -595,24 +621,37 @@
          "Back to Lobby"]]])))
 
 (defn game-view []
-  (r/create-class
-   {:component-did-mount
-    (fn [this]
-      (.addEventListener js/document "keydown" handle-keydown))
+  (let [timer-interval (atom nil)]
+    (r/create-class
+     {:component-did-mount
+      (fn [this]
+        (.addEventListener js/document "keydown" handle-keydown)
+        ;; Start timer update interval
+        (reset! timer-interval
+                (js/setInterval #(reset! state/current-time (js/Date.now)) 1000)))
 
-    :component-will-unmount
-    (fn [this]
-      (.removeEventListener js/document "keydown" handle-keydown))
+      :component-will-unmount
+      (fn [this]
+        (.removeEventListener js/document "keydown" handle-keydown)
+        ;; Clear timer interval
+        (when @timer-interval
+          (js/clearInterval @timer-interval)))
 
-    :reagent-render
-    (fn []
-      [:div.game
-       [:h2 "Icehouse"]
-       [error-display]
-       [game-results-overlay]
-       [piece-selector]
-       [:div.game-area
-        [stash-panel :left]
-        [game-canvas]
-        [stash-panel :right]]])}))
+      :reagent-render
+      (fn []
+        [:div.game
+         [:div.game-header
+          {:style {:display "flex"
+                   :justify-content "space-between"
+                   :align-items "center"
+                   :margin-bottom "0.5rem"}}
+          [:h2 {:style {:margin 0}} "Icehouse"]
+          [game-timer]]
+         [error-display]
+         [game-results-overlay]
+         [piece-selector]
+         [:div.game-area
+          [stash-panel :left]
+          [game-canvas]
+          [stash-panel :right]]])})))
 

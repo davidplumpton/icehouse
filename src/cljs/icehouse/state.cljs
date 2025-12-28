@@ -35,6 +35,9 @@
 ;; {:scores {"player-id" score} :icehouse-players ["id"] :over-ice {...}}
 (defonce game-result (r/atom nil))
 
+;; Current time for game timer (updated every second)
+(defonce current-time (r/atom (js/Date.now)))
+
 ;; Traditional Looney Labs pyramid stash colours
 ;; Rainbow stash: red, yellow, green, blue, black
 ;; Xeno stash: purple, cyan, orange, white
