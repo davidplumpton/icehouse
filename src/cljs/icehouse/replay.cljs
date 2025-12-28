@@ -80,28 +80,26 @@
 ;; Replay Canvas Component
 ;; =============================================================================
 
+(defn- render-replay-board!
+  "Render the current replay state to the canvas"
+  [canvas]
+  (when canvas
+    (let [ctx (.getContext canvas "2d")
+          replay @state/replay-state
+          game-state (when replay
+                       (game-state-at-move (:record replay) (:current-move replay)))]
+      (game/draw-board ctx game-state nil nil))))
+
 (defn replay-canvas
   "Canvas component for rendering replay board state"
   []
   (let [canvas-ref (r/atom nil)]
     (r/create-class
      {:component-did-mount
-      (fn [_]
-        (when-let [canvas @canvas-ref]
-          (let [ctx (.getContext canvas "2d")
-                replay @state/replay-state
-                game-state (when replay
-                             (game-state-at-move (:record replay) (:current-move replay)))]
-            (game/draw-board ctx game-state nil nil))))
+      (fn [_] (render-replay-board! @canvas-ref))
 
       :component-did-update
-      (fn [_]
-        (when-let [canvas @canvas-ref]
-          (let [ctx (.getContext canvas "2d")
-                replay @state/replay-state
-                game-state (when replay
-                             (game-state-at-move (:record replay) (:current-move replay)))]
-            (game/draw-board ctx game-state nil nil))))
+      (fn [_] (render-replay-board! @canvas-ref))
 
       :reagent-render
       (fn []
@@ -232,51 +230,60 @@
         "No saved games found"])]))
 
 ;; =============================================================================
+;; Auto-play Logic
+;; =============================================================================
+
+(defonce tick-counter (atom 0))
+
+(defn- auto-play-tick!
+  "Advance replay if playing, respecting speed setting"
+  []
+  (when-let [replay @state/replay-state]
+    (when (:playing? replay)
+      (let [speed (or (:speed replay) 1)
+            ;; At 500ms base interval: speed 0.5 = every 2 ticks, speed 2 = every tick + extra
+            ticks-needed (/ 1 speed)]
+        (swap! tick-counter inc)
+        (when (>= @tick-counter ticks-needed)
+          (reset! tick-counter 0)
+          (let [max-move (dec (count (get-in replay [:record :moves])))
+                current (:current-move replay)
+                ;; For speeds > 1, advance multiple moves per tick
+                steps (max 1 (int speed))]
+            (if (< current max-move)
+              (dotimes [_ steps]
+                (when (< (:current-move @state/replay-state) max-move)
+                  (step-forward!)))
+              (swap! state/replay-state assoc :playing? false))))))))
+
+;; =============================================================================
 ;; Main Replay View
 ;; =============================================================================
 
 (defn replay-view
-  "Main replay view component"
+  "Main replay view component with integrated auto-play timer"
   []
-  (let [replay @state/replay-state]
-    [:div.replay-view {:style {:background "#1a1a2e"
-                                :min-height "100vh"
-                                :padding "20px"}}
-     (if replay
-       ;; Replay mode - show canvas and controls
-       [:div
-        [:h2 {:style {:color "white" :text-align "center"}} "Game Replay"]
-        [replay-canvas]
-        [replay-controls]]
-       ;; No replay loaded - show game list
-       [game-list-panel])]))
+  (let [timer-ref (r/atom nil)]
+    (r/create-class
+     {:component-did-mount
+      (fn [_]
+        (reset! timer-ref
+                (js/setInterval auto-play-tick! 500)))
 
-;; =============================================================================
-;; Auto-play Timer
-;; =============================================================================
+      :component-will-unmount
+      (fn [_]
+        (when @timer-ref
+          (js/clearInterval @timer-ref)))
 
-(defonce auto-play-interval (atom nil))
-
-(defn start-auto-play!
-  "Start the auto-play timer"
-  []
-  (when @auto-play-interval
-    (js/clearInterval @auto-play-interval))
-  (reset! auto-play-interval
-          (js/setInterval
-           (fn []
-             (when-let [replay @state/replay-state]
-               (when (:playing? replay)
-                 (let [max-move (dec (count (get-in replay [:record :moves])))
-                       current (:current-move replay)]
-                   (if (< current max-move)
-                     (step-forward!)
-                     (swap! state/replay-state assoc :playing? false))))))
-           500)))  ;; Base interval, adjusted by speed
-
-(defn stop-auto-play!
-  "Stop the auto-play timer"
-  []
-  (when @auto-play-interval
-    (js/clearInterval @auto-play-interval)
-    (reset! auto-play-interval nil)))
+      :reagent-render
+      (fn []
+        (let [replay @state/replay-state]
+          [:div.replay-view {:style {:background "#1a1a2e"
+                                      :min-height "100vh"
+                                      :padding "20px"}}
+           (if replay
+             [:div
+              [:h2 {:style {:color "white" :text-align "center"}} "Game Replay"]
+              [replay-canvas]
+              [replay-controls]]
+             [game-list-panel])]))})))
