@@ -458,7 +458,7 @@
 (defn has-pieces-of-size? [size use-captured?]
   "Returns true if current player has pieces of the given size to place"
   (let [game @state/game-state
-        player-id @state/player-id
+        player-id (keyword @state/player-id)
         player-data (get-in game [:players player-id])]
     (if use-captured?
       ;; Check captured pieces
