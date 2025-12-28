@@ -7,7 +7,8 @@
 (def pips {:small 1 :medium 2 :large 3})
 
 ;; Piece sizes in pixels (must match frontend)
-(def piece-sizes {:small 30 :medium 50 :large 70})
+;; Sized so small height = large base, medium is halfway between
+(def piece-sizes {:small 40 :medium 50 :large 60})
 
 ;; Play area dimensions (must match frontend canvas)
 (def play-area-width 800)

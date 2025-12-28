@@ -9,10 +9,12 @@
 (def grid-size 50)
 
 ;; Piece sizes for canvas rendering (base width in pixels)
-(def piece-sizes {:small 30 :medium 50 :large 70})
+;; Sized so small height = large base, medium is halfway between
+(def piece-sizes {:small 40 :medium 50 :large 60})
 
 ;; Piece sizes for stash SVG rendering [width height]
-(def stash-sizes {:small [24 36] :medium [36 54] :large [48 72]})
+;; 3:2 height:base ratio, small height = large base
+(def stash-sizes {:small [32 48] :medium [40 60] :large [48 72]})
 
 ;; Default piece counts per player
 (def default-pieces {:small 5 :medium 5 :large 5})
