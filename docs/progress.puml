@@ -1,0 +1,69 @@
+@startuml Development Progress Dashboard
+!theme plain
+
+title Icehouse Game - Development Progress
+
+' Use a work breakdown / timeline style
+left to right direction
+
+skinparam {
+    BackgroundColor white
+    ArrowColor #666
+    RectangleBackgroundColor #e8f5e9
+    RectangleBorderColor #4CAF50
+}
+
+' ============================================
+' BURNDOWN STYLE - Features Completed Over Time
+' ============================================
+
+@startgantt
+<style>
+ganttDiagram {
+    task {
+        BackGroundColor #4CAF50
+        FontColor white
+    }
+    milestone {
+        BackGroundColor #2196F3
+    }
+    separator {
+        LineColor #999
+    }
+}
+</style>
+
+title Feature Burndown - Session Progress
+
+Project starts 2025-12-28
+
+-- Core Game Mechanics --
+[Captured pieces hotkey] starts 2025-12-28 and lasts 1 day
+[Play captured pieces] starts 2025-12-28 and lasts 1 day
+[Attack range fix] starts 2025-12-28 and lasts 1 day
+[Capture over-iced attackers] starts 2025-12-28 and lasts 1 day
+
+-- UI/UX Improvements --
+[Piece size proportions] starts 2025-12-28 and lasts 1 day
+[Shift-drag positioning] starts 2025-12-28 and lasts 1 day
+[Piece placement UX] starts 2025-12-28 and lasts 1 day
+[Larger playfield] starts 2025-12-28 and lasts 1 day
+
+-- Code Quality --
+[Extract constants] starts 2025-12-28 and lasts 1 day
+[Fix intersection detection] starts 2025-12-28 and lasts 1 day
+[Add tests] starts 2025-12-28 and lasts 1 day
+[Refactor helpers] starts 2025-12-28 and lasts 1 day
+
+-- Game Flow --
+[Final scores overlay] starts 2025-12-28 and lasts 1 day
+[Game timer display] starts 2025-12-28 and lasts 1 day
+[Random game duration] starts 2025-12-28 and lasts 1 day
+
+-- Game Recording (Latest) --
+[Save game moves] starts 2025-12-28 and lasts 1 day
+[Game replay UI] starts 2025-12-28 and lasts 1 day
+[Code cleanup] starts 2025-12-28 and lasts 1 day
+
+@endgantt
+@enduml

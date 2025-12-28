@@ -438,7 +438,10 @@
                   ;; Otherwise, toggle captured piece selection
                   (when (has-captured-pieces?)
                     (swap! state/selected-piece update :captured? not)))
-      "Escape" (reset! state/drag-state nil)
+      "Escape" (do
+                 (reset! state/drag-state nil)
+                 (reset! state/show-help false))
+      "?" (swap! state/show-help not)
       nil)))
 
 (defn piece-selector []
@@ -458,13 +461,13 @@
      [:div.hotkey-hint
       (cond
         (not attack-allowed)
-        "1/2/3 size, D defend, Shift+drag to reposition (attack unlocks after 2 moves)"
+        "1/2/3 size, D defend, Shift+drag | ? help (attack unlocks after 2 moves)"
 
         has-captured
-        "1/2/3 size, A/D mode, C captured, Shift+drag to reposition"
+        "1/2/3 size, A/D mode, C captured, Shift+drag | ? help"
 
         :else
-        "1/2/3 size, A/D mode, Shift+drag to reposition")]]))
+        "1/2/3 size, A/D mode, Shift+drag | ? help")]]))
 
 (defn draw-stash-pyramid [size colour & [{:keys [captured?]}]]
   "Returns SVG element for a pyramid in the stash"
@@ -622,6 +625,51 @@
                        (reset! state/current-view :lobby))}
          "Back to Lobby"]]])))
 
+(defn help-overlay []
+  "Display help overlay with hotkey descriptions"
+  (when @state/show-help
+    [:div.help-overlay
+     {:style {:position "fixed"
+              :top 0 :left 0 :right 0 :bottom 0
+              :background "rgba(0,0,0,0.85)"
+              :display "flex"
+              :justify-content "center"
+              :align-items "center"
+              :z-index 1000}
+      :on-click #(reset! state/show-help false)}
+     [:div.help-content
+      {:style {:background "#2a2a3e"
+               :padding "2rem"
+               :border-radius "8px"
+               :max-width "500px"
+               :color "white"}
+       :on-click #(.stopPropagation %)}
+      [:h2 {:style {:margin-top 0 :text-align "center"}} "Keyboard Controls"]
+      [:table {:style {:width "100%" :border-collapse "collapse"}}
+       [:tbody
+        [:tr [:td {:style {:padding "0.5rem" :color "#ffd700"}} "1 / 2 / 3"]
+         [:td {:style {:padding "0.5rem"}} "Select piece size (Small / Medium / Large)"]]
+        [:tr [:td {:style {:padding "0.5rem" :color "#ffd700"}} "D"]
+         [:td {:style {:padding "0.5rem"}} "Defend mode (standing piece)"]]
+        [:tr [:td {:style {:padding "0.5rem" :color "#ffd700"}} "A"]
+         [:td {:style {:padding "0.5rem"}} "Attack mode (pointing piece)"]]
+        [:tr [:td {:style {:padding "0.5rem" :color "#ffd700"}} "C"]
+         [:td {:style {:padding "0.5rem"}} "Capture piece / Toggle captured mode"]]
+        [:tr [:td {:style {:padding "0.5rem" :color "#ffd700"}} "Shift + Drag"]
+         [:td {:style {:padding "0.5rem"}} "Adjust position without changing angle"]]
+        [:tr [:td {:style {:padding "0.5rem" :color "#ffd700"}} "Escape"]
+         [:td {:style {:padding "0.5rem"}} "Cancel placement / Close help"]]
+        [:tr [:td {:style {:padding "0.5rem" :color "#ffd700"}} "?"]
+         [:td {:style {:padding "0.5rem"}} "Toggle this help"]]]]
+      [:h3 {:style {:margin-top "1.5rem"}} "Gameplay Tips"]
+      [:ul {:style {:padding-left "1.5rem" :line-height "1.6"}}
+       [:li "Click and drag to place a piece with rotation"]
+       [:li "Attack mode unlocks after placing 2 pieces"]
+       [:li "Attackers must point at an opponent's defender within range"]
+       [:li "Over-ice: When attack pips exceed defense, capture excess attackers"]]
+      [:div {:style {:text-align "center" :margin-top "1.5rem" :color "#888"}}
+       "Click anywhere or press Escape to close"]]]))
+
 (defn game-view []
   (let [timer-interval (atom nil)]
     (r/create-class
@@ -651,6 +699,7 @@
           [game-timer]]
          [error-display]
          [game-results-overlay]
+         [help-overlay]
          [piece-selector]
          [:div.game-area
           [stash-panel :left]

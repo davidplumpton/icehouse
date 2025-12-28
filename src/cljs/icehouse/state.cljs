@@ -45,6 +45,9 @@
 ;; List of available saved game IDs
 (defonce game-list (r/atom nil))
 
+;; Whether the help overlay is visible
+(defonce show-help (r/atom false))
+
 ;; Traditional Looney Labs pyramid stash colours
 ;; Rainbow stash: red, yellow, green, blue, black
 ;; Xeno stash: purple, cyan, orange, white
