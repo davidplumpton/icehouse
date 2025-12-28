@@ -98,6 +98,116 @@
                                       xi)))]
           (recur (inc i) (if intersect (not inside) inside)))))))
 
+;; =============================================================================
+;; Attack Target Detection (for preview highlighting)
+;; =============================================================================
+
+(def parallel-threshold 0.0001)
+
+(defn attacker-tip
+  "Get the tip position of a pointing piece"
+  [{:keys [x y size angle]}]
+  (let [base-size (get piece-sizes (keyword size) default-piece-size)
+        tip-offset (* base-size tip-offset-ratio)
+        angle (or angle 0)]
+    [(+ x (* (js/Math.cos angle) tip-offset))
+     (+ y (* (js/Math.sin angle) tip-offset))]))
+
+(defn attack-direction
+  "Get the unit direction vector for an attack"
+  [{:keys [angle]}]
+  (let [angle (or angle 0)]
+    [(js/Math.cos angle) (js/Math.sin angle)]))
+
+(defn ray-segment-intersection?
+  "Check if ray from origin in direction intersects line segment [a b]"
+  [[ox oy] [dx dy] [[ax ay] [bx by]]]
+  (let [v1x (- ox ax)
+        v1y (- oy ay)
+        v2x (- bx ax)
+        v2y (- by ay)
+        v3x (- dy)
+        v3y dx
+        dot (+ (* v2x v3x) (* v2y v3y))]
+    (when (> (js/Math.abs dot) parallel-threshold)
+      (let [t1 (/ (- (* v2x v1y) (* v2y v1x)) dot)
+            t2 (/ (+ (* v1x v3x) (* v1y v3y)) dot)]
+        (and (>= t1 0) (>= t2 0) (<= t2 1))))))
+
+(defn ray-intersects-polygon?
+  "Check if ray intersects any edge of polygon"
+  [origin direction vertices]
+  (let [n (count vertices)
+        edges (map (fn [i] [(nth vertices i) (nth vertices (mod (inc i) n))])
+                   (range n))]
+    (some #(ray-segment-intersection? origin direction %) edges)))
+
+(defn in-front-of?
+  "Check if attacker's attack ray intersects the target piece"
+  [attacker target]
+  (let [tip (attacker-tip attacker)
+        dir (attack-direction attacker)
+        target-verts (piece-vertices target)]
+    (ray-intersects-polygon? tip dir target-verts)))
+
+(defn point-to-segment-distance
+  "Calculate minimum distance from point p to line segment [a b]"
+  [[px py] [[ax ay] [bx by]]]
+  (let [abx (- bx ax)
+        aby (- by ay)
+        apx (- px ax)
+        apy (- py ay)
+        ab-len-sq (+ (* abx abx) (* aby aby))
+        t (if (zero? ab-len-sq)
+            0
+            (max 0 (min 1 (/ (+ (* apx abx) (* apy aby)) ab-len-sq))))
+        cx (+ ax (* t abx))
+        cy (+ ay (* t aby))]
+    (js/Math.sqrt (+ (* (- px cx) (- px cx))
+                     (* (- py cy) (- py cy))))))
+
+(defn point-to-polygon-distance
+  "Calculate minimum distance from point to polygon (nearest edge)"
+  [point vertices]
+  (let [n (count vertices)
+        edges (map (fn [i] [(nth vertices i) (nth vertices (mod (inc i) n))])
+                   (range n))]
+    (apply min (map #(point-to-segment-distance point %) edges))))
+
+(defn attack-range
+  "Get attack range for a piece (equals its base size)"
+  [piece]
+  (get piece-sizes (keyword (:size piece)) default-piece-size))
+
+(defn within-range?
+  "Check if target is within attack range of attacker"
+  [attacker target]
+  (let [tip (attacker-tip attacker)
+        target-verts (piece-vertices target)
+        dist (point-to-polygon-distance tip target-verts)
+        rng (attack-range attacker)]
+    (<= dist rng)))
+
+(defn potential-target?
+  "Check if target could be attacked (in trajectory, ignoring range)"
+  [attacker target attacker-player-id]
+  (and (not= (:player-id target) attacker-player-id)
+       (= (keyword (:orientation target)) :standing)
+       (in-front-of? attacker target)))
+
+(defn valid-target?
+  "Check if target is a valid attack target (in trajectory AND in range)"
+  [attacker target attacker-player-id]
+  (and (potential-target? attacker target attacker-player-id)
+       (within-range? attacker target)))
+
+(defn find-targets-for-attack
+  "Find all potential targets and categorize them as valid (in range) or invalid (out of range)"
+  [attacker player-id board]
+  (let [potential (filter #(potential-target? attacker % player-id) board)]
+    {:valid (filter #(within-range? attacker %) potential)
+     :invalid (remove #(within-range? attacker %) potential)}))
+
 (defn find-piece-at
   "Find the piece at the given x,y position, or nil if none"
   [x y board]
@@ -265,6 +375,25 @@
     {:x (- (.-clientX e) (.-left rect))
      :y (- (.-clientY e) (.-top rect))}))
 
+(defn draw-target-highlight
+  "Draw a highlight around a target piece - green for valid, red for out of range"
+  [ctx piece valid?]
+  (let [verts (piece-vertices piece)
+        color (if valid? "rgba(0,255,0,0.5)" "rgba(255,0,0,0.5)")]
+    (.save ctx)
+    (set! (.-strokeStyle ctx) color)
+    (set! (.-lineWidth ctx) 4)
+    (set! (.-lineCap ctx) "round")
+    (set! (.-lineJoin ctx) "round")
+    (.beginPath ctx)
+    (let [[fx fy] (first verts)]
+      (.moveTo ctx fx fy))
+    (doseq [[x y] (rest verts)]
+      (.lineTo ctx x y))
+    (.closePath ctx)
+    (.stroke ctx)
+    (.restore ctx)))
+
 (defn draw-with-preview [ctx game drag-state selected-piece player-colour hover-pos player-id]
   "Draw the board and optionally a preview of the piece being placed"
   (draw-board ctx game hover-pos player-id)
@@ -290,14 +419,24 @@
         (.moveTo ctx start-x start-y)
         (.lineTo ctx current-x current-y)
         (.stroke ctx))
-      ;; Draw attack range indicator for attacking pieces
+      ;; Draw attack range indicator and target highlights for attacking pieces
       (when (and is-attacking? current-x current-y)
         (let [tip-offset (* base-size tip-offset-ratio)
               tip-x (+ start-x (* (js/Math.cos angle) tip-offset))
               tip-y (+ start-y (* (js/Math.sin angle) tip-offset))
               ;; Attack range extends base-size from tip
               range-end-x (+ tip-x (* (js/Math.cos angle) base-size))
-              range-end-y (+ tip-y (* (js/Math.sin angle) base-size))]
+              range-end-y (+ tip-y (* (js/Math.sin angle) base-size))
+              ;; Create preview attacker to find targets
+              preview-attacker {:x start-x :y start-y :size size :orientation :pointing :angle angle}
+              board (:board game)
+              {:keys [valid invalid]} (find-targets-for-attack preview-attacker player-id board)]
+          ;; Highlight valid targets (green)
+          (doseq [target valid]
+            (draw-target-highlight ctx target true))
+          ;; Highlight invalid targets - in trajectory but out of range (red)
+          (doseq [target invalid]
+            (draw-target-highlight ctx target false))
           ;; Draw range line from tip
           (set! (.-strokeStyle ctx) "rgba(255,100,100,0.7)")
           (set! (.-lineWidth ctx) 3)
