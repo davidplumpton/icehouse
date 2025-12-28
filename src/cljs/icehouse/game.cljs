@@ -22,6 +22,118 @@
   [x1 y1 x2 y2]
   (js/Math.atan2 (- y2 y1) (- x2 x1)))
 
+;; Pips per piece size (for over-ice calculation)
+(def pips {:small 1 :medium 2 :large 3})
+
+(defn rotate-point
+  "Rotate point [x y] around origin by angle (radians)"
+  [[x y] angle]
+  (let [cos-a (js/Math.cos angle)
+        sin-a (js/Math.sin angle)]
+    [(- (* x cos-a) (* y sin-a))
+     (+ (* x sin-a) (* y cos-a))]))
+
+(defn piece-vertices
+  "Get vertices of a piece in world coordinates"
+  [{:keys [x y size orientation angle]}]
+  (let [base-size (get piece-sizes (keyword size) 30)
+        half (/ base-size 2)
+        angle (or angle 0)
+        local-verts (if (= (keyword orientation) :standing)
+                      [[(- half) (- half)]
+                       [half (- half)]
+                       [half half]
+                       [(- half) half]]
+                      (let [half-width (* base-size 0.75)]
+                        [[half-width 0]
+                         [(- half-width) (- half)]
+                         [(- half-width) half]]))]
+    (mapv (fn [[lx ly]]
+            (let [[rx ry] (rotate-point [lx ly] angle)]
+              [(+ x rx) (+ y ry)]))
+          local-verts)))
+
+(defn point-in-polygon?
+  "Check if point [px py] is inside polygon (ray casting algorithm)"
+  [[px py] vertices]
+  (let [n (count vertices)]
+    (loop [i 0
+           inside false]
+      (if (>= i n)
+        inside
+        (let [j (mod (dec (+ i n)) n)
+              [xi yi] (nth vertices i)
+              [xj yj] (nth vertices j)
+              intersect (and (not= (> yi py) (> yj py))
+                             (< px (+ (/ (* (- xj xi) (- py yi))
+                                         (- yj yi))
+                                      xi)))]
+          (recur (inc i) (if intersect (not inside) inside)))))))
+
+(defn find-piece-at
+  "Find the piece at the given x,y position, or nil if none"
+  [x y board]
+  (first (filter (fn [piece]
+                   (let [verts (piece-vertices piece)]
+                     (point-in-polygon? [x y] verts)))
+                 (reverse board))))  ;; Check most recently placed first
+
+(defn find-piece-by-id
+  "Find a piece by its ID"
+  [board id]
+  (first (filter #(= (:id %) id) board)))
+
+(defn attackers-by-target
+  "Returns a map of target-id -> list of attackers targeting that piece"
+  [board]
+  (let [pointing-pieces (filter #(and (= (keyword (:orientation %)) :pointing)
+                                      (:target-id %))
+                                board)]
+    (group-by :target-id pointing-pieces)))
+
+(defn attack-strength
+  "Sum of pip values of all attackers"
+  [attackers]
+  (reduce + (map #(get pips (keyword (:size %)) 0) attackers)))
+
+(defn calculate-over-ice
+  "Returns a map of defender-id -> {:excess pips :attackers [...] :defender-owner player-id}
+   for each over-iced defender"
+  [board]
+  (let [attacks (attackers-by-target board)]
+    (reduce-kv
+     (fn [result target-id attackers]
+       (let [defender (find-piece-by-id board target-id)
+             defender-pips (get pips (keyword (:size defender)) 0)
+             attacker-pips (attack-strength attackers)
+             excess (- attacker-pips (+ defender-pips 1))]
+         (if (and defender (> attacker-pips defender-pips) (pos? excess))
+           (assoc result target-id {:excess excess
+                                    :attackers attackers
+                                    :defender-owner (:player-id defender)})
+           result)))
+     {}
+     attacks)))
+
+(defn capturable-piece?
+  "Check if a piece can be captured by the current player.
+   Returns true if piece is an attacker in an over-iced situation where
+   the current player owns the defender and the attacker's pips <= excess."
+  [piece player-id board]
+  (when (and piece (= (keyword (:orientation piece)) :pointing))
+    (let [over-ice (calculate-over-ice board)
+          target-id (:target-id piece)]
+      (when-let [info (get over-ice target-id)]
+        (and (= (:defender-owner info) player-id)
+             (<= (get pips (keyword (:size piece)) 0) (:excess info)))))))
+
+(defn get-hovered-piece
+  "Get the piece currently under the mouse cursor, if any"
+  []
+  (when-let [{:keys [x y]} @state/hover-pos]
+    (when-let [game @state/game-state]
+      (find-piece-at x y (:board game)))))
+
 (defn draw-pyramid [ctx x y size colour orientation angle]
   (let [size-kw (keyword size)
         orient-kw (keyword orientation)
@@ -63,7 +175,25 @@
 
     (.restore ctx)))
 
-(defn draw-board [ctx game]
+(defn draw-capture-highlight
+  "Draw a highlight around a capturable piece"
+  [ctx piece]
+  (let [verts (piece-vertices piece)]
+    (.save ctx)
+    (set! (.-strokeStyle ctx) "#ffd700")
+    (set! (.-lineWidth ctx) 4)
+    (set! (.-shadowColor ctx) "#ffd700")
+    (set! (.-shadowBlur ctx) 10)
+    (.beginPath ctx)
+    (let [[x0 y0] (first verts)]
+      (.moveTo ctx x0 y0))
+    (doseq [[x y] (rest verts)]
+      (.lineTo ctx x y))
+    (.closePath ctx)
+    (.stroke ctx)
+    (.restore ctx)))
+
+(defn draw-board [ctx game hover-pos current-player-id]
   (set! (.-fillStyle ctx) "#2a2a3e")
   (.fillRect ctx 0 0 canvas-width canvas-height)
 
@@ -81,17 +211,25 @@
     (.stroke ctx))
 
   (when game
-    (doseq [piece (:board game)]
-      (let [player-id (:player-id piece)
-            player-data (get-in game [:players player-id])
-            colour (or (:colour piece) (:colour player-data) "#888")]
-        (draw-pyramid ctx
-                      (:x piece)
-                      (:y piece)
-                      (:size piece)
-                      colour
-                      (:orientation piece)
-                      (:angle piece))))))
+    (let [board (:board game)
+          hovered-piece (when hover-pos
+                          (find-piece-at (:x hover-pos) (:y hover-pos) board))]
+      ;; Draw all pieces
+      (doseq [piece board]
+        (let [player-id (:player-id piece)
+              player-data (get-in game [:players player-id])
+              colour (or (:colour piece) (:colour player-data) "#888")]
+          (draw-pyramid ctx
+                        (:x piece)
+                        (:y piece)
+                        (:size piece)
+                        colour
+                        (:orientation piece)
+                        (:angle piece))))
+      ;; Draw capture highlight if hovering over a capturable piece
+      (when (and hovered-piece
+                 (capturable-piece? hovered-piece current-player-id board))
+        (draw-capture-highlight ctx hovered-piece)))))
 
 (defn get-canvas-coords [e]
   "Get coordinates relative to canvas from mouse event"
@@ -99,9 +237,9 @@
     {:x (- (.-clientX e) (.-left rect))
      :y (- (.-clientY e) (.-top rect))}))
 
-(defn draw-with-preview [ctx game drag-state selected-piece player-colour]
+(defn draw-with-preview [ctx game drag-state selected-piece player-colour hover-pos player-id]
   "Draw the board and optionally a preview of the piece being placed"
-  (draw-board ctx game)
+  (draw-board ctx game hover-pos player-id)
   ;; Draw preview if dragging
   (when drag-state
     (let [{:keys [start-x start-y current-x current-y]} drag-state
@@ -153,7 +291,7 @@
       (fn [this]
         (when-let [canvas @canvas-ref]
           (let [ctx (.getContext canvas "2d")]
-            (draw-board ctx @state/game-state))))
+            (draw-board ctx @state/game-state @state/hover-pos @state/player-id))))
 
       :component-did-update
       (fn [this]
@@ -163,14 +301,17 @@
                                @state/game-state
                                @state/drag-state
                                @state/selected-piece
-                               @state/player-colour))))
+                               @state/player-colour
+                               @state/hover-pos
+                               @state/player-id))))
 
       :reagent-render
       (fn []
         ;; Deref state atoms so Reagent re-renders when they change
         (let [_ @state/game-state
               _ @state/drag-state
-              _ @state/selected-piece]
+              _ @state/selected-piece
+              _ @state/hover-pos]
           [:canvas
            {:ref #(reset! canvas-ref %)
             :width canvas-width
@@ -184,8 +325,11 @@
                                           :current-x x :current-y y})))
             :on-mouse-move
             (fn [e]
-              (when @state/drag-state
-                (let [{:keys [x y]} (get-canvas-coords e)]
+              (let [{:keys [x y]} (get-canvas-coords e)]
+                ;; Always update hover position for capture detection
+                (reset! state/hover-pos {:x x :y y})
+                ;; Update drag state if dragging
+                (when @state/drag-state
                   (swap! state/drag-state assoc :current-x x :current-y y))))
             :on-mouse-up
             (fn [e]
@@ -197,6 +341,7 @@
                   (reset! state/drag-state nil))))
             :on-mouse-leave
             (fn [e]
+              (reset! state/hover-pos nil)
               (reset! state/drag-state nil))}]))})))
 
 (defn can-attack? []
@@ -215,6 +360,16 @@
              (get captured :medium 0)
              (get captured :large 0)))))
 
+(defn try-capture-hovered-piece!
+  "Attempt to capture the piece under the cursor"
+  []
+  (when-let [hovered (get-hovered-piece)]
+    (when-let [game @state/game-state]
+      (let [player-id @state/player-id
+            board (:board game)]
+        (when (capturable-piece? hovered player-id board)
+          (ws/capture-piece! (:id hovered)))))))
+
 (defn handle-keydown [e]
   (let [key (.-key e)]
     (case key
@@ -224,8 +379,12 @@
       ("a" "A") (when (can-attack?)
                   (swap! state/selected-piece assoc :orientation :pointing))
       ("d" "D") (swap! state/selected-piece assoc :orientation :standing)
-      ("c" "C") (when (has-captured-pieces?)
-                  (swap! state/selected-piece update :captured? not))
+      ("c" "C") (if (get-hovered-piece)
+                  ;; If hovering over a piece, try to capture it
+                  (try-capture-hovered-piece!)
+                  ;; Otherwise, toggle captured piece selection
+                  (when (has-captured-pieces?)
+                    (swap! state/selected-piece update :captured? not)))
       "Escape" (reset! state/drag-state nil)
       nil)))
 

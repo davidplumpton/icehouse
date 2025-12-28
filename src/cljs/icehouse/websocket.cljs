@@ -39,6 +39,9 @@
       "piece-placed"
       (reset! state/game-state (:game data))
 
+      "piece-captured"
+      (reset! state/game-state (:game data))
+
       "game-over"
       (js/alert (str "Game Over! Scores: " (pr-str (:scores data))))
 
@@ -93,3 +96,8 @@
           :angle angle
           :target-id target-id
           :captured captured?}))
+
+(defn capture-piece! [piece-id]
+  "Capture an over-iced attacker piece"
+  (send! {:type "capture-piece"
+          :piece-id piece-id}))

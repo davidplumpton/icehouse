@@ -27,6 +27,10 @@
 ;; WebSocket connection status: :connected, :disconnected, :connecting
 (defonce ws-status (r/atom :connecting))
 
+;; Current mouse position on canvas for hover detection
+;; {:x :y} or nil when mouse is not over canvas
+(defonce hover-pos (r/atom nil))
+
 (def colours
   ["#ff6b6b"   ; red
    "#4ecdc4"   ; teal

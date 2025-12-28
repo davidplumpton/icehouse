@@ -484,5 +484,56 @@
                                       :icehouse-players (vec icehouse-players)})))))
       (utils/send-msg! channel {:type "error" :message (or error "Invalid game state")}))))
 
+(defn validate-capture
+  "Validate that a piece can be captured by the player.
+   Returns nil if valid, or error message if invalid."
+  [game player-id piece-id]
+  (let [board (:board game)
+        piece (find-piece-by-id board piece-id)
+        over-ice (calculate-over-ice board)]
+    (cond
+      (nil? piece)
+      "Piece not found"
+
+      (not= (:orientation piece) :pointing)
+      "Can only capture attacking pieces"
+
+      (not (:target-id piece))
+      "Piece has no target"
+
+      (nil? (get over-ice (:target-id piece)))
+      "Target is not over-iced"
+
+      (not= (:defender-owner (get over-ice (:target-id piece))) player-id)
+      "You can only capture attackers targeting your own pieces"
+
+      (> (get pips (:size piece) 0) (:excess (get over-ice (:target-id piece))))
+      "Attacker's pip value exceeds remaining excess"
+
+      :else nil)))
+
+(defn handle-capture-piece [clients channel msg]
+  (let [room-id (get-in @clients [channel :room-id])
+        player-id (str (hash channel))
+        game (get @games room-id)
+        piece-id (:piece-id msg)
+        error (when game (validate-capture game player-id piece-id))]
+    (if (and game (nil? error))
+      (let [piece (find-piece-by-id (:board game) piece-id)
+            piece-size (:size piece)]
+        ;; Remove piece from board
+        (swap! games update-in [room-id :board]
+               (fn [board] (vec (remove #(= (:id %) piece-id) board))))
+        ;; Add to capturing player's captured stash
+        (swap! games update-in [room-id :players player-id :captured piece-size] inc)
+        ;; Broadcast updated game state
+        (let [updated-game (get @games room-id)]
+          (utils/broadcast-room! clients room-id
+                                 {:type "piece-captured"
+                                  :piece-id piece-id
+                                  :captured-by player-id
+                                  :game updated-game})))
+      (utils/send-msg! channel {:type "error" :message (or error "Invalid capture")}))))
+
 (defn start-game! [room-id players]
   (swap! games assoc room-id (create-game room-id players)))

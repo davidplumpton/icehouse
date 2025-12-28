@@ -25,6 +25,7 @@
 
       ;; Game messages
       "place-piece" (game/handle-place-piece clients channel msg)
+      "capture-piece" (game/handle-capture-piece clients channel msg)
 
       ;; Unknown
       (utils/send-msg! channel {:type "error" :message "Unknown message type"}))))
