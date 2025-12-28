@@ -390,6 +390,172 @@
       (is (= "Attacking piece must be pointed at an opponent's piece"
              (game/validate-placement game "p1" attacker))))))
 
+(deftest in-front-of-test
+  (testing "ray from tip intersects target at various angles"
+    ;; Large attacker at (100, 100) pointing right (angle=0) at small defender at (200, 100)
+    (let [attacker {:x 100 :y 100 :size :large :orientation :pointing :angle 0}
+          defender {:x 200 :y 100 :size :small :orientation :standing :angle 0}]
+      (is (game/in-front-of? attacker defender) "Should hit defender directly ahead")))
+
+  (testing "ray misses target that is off-angle"
+    (let [attacker {:x 100 :y 100 :size :large :orientation :pointing :angle 0}  ;; pointing right
+          defender {:x 100 :y 200 :size :small :orientation :standing :angle 0}] ;; below
+      (is (not (game/in-front-of? attacker defender)) "Should miss defender below")))
+
+  (testing "close-range attack - tip near target edge"
+    ;; Large piece: tip-offset = 0.75 * 70 = 52.5px from center
+    ;; At x=100, tip is at x=152.5
+    ;; Small defender at x=180 has left edge at x=165 (180 - 15)
+    ;; Ray should hit the defender
+    (let [attacker {:x 100 :y 100 :size :large :orientation :pointing :angle 0}
+          defender {:x 180 :y 100 :size :small :orientation :standing :angle 0}]
+      (is (game/in-front-of? attacker defender) "Close-range attack should hit")))
+
+  (testing "very close attack - tip almost touching target"
+    ;; Tip at x=152.5, defender left edge at x=155 (170-15)
+    (let [attacker {:x 100 :y 100 :size :large :orientation :pointing :angle 0}
+          defender {:x 170 :y 100 :size :small :orientation :standing :angle 0}]
+      (is (game/in-front-of? attacker defender) "Very close attack should hit")))
+
+  (testing "diagonal attack"
+    ;; Attacker pointing at 45 degrees toward defender
+    (let [angle (/ Math/PI 4)  ;; 45 degrees
+          attacker {:x 100 :y 100 :size :large :orientation :pointing :angle angle}
+          ;; Defender at 45 degrees, ~100px away
+          defender {:x 170 :y 170 :size :small :orientation :standing :angle 0}]
+      (is (game/in-front-of? attacker defender) "Diagonal attack should hit")))
+
+  (testing "up-left attack (user bug scenario)"
+    ;; User reported: large red attacking piece pointing up-left at small teal defender
+    ;; Up-left in screen coords = negative x, negative y = angle around -135 degrees
+    (let [angle (* -0.75 Math/PI)  ;; -135 degrees = up-left
+          ;; Attacker at center of play area
+          attacker {:x 400 :y 300 :size :large :orientation :pointing :angle angle}
+          ;; Defender up and to the left
+          ;; For large piece: tip-offset = 52.5px in direction of angle
+          ;; cos(-135°) ≈ -0.707, sin(-135°) ≈ -0.707
+          ;; Tip at approximately (400 - 37, 300 - 37) = (363, 263)
+          ;; Place defender so center is within 70px of tip
+          defender {:x 320 :y 220 :size :small :orientation :standing :angle 0}]
+      (is (game/in-front-of? attacker defender) "Up-left attack should hit defender")
+      (is (game/within-range? attacker defender) "Defender should be in range")))
+
+  (testing "up-left attack - close range"
+    ;; Same scenario but with pieces closer together
+    (let [angle (* -0.75 Math/PI)  ;; -135 degrees = up-left
+          attacker {:x 400 :y 300 :size :large :orientation :pointing :angle angle}
+          ;; Place defender very close (tip almost touching)
+          ;; Tip at (363, 263), place defender center at (340, 240)
+          ;; Distance from tip to defender center ≈ sqrt((363-340)^2 + (263-240)^2) ≈ 32px
+          defender {:x 340 :y 240 :size :small :orientation :standing :angle 0}]
+      (is (game/in-front-of? attacker defender) "Close up-left attack should hit")
+      (is (game/within-range? attacker defender) "Close defender should be in range"))))
+
+(deftest within-range-test
+  (testing "target edge within range"
+    ;; Large attacker has range of 70px from tip
+    ;; Tip at x=152.5 (100 + 52.5), target center at x=200
+    ;; Target left edge at x=185 (200-15), distance to edge = 32.5px < 70px
+    (let [attacker {:x 100 :y 100 :size :large :orientation :pointing :angle 0}
+          defender {:x 200 :y 100 :size :small :orientation :standing :angle 0}]
+      (is (game/within-range? attacker defender) "Should be in range")))
+
+  (testing "target edge just outside range"
+    ;; Tip at x=152.5, range = 70px, so max reach is x=222.5
+    ;; For small defender (half-size=15), if center at x=240, left edge at x=225
+    ;; Distance to edge = 225 - 152.5 = 72.5px > 70px (out of range)
+    (let [attacker {:x 100 :y 100 :size :large :orientation :pointing :angle 0}
+          defender {:x 240 :y 100 :size :small :orientation :standing :angle 0}]
+      (is (not (game/within-range? attacker defender)) "Should be out of range")))
+
+  (testing "small piece has shorter range"
+    ;; Small attacker: tip-offset = 0.75 * 30 = 22.5px, range = 30px
+    ;; Tip at x=122.5, max reach is x=152.5
+    ;; Target center at x=200, left edge at x=185
+    ;; Distance to edge = 185 - 122.5 = 62.5px > 30px (out of range)
+    (let [attacker {:x 100 :y 100 :size :small :orientation :pointing :angle 0}
+          defender {:x 200 :y 100 :size :small :orientation :standing :angle 0}]
+      (is (not (game/within-range? attacker defender)) "Small piece should be out of range")))
+
+  (testing "target edge exactly at range still counts"
+    ;; Tip at x=152.5, range=70, so x=222.5 is the limit
+    ;; Small defender at x=237.5 has left edge at x=222.5 (exactly at range)
+    (let [attacker {:x 100 :y 100 :size :large :orientation :pointing :angle 0}
+          defender {:x 237.5 :y 100 :size :small :orientation :standing :angle 0}]
+      (is (game/within-range? attacker defender) "Edge at exact range should count"))))
+
+(deftest attack-placement-integration-test
+  "Test full attack validation flow as would happen in actual gameplay"
+  (testing "valid attack passes all checks"
+    (let [;; Bob's defender is already on the board
+          defender {:id "bob-d1" :player-id "bob" :x 300 :y 200
+                    :size :small :orientation :standing :angle 0}
+          ;; Alice also has a piece on board (required for attack to be enabled)
+          alice-piece {:id "alice-d1" :player-id "alice" :x 500 :y 400
+                       :size :small :orientation :standing :angle 0}
+          game {:players {"alice" {:pieces {:small 5 :medium 5 :large 5}}}
+                :board [defender alice-piece]}
+          ;; Alice attacks Bob's defender from the right, pointing left
+          ;; Angle = PI (pointing left)
+          ;; Large attacker: tip-offset = 52.5, range = 70
+          ;; If attacker center is at x=420, tip is at x=420-52.5=367.5
+          ;; Defender center at x=300, distance = 367.5-300=67.5 < 70 (in range)
+          attacker {:x 420 :y 200 :size :large :orientation :pointing :angle Math/PI}
+          error (game/validate-placement game "alice" attacker)]
+      (is (nil? error) (str "Attack should be valid, got error: " error))))
+
+  (testing "attack fails when pieces overlap"
+    (let [defender {:id "bob-d1" :player-id "bob" :x 300 :y 200
+                    :size :small :orientation :standing :angle 0}
+          alice-piece {:id "alice-d1" :player-id "alice" :x 500 :y 400
+                       :size :small :orientation :standing :angle 0}
+          game {:players {"alice" {:pieces {:small 5 :medium 5 :large 5}}}
+                :board [defender alice-piece]}
+          ;; Place attacker so close that pieces overlap
+          ;; Large piece: half-width = 52.5 (tip side), half-base = 35
+          ;; At x=340, large piece extends from x=287.5 to x=392.5
+          ;; Defender at x=300 with half-size=15 extends from x=285 to x=315
+          ;; These would overlap
+          attacker {:x 340 :y 200 :size :large :orientation :pointing :angle Math/PI}
+          error (game/validate-placement game "alice" attacker)]
+      (is (= "Piece would overlap with existing piece" error))))
+
+  (testing "attack fails when target is out of range"
+    (let [defender {:id "bob-d1" :player-id "bob" :x 200 :y 200
+                    :size :small :orientation :standing :angle 0}
+          alice-piece {:id "alice-d1" :player-id "alice" :x 500 :y 400
+                       :size :small :orientation :standing :angle 0}
+          game {:players {"alice" {:pieces {:small 5 :medium 5 :large 5}}}
+                :board [defender alice-piece]}
+          ;; Large attacker far from defender
+          ;; Tip at x=447.5, defender at x=200, distance=247.5 >> 70
+          attacker {:x 500 :y 200 :size :large :orientation :pointing :angle Math/PI}
+          error (game/validate-placement game "alice" attacker)]
+      (is (= "Target is out of range" error))))
+
+  (testing "attack with acute angle relative to target"
+    ;; User bug scenario: attack at an angle, not straight at target
+    (let [defender {:id "bob-d1" :player-id "bob" :x 300 :y 200
+                    :size :small :orientation :standing :angle 0}
+          ;; Place Alice's own piece far from the attacker to avoid overlap
+          alice-piece {:id "alice-d1" :player-id "alice" :x 700 :y 500
+                       :size :small :orientation :standing :angle 0}
+          game {:players {"alice" {:pieces {:small 5 :medium 5 :large 5}}}
+                :board [defender alice-piece]}
+          ;; Attack from below-right, pointing up-left at -135 degrees
+          ;; For large piece: tip-offset = 52.5, range = 70
+          ;; To be in range, tip must be within 70px of defender center (300, 200)
+          ;; At angle -135deg, direction is (-0.707, -0.707)
+          ;; Place attacker so tip is ~50px from defender:
+          ;; tip = defender_center + 50 * (0.707, 0.707) = (300+35, 200+35) = (335, 235)
+          ;; attacker_center = tip - tip_offset * direction
+          ;;                 = (335, 235) - 52.5 * (-0.707, -0.707)
+          ;;                 = (335+37, 235+37) = (372, 272)
+          angle (* -0.75 Math/PI)  ;; -135 degrees
+          attacker {:x 372 :y 272 :size :large :orientation :pointing :angle angle}
+          error (game/validate-placement game "alice" attacker)]
+      (is (nil? error) (str "Angled attack should be valid, got error: " error)))))
+
 (deftest bounds-validation-test
   (testing "piece within play area is valid"
     (let [game {:players {"p1" {:pieces {:small 5 :medium 5 :large 5}}}

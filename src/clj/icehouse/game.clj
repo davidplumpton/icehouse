@@ -183,13 +183,42 @@
   [piece]
   (get piece-sizes (:size piece) 30))
 
+(defn point-to-segment-distance
+  "Calculate minimum distance from point p to line segment [a b]"
+  [[px py] [[ax ay] [bx by]]]
+  (let [;; Vector from a to b
+        abx (- bx ax)
+        aby (- by ay)
+        ;; Vector from a to p
+        apx (- px ax)
+        apy (- py ay)
+        ;; Project ap onto ab, clamped to [0,1]
+        ab-len-sq (+ (* abx abx) (* aby aby))
+        t (if (zero? ab-len-sq)
+            0
+            (max 0 (min 1 (/ (+ (* apx abx) (* apy aby)) ab-len-sq))))
+        ;; Closest point on segment
+        cx (+ ax (* t abx))
+        cy (+ ay (* t aby))]
+    (Math/sqrt (+ (* (- px cx) (- px cx))
+                  (* (- py cy) (- py cy))))))
+
+(defn point-to-polygon-distance
+  "Calculate minimum distance from point to polygon (nearest edge)"
+  [point vertices]
+  (let [n (count vertices)
+        edges (map (fn [i] [(nth vertices i) (nth vertices (mod (inc i) n))])
+                   (range n))]
+    (apply min (map #(point-to-segment-distance point %) edges))))
+
 (defn within-range?
   "Check if target is within attack range of attacker.
-   Per Icehouse rules, range is measured from the attacker's tip."
+   Per Icehouse rules, range is measured from the attacker's tip to the nearest
+   point on the target piece."
   [attacker target]
   (let [tip (attacker-tip attacker)
-        target-center (piece-center target)
-        dist (distance tip target-center)
+        target-verts (piece-vertices target)
+        dist (point-to-polygon-distance tip target-verts)
         range (attack-range attacker)]
     (<= dist range)))
 
