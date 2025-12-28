@@ -244,15 +244,20 @@
   (draw-board ctx game hover-pos player-id)
   ;; Draw preview if dragging
   (when drag-state
-    (let [{:keys [start-x start-y current-x current-y]} drag-state
+    (let [{:keys [start-x start-y current-x current-y locked-angle]} drag-state
           {:keys [size orientation]} selected-piece
           base-size (get piece-sizes size 30)
-          angle (if (and current-x current-y)
-                  (calculate-angle start-x start-y current-x current-y)
-                  0)
+          ;; In shift mode (position adjustment), start equals current, so use locked-angle
+          ;; In normal mode, calculate angle from start to current
+          in-shift-mode? (and (= start-x current-x) (= start-y current-y))
+          angle (if in-shift-mode?
+                  (or locked-angle 0)
+                  (if (and current-x current-y)
+                    (calculate-angle start-x start-y current-x current-y)
+                    0))
           is-attacking? (= orientation :pointing)]
-      ;; Draw a line showing the direction
-      (when (and current-x current-y)
+      ;; Draw a line showing the direction (only in normal mode)
+      (when (and current-x current-y (not in-shift-mode?))
         (set! (.-strokeStyle ctx) "rgba(255,255,255,0.5)")
         (set! (.-lineWidth ctx) 2)
         (.beginPath ctx)
@@ -324,21 +329,35 @@
               (.preventDefault e)
               (let [{:keys [x y]} (get-canvas-coords e)]
                 (reset! state/drag-state {:start-x x :start-y y
-                                          :current-x x :current-y y})))
+                                          :current-x x :current-y y
+                                          :locked-angle 0})))
             :on-mouse-move
             (fn [e]
-              (let [{:keys [x y]} (get-canvas-coords e)]
+              (let [{:keys [x y]} (get-canvas-coords e)
+                    shift-held (.-shiftKey e)]
                 ;; Always update hover position for capture detection
                 (reset! state/hover-pos {:x x :y y})
                 ;; Update drag state if dragging
-                (when @state/drag-state
-                  (swap! state/drag-state assoc :current-x x :current-y y))))
+                (when-let [drag @state/drag-state]
+                  (if shift-held
+                    ;; Shift held: move position, keep locked angle
+                    (reset! state/drag-state
+                            (assoc drag :start-x x :start-y y :current-x x :current-y y))
+                    ;; Normal: update current position for angle calculation, lock that angle
+                    (let [new-angle (calculate-angle (:start-x drag) (:start-y drag) x y)]
+                      (swap! state/drag-state assoc
+                             :current-x x :current-y y
+                             :locked-angle new-angle))))))
             :on-mouse-up
             (fn [e]
               (when-let [drag @state/drag-state]
-                (let [{:keys [start-x start-y current-x current-y]} drag
+                (let [{:keys [start-x start-y current-x current-y locked-angle]} drag
                       {:keys [size orientation captured?]} @state/selected-piece
-                      angle (calculate-angle start-x start-y current-x current-y)]
+                      shift-held (.-shiftKey e)
+                      ;; Use locked angle when shift is held, otherwise calculate from position
+                      angle (if shift-held
+                              locked-angle
+                              (calculate-angle start-x start-y current-x current-y))]
                   (ws/place-piece! start-x start-y size orientation angle nil captured?)
                   (reset! state/drag-state nil))))
             :on-mouse-leave
@@ -407,13 +426,13 @@
      [:div.hotkey-hint
       (cond
         (not attack-allowed)
-        "Press 1/2/3 for size, D for defend, Esc to cancel (attack unlocks after 2 moves)"
+        "1/2/3 size, D defend, Shift+drag to reposition (attack unlocks after 2 moves)"
 
         has-captured
-        "Press 1/2/3 for size, A/D for mode, C for captured, Esc to cancel"
+        "1/2/3 size, A/D mode, C captured, Shift+drag to reposition"
 
         :else
-        "Press 1/2/3 for size, A/D for mode, Esc to cancel")]]))
+        "1/2/3 size, A/D mode, Shift+drag to reposition")]]))
 
 (defn draw-stash-pyramid [size colour & [{:keys [captured?]}]]
   "Returns SVG element for a pyramid in the stash"
