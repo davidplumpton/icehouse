@@ -205,6 +205,16 @@
         board-count (count (:board game))]
     (>= board-count 2)))
 
+(defn has-captured-pieces? []
+  "Returns true if current player has any captured pieces"
+  (let [game @state/game-state
+        player-id @state/player-id
+        player-data (get-in game [:players player-id])
+        captured (or (:captured player-data) {:small 0 :medium 0 :large 0})]
+    (pos? (+ (get captured :small 0)
+             (get captured :medium 0)
+             (get captured :large 0)))))
+
 (defn handle-keydown [e]
   (let [key (.-key e)]
     (case key
@@ -214,23 +224,35 @@
       ("a" "A") (when (can-attack?)
                   (swap! state/selected-piece assoc :orientation :pointing))
       ("d" "D") (swap! state/selected-piece assoc :orientation :standing)
+      ("c" "C") (when (has-captured-pieces?)
+                  (swap! state/selected-piece update :captured? not))
       "Escape" (reset! state/drag-state nil)
       nil)))
 
 (defn piece-selector []
-  (let [{:keys [size orientation]} @state/selected-piece
-        attack-allowed (can-attack?)]
+  (let [{:keys [size orientation captured?]} @state/selected-piece
+        attack-allowed (can-attack?)
+        has-captured (has-captured-pieces?)]
     [:div.piece-selector
      [:div.hotkey-display
       [:span.current-size
        (case size :small "Small (1)" :medium "Medium (2)" :large "Large (3)" "Small (1)")]
       [:span.separator " | "]
       [:span.current-mode
-       (if (= orientation :standing) "Defend (D)" "Attack (A)")]]
+       (if (= orientation :standing) "Defend (D)" "Attack (A)")]
+      (when captured?
+        [:span.captured-indicator {:style {:color "#ffd700" :margin-left "0.5rem"}}
+         "[Captured]"])]
      [:div.hotkey-hint
-      (if attack-allowed
-        "Press 1/2/3 for size, A/D for mode, Esc to cancel"
-        "Press 1/2/3 for size, D for defend, Esc to cancel (attack unlocks after 2 moves)")]]))
+      (cond
+        (not attack-allowed)
+        "Press 1/2/3 for size, D for defend, Esc to cancel (attack unlocks after 2 moves)"
+
+        has-captured
+        "Press 1/2/3 for size, A/D for mode, C for captured, Esc to cancel"
+
+        :else
+        "Press 1/2/3 for size, A/D for mode, Esc to cancel")]]))
 
 (defn draw-stash-pyramid [size colour & [{:keys [captured?]}]]
   "Returns SVG element for a pyramid in the stash"

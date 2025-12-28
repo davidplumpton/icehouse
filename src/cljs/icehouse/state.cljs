@@ -15,7 +15,7 @@
 
 (defonce game-state (r/atom nil))
 
-(defonce selected-piece (r/atom {:size :small :orientation :standing}))
+(defonce selected-piece (r/atom {:size :small :orientation :standing :captured? false}))
 
 ;; Drag state for placing pieces at angles
 ;; {:x :y :dragging?} - tracks the starting position of a drag operation
