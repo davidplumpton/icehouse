@@ -31,6 +31,10 @@
 ;; {:x :y} or nil when mouse is not over canvas
 (defonce hover-pos (r/atom nil))
 
+;; Game result when game ends
+;; {:scores {"player-id" score} :icehouse-players ["id"] :over-ice {...}}
+(defonce game-result (r/atom nil))
+
 ;; Traditional Looney Labs pyramid stash colours
 ;; Rainbow stash: red, yellow, green, blue, black
 ;; Xeno stash: purple, cyan, orange, white

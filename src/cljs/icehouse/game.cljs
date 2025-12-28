@@ -534,6 +534,66 @@
               :font-weight "bold"}}
      error]))
 
+(defn game-results-overlay []
+  "Display final scores when game ends"
+  (when-let [result @state/game-result]
+    (let [scores (:scores result)
+          icehouse-players (set (:icehouse-players result))
+          game @state/game-state
+          players-map (:players game)
+          ;; Sort by score descending
+          sorted-scores (sort-by (fn [[_ score]] (- score)) scores)]
+      [:div.game-results-overlay
+       {:style {:position "fixed"
+                :top 0 :left 0 :right 0 :bottom 0
+                :background "rgba(0,0,0,0.8)"
+                :display "flex"
+                :align-items "center"
+                :justify-content "center"
+                :z-index 1000}}
+       [:div.game-results
+        {:style {:background "#fff"
+                 :padding "2rem"
+                 :border-radius "8px"
+                 :min-width "300px"
+                 :text-align "center"}}
+        [:h2 {:style {:margin-top 0}} "Game Over!"]
+        [:table {:style {:width "100%" :border-collapse "collapse" :margin "1rem 0"}}
+         [:thead
+          [:tr
+           [:th {:style {:text-align "left" :padding "0.5rem"}} "Player"]
+           [:th {:style {:text-align "right" :padding "0.5rem"}} "Score"]]]
+         [:tbody
+          (for [[player-id score] sorted-scores]
+            (let [player-data (get players-map (keyword player-id))
+                  player-name (or (:name player-data) player-id)
+                  player-colour (or (:colour player-data) "#888")
+                  in-icehouse? (contains? icehouse-players player-id)
+                  is-winner? (= score (apply max (vals scores)))]
+              ^{:key player-id}
+              [:tr {:style {:background (when is-winner? "#e8f5e9")}}
+               [:td {:style {:text-align "left" :padding "0.5rem"}}
+                [:span {:style {:color player-colour :font-weight "bold"}}
+                 player-name]
+                (when in-icehouse?
+                  [:span {:style {:color "#f44336" :margin-left "0.5rem" :font-size "0.8em"}}
+                   "(Icehouse!)"])]
+               [:td {:style {:text-align "right" :padding "0.5rem" :font-size "1.2em"}}
+                score]]))]]
+        [:button
+         {:style {:padding "0.5rem 2rem"
+                  :font-size "1rem"
+                  :cursor "pointer"
+                  :background "#4CAF50"
+                  :color "#fff"
+                  :border "none"
+                  :border-radius "4px"}
+          :on-click #(do
+                       (reset! state/game-result nil)
+                       (reset! state/game-state nil)
+                       (reset! state/current-view :lobby))}
+         "Back to Lobby"]]])))
+
 (defn game-view []
   (r/create-class
    {:component-did-mount
@@ -549,6 +609,7 @@
       [:div.game
        [:h2 "Icehouse"]
        [error-display]
+       [game-results-overlay]
        [piece-selector]
        [:div.game-area
         [stash-panel :left]

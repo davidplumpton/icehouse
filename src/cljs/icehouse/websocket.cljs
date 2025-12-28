@@ -43,7 +43,9 @@
       (reset! state/game-state (:game data))
 
       "game-over"
-      (js/alert (str "Game Over! Scores: " (pr-str (:scores data))))
+      (reset! state/game-result {:scores (:scores data)
+                                  :icehouse-players (:icehouse-players data)
+                                  :over-ice (:over-ice data)})
 
       "error"
       (do
