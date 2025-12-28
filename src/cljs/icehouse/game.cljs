@@ -1,6 +1,7 @@
 (ns icehouse.game
   (:require [reagent.core :as r]
             [icehouse.state :as state]
+            [icehouse.utils :as utils]
             [icehouse.websocket :as ws]))
 
 ;; =============================================================================
@@ -537,15 +538,6 @@
               :font-weight "bold"}}
      error]))
 
-(defn format-time
-  "Format milliseconds as MM:SS"
-  [ms]
-  (let [total-seconds (quot ms 1000)
-        minutes (quot total-seconds 60)
-        seconds (mod total-seconds 60)]
-    (str (when (< minutes 10) "0") minutes
-         ":"
-         (when (< seconds 10) "0") seconds)))
 
 (defn game-timer []
   "Display remaining game time"
@@ -563,7 +555,7 @@
                   :border-radius "4px"
                   :display "inline-block"
                   :animation (when urgent? "pulse 1s infinite")}}
-         (format-time remaining)]))))
+         (utils/format-time remaining)]))))
 
 (defn game-results-overlay []
   "Display final scores when game ends"

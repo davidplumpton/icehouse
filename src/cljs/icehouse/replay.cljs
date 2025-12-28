@@ -1,6 +1,7 @@
 (ns icehouse.replay
   (:require [reagent.core :as r]
             [icehouse.state :as state]
+            [icehouse.utils :as utils]
             [icehouse.websocket :as ws]
             [icehouse.game :as game]))
 
@@ -115,14 +116,6 @@
 ;; Replay Controls Component
 ;; =============================================================================
 
-(defn format-time
-  "Format milliseconds as mm:ss"
-  [ms]
-  (let [total-secs (quot ms 1000)
-        mins (quot total-secs 60)
-        secs (mod total-secs 60)]
-    (str (when (< mins 10) "0") mins ":" (when (< secs 10) "0") secs)))
-
 (defn replay-controls
   "Control panel for replay"
   []
@@ -140,7 +133,7 @@
          ;; Progress info
          [:div {:style {:margin-bottom "10px" :color "#aaa"}}
           "Move " (inc current-move) " / " total-moves
-          " - " (format-time current-time) " / " (format-time (:duration-ms record))]
+          " - " (utils/format-time current-time) " / " (utils/format-time (:duration-ms record))]
 
          ;; Control buttons
          [:div {:style {:display "flex" :justify-content "center" :gap "10px"}}

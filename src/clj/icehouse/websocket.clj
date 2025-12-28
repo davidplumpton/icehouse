@@ -7,11 +7,6 @@
 
 (defonce clients (atom {}))
 
-(defn broadcast! [room-id msg]
-  (doseq [[ch client] @clients
-          :when (= (:room-id client) room-id)]
-    (utils/send-msg! ch msg)))
-
 (defn handle-message [channel data]
   (let [msg (json/parse-string data true)
         client (get @clients channel)
