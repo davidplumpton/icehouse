@@ -31,6 +31,9 @@
       "players"
       (reset! state/players (:players data))
 
+      "options"
+      (reset! state/game-options (:options data))
+
       "game-start"
       (do
         (reset! state/game-state (:game data))
@@ -125,3 +128,8 @@
   "Load a saved game record for replay"
   [game-id]
   (send! {:type "load-game" :game-id game-id}))
+
+(defn set-option!
+  "Set a game option for the room"
+  [key value]
+  (send! {:type "set-option" :key (name key) :value value}))

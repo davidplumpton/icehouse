@@ -48,6 +48,10 @@
 ;; Whether the help overlay is visible
 (defonce show-help (r/atom false))
 
+;; Game options for the current room
+;; {:icehouse-rule true, :timer-enabled true, :timer-duration :random}
+(defonce game-options (r/atom nil))
+
 ;; Traditional Looney Labs pyramid stash colours
 ;; Rainbow stash: red, yellow, green, blue, black
 ;; Xeno stash: purple, cyan, orange, white

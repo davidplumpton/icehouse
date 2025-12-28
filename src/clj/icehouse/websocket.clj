@@ -21,6 +21,7 @@
       "join" (lobby/handle-join clients channel msg)
       "set-name" (lobby/handle-set-name clients channel msg)
       "set-colour" (lobby/handle-set-colour clients channel msg)
+      "set-option" (lobby/handle-set-option clients channel msg)
       "ready" (lobby/handle-ready clients channel)
 
       ;; Game messages

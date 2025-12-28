@@ -47,6 +47,33 @@
       :class (when (:ready current-player) "is-ready")}
      (if (:ready current-player) "Not Ready" "Ready!")]))
 
+(defn game-options-panel []
+  (let [options @state/game-options]
+    (when options
+      [:div.game-options {:style {:margin-top "20px"
+                                   :padding "15px"
+                                   :background "#2a2a3e"
+                                   :border-radius "8px"}}
+       [:h3 {:style {:margin-top 0 :color "#aaa"}} "Game Options"]
+       [:div.option {:style {:margin "10px 0"}}
+        [:label {:style {:display "flex" :align-items "center" :cursor "pointer"}}
+         [:input {:type "checkbox"
+                  :checked (:icehouse-rule options)
+                  :on-change #(ws/set-option! :icehouse-rule (.. % -target -checked))
+                  :style {:margin-right "10px"}}]
+         [:span "Icehouse Rule"]
+         [:span {:style {:color "#888" :font-size "0.85em" :margin-left "10px"}}
+          "(0 pts if all defenders iced after 8+ pieces)"]]]
+       [:div.option {:style {:margin "10px 0"}}
+        [:label {:style {:display "flex" :align-items "center" :cursor "pointer"}}
+         [:input {:type "checkbox"
+                  :checked (:timer-enabled options)
+                  :on-change #(ws/set-option! :timer-enabled (.. % -target -checked))
+                  :style {:margin-right "10px"}}]
+         [:span "Game Timer"]
+         [:span {:style {:color "#888" :font-size "0.85em" :margin-left "10px"}}
+          "(random 2-5 min)"]]]])))
+
 (defn watch-replays-button []
   [:button.watch-replays-btn
    {:on-click #(ws/list-games!)
@@ -67,5 +94,6 @@
    [name-input]
    [colour-picker]
    [player-list]
+   [game-options-panel]
    [ready-button]
    [watch-replays-button]])

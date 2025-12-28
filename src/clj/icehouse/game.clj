@@ -316,20 +316,32 @@
   (+ game-duration-min-ms
      (rand-int (- game-duration-max-ms game-duration-min-ms))))
 
-(defn create-game [room-id players]
-  (let [now (System/currentTimeMillis)
-        duration (random-game-duration)]
-    {:game-id (str (java.util.UUID/randomUUID))
-     :room-id room-id
-     :players (into {} (map (fn [p] [(:id p) {:name (:name p)
-                                              :colour (:colour p)
-                                              :pieces initial-piece-counts
-                                              :captured []}])  ;; List of {:size :colour}
-                            players))
-     :board []
-     :moves []  ;; Move history for replay
-     :started-at now
-     :ends-at (+ now duration)}))
+(defn create-game
+  "Create a new game with the given options.
+   Options: {:icehouse-rule bool, :timer-enabled bool, :timer-duration :random|ms}"
+  ([room-id players]
+   (create-game room-id players {}))
+  ([room-id players options]
+   (let [now (System/currentTimeMillis)
+         timer-enabled (get options :timer-enabled true)
+         timer-duration (get options :timer-duration :random)
+         duration (cond
+                    (not timer-enabled) nil
+                    (= timer-duration :random) (random-game-duration)
+                    (number? timer-duration) timer-duration
+                    :else (random-game-duration))]
+     {:game-id (str (java.util.UUID/randomUUID))
+      :room-id room-id
+      :players (into {} (map (fn [p] [(:id p) {:name (:name p)
+                                               :colour (:colour p)
+                                               :pieces initial-piece-counts
+                                               :captured []}])
+                             players))
+      :board []
+      :moves []
+      :options options  ;; Store options for later use (e.g., icehouse rule)
+      :started-at now
+      :ends-at (when duration (+ now duration))})))
 
 (defn record-move!
   "Append a move to the game's move history"
@@ -476,16 +488,22 @@
          (every? #(contains? iced-set (:id %)) defenders)))) ;; All defenders are iced
 
 (defn calculate-icehouse-players
-  "Returns set of player-ids who are 'in the Icehouse'"
-  [board]
-  (let [iced (calculate-iced-pieces board)
-        player-ids (distinct (map :player-id board))]
-    (set (filter #(in-icehouse? board iced %) player-ids))))
+  "Returns set of player-ids who are 'in the Icehouse'.
+   If icehouse-rule option is false, returns empty set."
+  ([board]
+   (calculate-icehouse-players board {}))
+  ([board options]
+   (if (false? (get options :icehouse-rule))
+     #{}  ;; Icehouse rule disabled
+     (let [iced (calculate-iced-pieces board)
+           player-ids (distinct (map :player-id board))]
+       (set (filter #(in-icehouse? board iced %) player-ids))))))
 
 (defn calculate-scores [game]
   (let [board (:board game)
+        options (get game :options {})
         iced (calculate-iced-pieces board)
-        icehouse-players (calculate-icehouse-players board)]
+        icehouse-players (calculate-icehouse-players board options)]
     (reduce
      (fn [scores piece]
        (let [player-id (:player-id piece)]
@@ -521,8 +539,9 @@
   "Build a complete game record from current game state for persistence"
   [game end-reason]
   (let [now (System/currentTimeMillis)
+        options (get game :options {})
         scores (calculate-scores game)
-        icehouse-players (calculate-icehouse-players (:board game))
+        icehouse-players (calculate-icehouse-players (:board game) options)
         winner (when (seq scores)
                  (key (apply max-key val scores)))]
     {:version 1
@@ -586,8 +605,9 @@
                                   :game updated-game})
           (when (game-over? updated-game)
             (let [board (:board updated-game)
+                  options (get updated-game :options {})
                   over-ice (calculate-over-ice board)
-                  icehouse-players (calculate-icehouse-players board)
+                  icehouse-players (calculate-icehouse-players board options)
                   end-reason (if (all-pieces-placed? updated-game)
                                :all-pieces-placed
                                :time-up)
@@ -662,8 +682,12 @@
                                   :game updated-game})))
       (utils/send-msg! channel {:type (:error msg-types) :message (or error "Invalid capture")}))))
 
-(defn start-game! [room-id players]
-  (swap! games assoc room-id (create-game room-id players)))
+(defn start-game!
+  "Start a new game with the given players and options"
+  ([room-id players]
+   (start-game! room-id players {}))
+  ([room-id players options]
+   (swap! games assoc room-id (create-game room-id players options))))
 
 ;; =============================================================================
 ;; Replay Handlers
