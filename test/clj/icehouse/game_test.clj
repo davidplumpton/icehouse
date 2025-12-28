@@ -561,14 +561,14 @@
   (testing "piece within play area is valid"
     (let [game {:players {"p1" {:pieces {:small 5 :medium 5 :large 5}}}
                 :board []}
-          piece {:x 400 :y 300 :size :small :orientation :standing :angle 0}]
+          piece {:x 500 :y 375 :size :small :orientation :standing :angle 0}]
       (is (nil? (game/validate-placement game "p1" piece)))))
 
   (testing "piece partially outside left edge is invalid"
     (let [game {:players {"p1" {:pieces {:small 5 :medium 5 :large 5}}}
                 :board []}
           ;; Small piece is 40x40, so at x=15 the left edge would be at x=-5
-          piece {:x 15 :y 300 :size :small :orientation :standing :angle 0}]
+          piece {:x 15 :y 375 :size :small :orientation :standing :angle 0}]
       (is (= "Piece must be placed within the play area"
              (game/validate-placement game "p1" piece)))))
 
@@ -576,23 +576,23 @@
     (let [game {:players {"p1" {:pieces {:small 5 :medium 5 :large 5}}}
                 :board []}
           ;; Small piece at y=15, top edge at y=-5
-          piece {:x 400 :y 15 :size :small :orientation :standing :angle 0}]
+          piece {:x 500 :y 15 :size :small :orientation :standing :angle 0}]
       (is (= "Piece must be placed within the play area"
              (game/validate-placement game "p1" piece)))))
 
   (testing "piece partially outside right edge is invalid"
     (let [game {:players {"p1" {:pieces {:small 5 :medium 5 :large 5}}}
                 :board []}
-          ;; At x=785, right edge would be at 785+20=805 which exceeds 800
-          piece {:x 785 :y 300 :size :small :orientation :standing :angle 0}]
+          ;; Play area is now 1000px wide. At x=985, right edge at 985+20=1005 > 1000
+          piece {:x 985 :y 375 :size :small :orientation :standing :angle 0}]
       (is (= "Piece must be placed within the play area"
              (game/validate-placement game "p1" piece)))))
 
   (testing "piece partially outside bottom edge is invalid"
     (let [game {:players {"p1" {:pieces {:small 5 :medium 5 :large 5}}}
                 :board []}
-          ;; At y=585, bottom edge at 585+20=605 which exceeds 600
-          piece {:x 400 :y 585 :size :small :orientation :standing :angle 0}]
+          ;; Play area is now 750px tall. At y=735, bottom edge at 735+20=755 > 750
+          piece {:x 500 :y 735 :size :small :orientation :standing :angle 0}]
       (is (= "Piece must be placed within the play area"
              (game/validate-placement game "p1" piece)))))
 
@@ -600,6 +600,130 @@
     (let [game {:players {"p1" {:pieces {:small 5 :medium 5 :large 5}}}
                 :board []}
           ;; Large piece is 60x60, so at x=25 left edge would be at x=-5
-          piece {:x 25 :y 300 :size :large :orientation :standing :angle 0}]
+          piece {:x 25 :y 375 :size :large :orientation :standing :angle 0}]
       (is (= "Piece must be placed within the play area"
-             (game/validate-placement game "p1" piece))))))
+             (game/validate-placement game "p1" piece)))))
+
+  (testing "piece at max valid position (bottom-right corner)"
+    (let [game {:players {"p1" {:pieces {:small 5 :medium 5 :large 5}}}
+                :board []}
+          ;; Small piece (40x40): max valid x = 1000-20=980, max valid y = 750-20=730
+          piece {:x 980 :y 730 :size :small :orientation :standing :angle 0}]
+      (is (nil? (game/validate-placement game "p1" piece))))))
+
+;; Captured pieces tests
+
+(deftest count-captured-by-size-test
+  (testing "empty captured list"
+    (is (= 0 (game/count-captured-by-size [] :small))))
+
+  (testing "counts matching sizes"
+    (let [captured [{:size :small :colour "#ff0000"}
+                    {:size :medium :colour "#00ff00"}
+                    {:size :small :colour "#0000ff"}
+                    {:size :large :colour "#ff0000"}]]
+      (is (= 2 (game/count-captured-by-size captured :small)))
+      (is (= 1 (game/count-captured-by-size captured :medium)))
+      (is (= 1 (game/count-captured-by-size captured :large)))))
+
+  (testing "returns 0 for missing size"
+    (let [captured [{:size :small :colour "#ff0000"}]]
+      (is (= 0 (game/count-captured-by-size captured :large))))))
+
+(deftest remove-first-captured-test
+  (testing "removes first matching piece"
+    (let [captured [{:size :small :colour "#ff0000"}
+                    {:size :medium :colour "#00ff00"}
+                    {:size :small :colour "#0000ff"}]
+          result (game/remove-first-captured captured :small)]
+      (is (= 2 (count result)))
+      (is (= {:size :medium :colour "#00ff00"} (first result)))
+      (is (= {:size :small :colour "#0000ff"} (second result)))))
+
+  (testing "returns unchanged if size not found"
+    (let [captured [{:size :small :colour "#ff0000"}]
+          result (game/remove-first-captured captured :large)]
+      (is (= captured result))))
+
+  (testing "empty list returns empty"
+    (is (= [] (game/remove-first-captured [] :small))))
+
+  (testing "removes only first occurrence"
+    (let [captured [{:size :large :colour "#111"}
+                    {:size :small :colour "#222"}
+                    {:size :small :colour "#333"}
+                    {:size :small :colour "#444"}]
+          result (game/remove-first-captured captured :small)]
+      ;; Should remove the one with colour #222
+      (is (= 3 (count result)))
+      (is (= "#111" (:colour (first result))))
+      (is (= "#333" (:colour (second result))))
+      (is (= "#444" (:colour (nth result 2)))))))
+
+;; Projection overlap tests (touching behavior)
+
+(deftest projections-overlap-strict-test
+  (testing "overlapping projections return true"
+    (is (game/projections-overlap? [0 10] [5 15]))
+    (is (game/projections-overlap? [5 15] [0 10])))
+
+  (testing "touching projections return false (strict inequality)"
+    ;; [0,10] and [10,20] touch at exactly 10 but don't overlap
+    (is (not (game/projections-overlap? [0 10] [10 20])))
+    (is (not (game/projections-overlap? [10 20] [0 10]))))
+
+  (testing "separate projections return false"
+    (is (not (game/projections-overlap? [0 10] [15 25])))
+    (is (not (game/projections-overlap? [15 25] [0 10]))))
+
+  (testing "contained projection returns true"
+    (is (game/projections-overlap? [0 20] [5 15]))
+    (is (game/projections-overlap? [5 15] [0 20]))))
+
+;; Player piece tracking tests
+
+(deftest pieces-placed-by-player-test
+  (testing "counts all pieces by a player"
+    (let [board [{:id "1" :player-id "alice" :size :small}
+                 {:id "2" :player-id "bob" :size :medium}
+                 {:id "3" :player-id "alice" :size :large}
+                 {:id "4" :player-id "alice" :size :small}]]
+      (is (= 3 (game/pieces-placed-by-player board "alice")))
+      (is (= 1 (game/pieces-placed-by-player board "bob")))))
+
+  (testing "returns 0 for unknown player"
+    (let [board [{:id "1" :player-id "alice" :size :small}]]
+      (is (= 0 (game/pieces-placed-by-player board "charlie"))))))
+
+(deftest player-defenders-test
+  (testing "returns only standing pieces"
+    (let [board [{:id "1" :player-id "alice" :orientation :standing :size :small}
+                 {:id "2" :player-id "alice" :orientation :pointing :size :medium}
+                 {:id "3" :player-id "alice" :orientation :standing :size :large}]]
+      (is (= 2 (count (game/player-defenders board "alice"))))))
+
+  (testing "filters by player"
+    (let [board [{:id "1" :player-id "alice" :orientation :standing :size :small}
+                 {:id "2" :player-id "bob" :orientation :standing :size :medium}]]
+      (is (= 1 (count (game/player-defenders board "alice"))))
+      (is (= 1 (count (game/player-defenders board "bob")))))))
+
+;; Constants verification tests
+
+(deftest constants-test
+  (testing "pips values are correct"
+    (is (= 1 (:small game/pips)))
+    (is (= 2 (:medium game/pips)))
+    (is (= 3 (:large game/pips))))
+
+  (testing "piece sizes maintain 3:2 ratio progression"
+    (is (= 40 (:small game/piece-sizes)))
+    (is (= 50 (:medium game/piece-sizes)))
+    (is (= 60 (:large game/piece-sizes))))
+
+  (testing "play area dimensions"
+    (is (= 1000 game/play-area-width))
+    (is (= 750 game/play-area-height)))
+
+  (testing "icehouse requires 8 pieces minimum"
+    (is (= 8 game/icehouse-min-pieces))))

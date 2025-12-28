@@ -15,8 +15,8 @@
 (def piece-sizes {:small 40 :medium 50 :large 60})
 
 ;; Play area dimensions (must match frontend canvas)
-(def play-area-width 800)
-(def play-area-height 600)
+(def play-area-width 1000)
+(def play-area-height 750)
 
 ;; Geometry constants
 (def tip-offset-ratio 0.75)       ;; Triangle tip extends 0.75 * base-size from center
