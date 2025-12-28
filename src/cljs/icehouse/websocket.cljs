@@ -37,6 +37,8 @@
       "game-start"
       (do
         (reset! state/game-state (:game data))
+        (reset! state/game-result nil)  ;; Clear previous game result
+        (reset! state/selected-piece {:size :small :orientation :standing :captured? false})
         (reset! state/current-view :game))
 
       "piece-placed"

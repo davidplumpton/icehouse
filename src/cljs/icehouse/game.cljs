@@ -433,13 +433,10 @@
               ;; Create preview attacker to find targets
               preview-attacker {:x start-x :y start-y :size size :orientation :pointing :angle angle}
               board (:board game)
-              {:keys [valid invalid]} (find-targets-for-attack preview-attacker player-id board)]
+              {:keys [valid]} (find-targets-for-attack preview-attacker player-id board)]
           ;; Highlight valid targets (green)
           (doseq [target valid]
             (draw-target-highlight ctx target true))
-          ;; Highlight invalid targets - in trajectory but out of range (red)
-          (doseq [target invalid]
-            (draw-target-highlight ctx target false))
           ;; Draw range line from tip
           (set! (.-strokeStyle ctx) "rgba(255,100,100,0.7)")
           (set! (.-lineWidth ctx) 3)
@@ -457,6 +454,19 @@
       (set! (.-globalAlpha ctx) preview-alpha)
       (draw-pyramid ctx start-x start-y size player-colour orientation angle)
       (.restore ctx))))
+
+(defn has-pieces-of-size? [size use-captured?]
+  "Returns true if current player has pieces of the given size to place"
+  (let [game @state/game-state
+        player-id @state/player-id
+        player-data (get-in game [:players player-id])]
+    (if use-captured?
+      ;; Check captured pieces
+      (let [captured (or (:captured player-data) [])]
+        (some #(= (keyword (:size %)) size) captured))
+      ;; Check regular pieces
+      (let [pieces (or (:pieces player-data) {})]
+        (pos? (get pieces size 0))))))
 
 (defn game-canvas []
   (let [canvas-ref (r/atom nil)]
@@ -494,11 +504,14 @@
             :on-mouse-down
             (fn [e]
               (.preventDefault e)
-              (let [{:keys [x y]} (get-canvas-coords e)]
-                (reset! state/drag-state {:start-x x :start-y y
-                                          :current-x x :current-y y
-                                          :last-x x :last-y y
-                                          :locked-angle 0})))
+              (let [{:keys [x y]} (get-canvas-coords e)
+                    {:keys [size captured?]} @state/selected-piece]
+                ;; Only start drag if player has pieces of this size
+                (when (has-pieces-of-size? size captured?)
+                  (reset! state/drag-state {:start-x x :start-y y
+                                            :current-x x :current-y y
+                                            :last-x x :last-y y
+                                            :locked-angle 0}))))
             :on-mouse-move
             (fn [e]
               (let [{:keys [x y]} (get-canvas-coords e)
