@@ -4,7 +4,8 @@
             [icehouse.state :as state]
             [icehouse.websocket :as ws]
             [icehouse.lobby :as lobby]
-            [icehouse.game :as game]))
+            [icehouse.game :as game]
+            [icehouse.replay :as replay]))
 
 (defn connection-warning []
   (let [status @state/ws-status]
@@ -20,13 +21,24 @@
          "Disconnected from server. Reconnecting...")])))
 
 (defn app []
-  (let [view @state/current-view]
+  (let [view @state/current-view
+        replay-active? (some? @state/replay-state)
+        game-list-visible? (some? @state/game-list)]
     [:div.app
      [connection-warning]
-     (case view
-       :lobby [lobby/lobby-view]
-       :game [game/game-view]
-       [:div "Loading..."])]))
+     ;; Show replay view if replay is active or game list is visible
+     (cond
+       replay-active?
+       [replay/replay-view]
+
+       game-list-visible?
+       [replay/replay-view]
+
+       :else
+       (case view
+         :lobby [lobby/lobby-view]
+         :game [game/game-view]
+         [:div "Loading..."]))]))
 
 (defonce root (atom nil))
 

@@ -727,3 +727,55 @@
 
   (testing "icehouse requires 8 pieces minimum"
     (is (= 8 game/icehouse-min-pieces))))
+
+;; =============================================================================
+;; Game Recording Tests
+;; =============================================================================
+
+(deftest create-game-with-moves-test
+  (testing "create-game initializes with game-id and empty moves"
+    (let [players [{:id "p1" :name "Alice" :colour "#ff0000"}]
+          game (game/create-game "room-1" players)]
+      (is (string? (:game-id game)))
+      (is (= [] (:moves game))))))
+
+(deftest build-game-record-test
+  (testing "build-game-record creates a complete record"
+    (let [game {:game-id "test-game-id"
+                :room-id "room-1"
+                :players {"p1" {:name "Alice" :colour "#ff0000" :pieces {:small 2 :medium 3 :large 4}}
+                          "p2" {:name "Bob" :colour "#0000ff" :pieces {:small 3 :medium 3 :large 3}}}
+                :board [{:id "piece-1" :player-id "p1" :orientation :standing :size :large}
+                        {:id "piece-2" :player-id "p2" :orientation :standing :size :medium}]
+                :moves [{:type :place-piece :player-id "p1" :elapsed-ms 1000}
+                        {:type :place-piece :player-id "p2" :elapsed-ms 2000}]
+                :started-at 1000000
+                :ends-at 1300000}
+          record (game/build-game-record game :time-up)]
+      (is (= 1 (:version record)))
+      (is (= "test-game-id" (:game-id record)))
+      (is (= "room-1" (:room-id record)))
+      (is (= :time-up (:end-reason record)))
+      (is (= 2 (count (:moves record))))
+      (is (= 2 (count (:final-board record))))
+      ;; Players should only have name and colour, not pieces
+      (is (= #{"Alice" "Bob"} (set (map :name (vals (:players record))))))
+      (is (nil? (get-in record [:players "p1" :pieces])))
+      ;; Scores should be calculated
+      (is (map? (:final-scores record)))
+      (is (vector? (:icehouse-players record))))))
+
+(deftest build-game-record-winner-test
+  (testing "build-game-record determines winner from scores"
+    (let [game {:game-id "test-game"
+                :room-id "room-1"
+                :players {"p1" {:name "Alice" :colour "#ff0000"}
+                          "p2" {:name "Bob" :colour "#0000ff"}}
+                :board [{:id "1" :player-id "p1" :orientation :standing :size :large}  ; 3 pts
+                        {:id "2" :player-id "p2" :orientation :standing :size :small}] ; 1 pt
+                :moves []
+                :started-at 1000000
+                :ends-at 1300000}
+          record (game/build-game-record game :all-pieces-placed)]
+      (is (= "p1" (:winner record)))
+      (is (= :all-pieces-placed (:end-reason record))))))

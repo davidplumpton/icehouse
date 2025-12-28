@@ -45,7 +45,19 @@
       "game-over"
       (reset! state/game-result {:scores (:scores data)
                                   :icehouse-players (:icehouse-players data)
-                                  :over-ice (:over-ice data)})
+                                  :over-ice (:over-ice data)
+                                  :game-id (:game-id data)})
+
+      "game-list"
+      (reset! state/game-list (:games data))
+
+      "game-record"
+      (do
+        (reset! state/game-list nil)  ;; Clear game list when loading replay
+        (reset! state/replay-state {:record (:record data)
+                                     :current-move 0
+                                     :playing? false
+                                     :speed 1}))
 
       "error"
       (do
@@ -103,3 +115,13 @@
   "Capture an over-iced attacker piece"
   (send! {:type "capture-piece"
           :piece-id piece-id}))
+
+(defn list-games!
+  "Request list of saved game records"
+  []
+  (send! {:type "list-games"}))
+
+(defn load-game!
+  "Load a saved game record for replay"
+  [game-id]
+  (send! {:type "load-game" :game-id game-id}))

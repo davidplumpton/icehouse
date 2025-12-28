@@ -1,5 +1,6 @@
 (ns icehouse.game
-  (:require [icehouse.utils :as utils]))
+  (:require [icehouse.utils :as utils]
+            [icehouse.storage :as storage]))
 
 (defonce games (atom {}))
 
@@ -318,15 +319,27 @@
 (defn create-game [room-id players]
   (let [now (System/currentTimeMillis)
         duration (random-game-duration)]
-    {:room-id room-id
+    {:game-id (str (java.util.UUID/randomUUID))
+     :room-id room-id
      :players (into {} (map (fn [p] [(:id p) {:name (:name p)
                                               :colour (:colour p)
                                               :pieces initial-piece-counts
                                               :captured []}])  ;; List of {:size :colour}
                             players))
      :board []
+     :moves []  ;; Move history for replay
      :started-at now
      :ends-at (+ now duration)}))
+
+(defn record-move!
+  "Append a move to the game's move history"
+  [room-id move]
+  (when-let [game (get @games room-id)]
+    (let [elapsed (- (System/currentTimeMillis) (:started-at game))]
+      (swap! games update-in [room-id :moves] conj
+             (assoc move
+                    :timestamp (System/currentTimeMillis)
+                    :elapsed-ms elapsed)))))
 
 (defn count-captured-by-size
   "Count captured pieces of a given size"
@@ -504,6 +517,31 @@
   (or (all-pieces-placed? game)
       (time-up? game)))
 
+(defn build-game-record
+  "Build a complete game record from current game state for persistence"
+  [game end-reason]
+  (let [now (System/currentTimeMillis)
+        scores (calculate-scores game)
+        icehouse-players (calculate-icehouse-players (:board game))
+        winner (when (seq scores)
+                 (key (apply max-key val scores)))]
+    {:version 1
+     :game-id (:game-id game)
+     :room-id (:room-id game)
+     :players (into {}
+                    (map (fn [[pid pdata]]
+                           [pid (select-keys pdata [:name :colour])])
+                         (:players game)))
+     :started-at (:started-at game)
+     :ended-at now
+     :duration-ms (- now (:started-at game))
+     :end-reason end-reason
+     :moves (:moves game)
+     :final-board (:board game)
+     :final-scores scores
+     :icehouse-players (vec icehouse-players)
+     :winner winner}))
+
 (defn handle-place-piece [clients channel msg]
   (let [room-id (get-in @clients [channel :room-id])
         player-id (player-id-from-channel channel)
@@ -536,6 +574,11 @@
           (swap! games update-in [room-id :players player-id :captured]
                  remove-first-captured (:size piece))
           (swap! games update-in [room-id :players player-id :pieces (:size piece)] dec))
+        ;; Record the move for replay
+        (record-move! room-id {:type :place-piece
+                               :player-id player-id
+                               :piece piece
+                               :using-captured? using-captured?})
         (let [updated-game (get @games room-id)]
           (utils/broadcast-room! clients room-id
                                  {:type (:piece-placed msg-types)
@@ -544,9 +587,16 @@
           (when (game-over? updated-game)
             (let [board (:board updated-game)
                   over-ice (calculate-over-ice board)
-                  icehouse-players (calculate-icehouse-players board)]
+                  icehouse-players (calculate-icehouse-players board)
+                  end-reason (if (all-pieces-placed? updated-game)
+                               :all-pieces-placed
+                               :time-up)
+                  record (build-game-record updated-game end-reason)]
+              ;; Save the game record
+              (storage/save-game-record! record)
               (utils/broadcast-room! clients room-id
                                      {:type (:game-over msg-types)
+                                      :game-id (:game-id updated-game)
                                       :scores (calculate-scores updated-game)
                                       :over-ice over-ice
                                       :icehouse-players (vec icehouse-players)})))))
@@ -598,6 +648,11 @@
         ;; Add to capturing player's captured stash with original colour
         (swap! games update-in [room-id :players player-id :captured]
                conj {:size piece-size :colour original-colour})
+        ;; Record the capture move for replay
+        (record-move! room-id {:type :capture-piece
+                               :player-id player-id
+                               :piece-id piece-id
+                               :captured-piece {:size piece-size :colour original-colour}})
         ;; Broadcast updated game state
         (let [updated-game (get @games room-id)]
           (utils/broadcast-room! clients room-id
@@ -609,3 +664,25 @@
 
 (defn start-game! [room-id players]
   (swap! games assoc room-id (create-game room-id players)))
+
+;; =============================================================================
+;; Replay Handlers
+;; =============================================================================
+
+(defn handle-list-games
+  "Send list of saved game record IDs to client"
+  [channel]
+  (utils/send-msg! channel
+                   {:type "game-list"
+                    :games (storage/list-game-records)}))
+
+(defn handle-load-game
+  "Load and send a game record to client"
+  [channel msg]
+  (if-let [record (storage/load-game-record (:game-id msg))]
+    (utils/send-msg! channel
+                     {:type "game-record"
+                      :record record})
+    (utils/send-msg! channel
+                     {:type "error"
+                      :message "Game not found"})))

@@ -47,6 +47,18 @@
       :class (when (:ready current-player) "is-ready")}
      (if (:ready current-player) "Not Ready" "Ready!")]))
 
+(defn watch-replays-button []
+  [:button.watch-replays-btn
+   {:on-click #(ws/list-games!)
+    :style {:margin-top "20px"
+            :padding "10px 20px"
+            :background "#4CAF50"
+            :color "white"
+            :border "none"
+            :border-radius "4px"
+            :cursor "pointer"}}
+   "Watch Replays"])
+
 (defn lobby-view []
   [:div.lobby
    [:h1 "Icehouse"]
@@ -55,4 +67,5 @@
    [name-input]
    [colour-picker]
    [player-list]
-   [ready-button]])
+   [ready-button]
+   [watch-replays-button]])

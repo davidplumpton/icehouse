@@ -38,6 +38,13 @@
 ;; Current time for game timer (updated every second)
 (defonce current-time (r/atom (js/Date.now)))
 
+;; Replay state
+;; {:record {...} :current-move 0 :playing? false :speed 1}
+(defonce replay-state (r/atom nil))
+
+;; List of available saved game IDs
+(defonce game-list (r/atom nil))
+
 ;; Traditional Looney Labs pyramid stash colours
 ;; Rainbow stash: red, yellow, green, blue, black
 ;; Xeno stash: purple, cyan, orange, white
