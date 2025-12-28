@@ -365,18 +365,19 @@
              (game/validate-placement game "p1" attacker)))))
 
   (testing "attack pointed at enemy but out of range"
-    ;; Small piece has range of 30px
-    ;; Place defender 100px away (well out of range) but in trajectory
-    (let [defender {:id "d1" :player-id "p2" :x 200 :y 100 :size :small :orientation :standing :angle 0}
+    ;; Small piece has range of 60px (height = 2 * 0.75 * 40)
+    ;; Small attacker tip at x=130 (100 + 30), max reach x=190
+    ;; Place defender at x=220 (left edge at 200), distance = 70px > 60px
+    (let [defender {:id "d1" :player-id "p2" :x 220 :y 100 :size :small :orientation :standing :angle 0}
           game {:players {"p1" {:pieces {:small 5 :medium 5 :large 5}}}
                 :board [defender]}
-          ;; Attacker at x=100, pointing right (angle = 0) at defender 100px away
+          ;; Attacker at x=100, pointing right (angle = 0) at defender out of range
           attacker {:x 100 :y 100 :size :small :orientation :pointing :angle 0}]
       (is (= "Target is out of range"
              (game/validate-placement game "p1" attacker)))))
 
   (testing "valid attack in trajectory and in range"
-    ;; Large piece has range of 60px, tip extends 45px from center
+    ;; Large piece has range of 90px (height), tip extends 45px from center
     ;; Position attacker so tip doesn't overlap defender but is in range
     (let [defender {:id "d1" :player-id "p2" :x 200 :y 100 :size :small :orientation :standing :angle 0}
           game {:players {"p1" {:pieces {:small 5 :medium 5 :large 5}}}
@@ -470,35 +471,35 @@
 
 (deftest within-range-test
   (testing "target edge within range"
-    ;; Large attacker has range of 60px from tip
+    ;; Large attacker has range of 90px from tip (height = 2 * 0.75 * 60 = 90)
     ;; Tip at x=145 (100 + 45), target center at x=200
-    ;; Target left edge at x=180 (200-20), distance to edge = 35px < 60px
+    ;; Target left edge at x=180 (200-20), distance to edge = 35px < 90px
     (let [attacker {:x 100 :y 100 :size :large :orientation :pointing :angle 0}
           defender {:x 200 :y 100 :size :small :orientation :standing :angle 0}]
       (is (game/within-range? attacker defender) "Should be in range")))
 
   (testing "target edge just outside range"
-    ;; Tip at x=145, range = 60px, so max reach is x=205
-    ;; For small defender (half-size=20), if center at x=240, left edge at x=220
-    ;; Distance to edge = 220 - 145 = 75px > 60px (out of range)
+    ;; Tip at x=145, range = 90px, so max reach is x=235
+    ;; For small defender (half-size=20), if center at x=260, left edge at x=240
+    ;; Distance to edge = 240 - 145 = 95px > 90px (out of range)
     (let [attacker {:x 100 :y 100 :size :large :orientation :pointing :angle 0}
-          defender {:x 240 :y 100 :size :small :orientation :standing :angle 0}]
+          defender {:x 260 :y 100 :size :small :orientation :standing :angle 0}]
       (is (not (game/within-range? attacker defender)) "Should be out of range")))
 
   (testing "small piece has shorter range"
-    ;; Small attacker: tip-offset = 0.75 * 40 = 30px, range = 40px
-    ;; Tip at x=130, max reach is x=170
-    ;; Target center at x=200, left edge at x=180
-    ;; Distance to edge = 180 - 130 = 50px > 40px (out of range)
+    ;; Small attacker: tip-offset = 0.75 * 40 = 30px, range = 60px (height = 2 * 0.75 * 40)
+    ;; Tip at x=130, max reach is x=190
+    ;; Target center at x=220, left edge at x=200
+    ;; Distance to edge = 200 - 130 = 70px > 60px (out of range)
     (let [attacker {:x 100 :y 100 :size :small :orientation :pointing :angle 0}
-          defender {:x 200 :y 100 :size :small :orientation :standing :angle 0}]
+          defender {:x 220 :y 100 :size :small :orientation :standing :angle 0}]
       (is (not (game/within-range? attacker defender)) "Small piece should be out of range")))
 
   (testing "target edge exactly at range still counts"
-    ;; Large: tip-offset=45, range=60. Tip at x=145, max reach at x=205
-    ;; Small defender (half=20) at x=225 has left edge at x=205 (exactly at range)
+    ;; Large: tip-offset=45, range=90. Tip at x=145, max reach at x=235
+    ;; Small defender (half=20) at x=255 has left edge at x=235 (exactly at range)
     (let [attacker {:x 100 :y 100 :size :large :orientation :pointing :angle 0}
-          defender {:x 225 :y 100 :size :small :orientation :standing :angle 0}]
+          defender {:x 255 :y 100 :size :small :orientation :standing :angle 0}]
       (is (game/within-range? attacker defender) "Edge at exact range should count"))))
 
 (deftest attack-placement-integration-test
@@ -514,9 +515,9 @@
                 :board [defender alice-piece]}
           ;; Alice attacks Bob's defender from the right, pointing left
           ;; Angle = PI (pointing left)
-          ;; Large attacker: tip-offset = 45, range = 60
+          ;; Large attacker: tip-offset = 45, range = 90 (height)
           ;; If attacker center is at x=400, tip is at x=400-45=355
-          ;; Defender center at x=300, distance = 355-300=55 < 60 (in range)
+          ;; Defender center at x=300, distance = 355-300=55 < 90 (in range)
           attacker {:x 400 :y 200 :size :large :orientation :pointing :angle Math/PI}
           error (game/validate-placement game "alice" attacker)]
       (is (nil? error) (str "Attack should be valid, got error: " error))))
@@ -545,7 +546,7 @@
           game {:players {"alice" {:pieces {:small 5 :medium 5 :large 5}}}
                 :board [defender alice-piece]}
           ;; Large attacker far from defender
-          ;; Tip at x=455, defender at x=200, distance=255 >> 60
+          ;; Tip at x=455, defender at x=200, distance=255 >> 90
           attacker {:x 500 :y 200 :size :large :orientation :pointing :angle Math/PI}
           error (game/validate-placement game "alice" attacker)]
       (is (= "Target is out of range" error))))
@@ -560,8 +561,8 @@
           game {:players {"alice" {:pieces {:small 5 :medium 5 :large 5}}}
                 :board [defender alice-piece]}
           ;; Attack from below-right, pointing up-left at -135 degrees
-          ;; For large piece: tip-offset = 45, range = 60
-          ;; To be in range, tip must be within 60px of defender center (300, 200)
+          ;; For large piece: tip-offset = 45, range = 90
+          ;; To be in range, tip must be within 90px of defender edge (center at 300, 200)
           ;; At angle -135deg, direction is (-0.707, -0.707)
           ;; Place attacker so tip is ~40px from defender:
           ;; tip = defender_center + 40 * (0.707, 0.707) = (300+28, 200+28) = (328, 228)

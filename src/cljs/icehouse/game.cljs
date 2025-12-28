@@ -175,9 +175,11 @@
     (apply min (map #(point-to-segment-distance point %) edges))))
 
 (defn attack-range
-  "Get attack range for a piece (equals its base size)"
+  "Get attack range for a piece (its height/length, not base width)"
   [piece]
-  (get piece-sizes (keyword (:size piece)) default-piece-size))
+  (let [base-size (get piece-sizes (keyword (:size piece)) default-piece-size)]
+    ;; Height = 2 * tip-offset-ratio * base-size
+    (* 2 tip-offset-ratio base-size)))
 
 (defn within-range?
   "Check if target is within attack range of attacker"
@@ -424,9 +426,10 @@
         (let [tip-offset (* base-size tip-offset-ratio)
               tip-x (+ start-x (* (js/Math.cos angle) tip-offset))
               tip-y (+ start-y (* (js/Math.sin angle) tip-offset))
-              ;; Attack range extends base-size from tip
-              range-end-x (+ tip-x (* (js/Math.cos angle) base-size))
-              range-end-y (+ tip-y (* (js/Math.sin angle) base-size))
+              ;; Attack range extends piece height from tip (height = 2 * tip-offset-ratio * base-size)
+              piece-height (* 2 tip-offset-ratio base-size)
+              range-end-x (+ tip-x (* (js/Math.cos angle) piece-height))
+              range-end-y (+ tip-y (* (js/Math.sin angle) piece-height))
               ;; Create preview attacker to find targets
               preview-attacker {:x start-x :y start-y :size size :orientation :pointing :angle angle}
               board (:board game)

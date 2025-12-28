@@ -220,9 +220,11 @@
     (ray-intersects-polygon? tip dir target-verts)))
 
 (defn attack-range
-  "Get the attack range for a piece (its own length)"
+  "Get the attack range for a piece (its height/length, not base width)"
   [piece]
-  (get piece-sizes (:size piece) default-piece-size))
+  (let [base-size (get piece-sizes (:size piece) default-piece-size)]
+    ;; Height = 2 * tip-offset-ratio * base-size (tip extends 0.75 * base from center in each direction)
+    (* 2 tip-offset-ratio base-size)))
 
 (defn point-to-segment-distance
   "Calculate minimum distance from point p to line segment [a b]"
