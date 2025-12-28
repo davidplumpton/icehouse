@@ -31,3 +31,11 @@ bd sync               # Sync with git
 - Canvas for rendering graphics
 - Version control using jj
 
+### Best Practices
+
+- Check `bd ready` at session start to find available work
+- Update status as you work (in_progress → closed)
+- Create new issues with `bd create` when you discover tasks
+- Use descriptive titles and set appropriate priority/type
+- Always `bd sync` before ending session
+
