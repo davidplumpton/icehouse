@@ -191,9 +191,9 @@
             (fn [e]
               (when-let [drag @state/drag-state]
                 (let [{:keys [start-x start-y current-x current-y]} drag
-                      {:keys [size orientation]} @state/selected-piece
+                      {:keys [size orientation captured?]} @state/selected-piece
                       angle (calculate-angle start-x start-y current-x current-y)]
-                  (ws/place-piece! start-x start-y size orientation angle nil)
+                  (ws/place-piece! start-x start-y size orientation angle nil captured?)
                   (reset! state/drag-state nil))))
             :on-mouse-leave
             (fn [e]

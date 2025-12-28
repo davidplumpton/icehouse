@@ -257,30 +257,37 @@
    :started-at (System/currentTimeMillis)})
 
 (defn validate-placement
-  "Validate piece placement, returns nil if valid or error message if invalid"
-  [game player-id piece]
-  (let [player (get-in game [:players player-id])
-        size (:size piece)
-        remaining (get-in player [:pieces size] 0)
-        board (:board game)
-        is-attacking? (= (:orientation piece) :pointing)]
-    (cond
-      (not (pos? remaining))
-      "No pieces of that size remaining"
+  "Validate piece placement, returns nil if valid or error message if invalid.
+   If using-captured? is true, checks captured pieces instead of regular pieces."
+  ([game player-id piece]
+   (validate-placement game player-id piece false))
+  ([game player-id piece using-captured?]
+   (let [player (get-in game [:players player-id])
+         size (:size piece)
+         remaining (if using-captured?
+                     (get-in player [:captured size] 0)
+                     (get-in player [:pieces size] 0))
+         board (:board game)
+         is-attacking? (= (:orientation piece) :pointing)]
+     (cond
+       (not (pos? remaining))
+       (if using-captured?
+         "No captured pieces of that size remaining"
+         "No pieces of that size remaining")
 
-      (not (within-play-area? piece))
-      "Piece must be placed within the play area"
+       (not (within-play-area? piece))
+       "Piece must be placed within the play area"
 
-      (intersects-any-piece? piece board)
-      "Piece would overlap with existing piece"
+       (intersects-any-piece? piece board)
+       "Piece would overlap with existing piece"
 
-      (and is-attacking? (not (has-potential-target? piece player-id board)))
-      "Attacking piece must be pointed at an opponent's piece"
+       (and is-attacking? (not (has-potential-target? piece player-id board)))
+       "Attacking piece must be pointed at an opponent's piece"
 
-      (and is-attacking? (not (has-valid-target? piece player-id board)))
-      "Target is out of range"
+       (and is-attacking? (not (has-valid-target? piece player-id board)))
+       "Target is out of range"
 
-      :else nil)))
+       :else nil))))
 
 (defn valid-placement? [game player-id piece]
   (nil? (validate-placement game player-id piece)))
@@ -406,6 +413,7 @@
         player-id (str (hash channel))
         game (get @games room-id)
         player-colour (get-in game [:players player-id :colour])
+        using-captured? (boolean (:captured msg))
         base-piece {:id (str (java.util.UUID/randomUUID))
                     :player-id player-id
                     :colour player-colour
@@ -423,11 +431,14 @@
                   (assoc base-piece :target-id (:id target))
                   base-piece)
                 base-piece)
-        error (when game (validate-placement game player-id piece))]
+        error (when game (validate-placement game player-id piece using-captured?))]
     (if (and game (nil? error))
       (do
         (swap! games update-in [room-id :board] conj piece)
-        (swap! games update-in [room-id :players player-id :pieces (:size piece)] dec)
+        ;; Decrement from captured or regular pieces
+        (if using-captured?
+          (swap! games update-in [room-id :players player-id :captured (:size piece)] dec)
+          (swap! games update-in [room-id :players player-id :pieces (:size piece)] dec))
         (let [updated-game (get @games room-id)]
           (utils/broadcast-room! clients room-id
                                  {:type "piece-placed"

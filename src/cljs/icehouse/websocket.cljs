@@ -84,11 +84,12 @@
 (defn toggle-ready! []
   (send! {:type "ready"}))
 
-(defn place-piece! [x y size orientation angle target-id]
+(defn place-piece! [x y size orientation angle target-id captured?]
   (send! {:type "place-piece"
           :x x
           :y y
           :size (name size)
           :orientation (name orientation)
           :angle angle
-          :target-id target-id}))
+          :target-id target-id
+          :captured captured?}))
