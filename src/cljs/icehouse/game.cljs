@@ -497,9 +497,10 @@
         [:div.captured-header {:style {:color "#ffd700" :font-size "0.8em" :margin-top "0.5rem"}}
          "Captured:"]
         ;; Render each captured piece with its original colour
-        (for [[idx cap-piece] (map-indexed vector captured)]
-          ^{:key (str "cap-" idx)}
-          [draw-stash-pyramid (keyword (:size cap-piece)) (:colour cap-piece) {:captured? true}])])]))
+        (doall
+          (for [[idx cap-piece] (map-indexed vector captured)]
+            ^{:key (str "cap-" idx)}
+            [draw-stash-pyramid (keyword (:size cap-piece)) (:colour cap-piece) {:captured? true}]))])]))
 
 (defn stash-panel [position]
   "Renders stash panels for players on left or right side"

@@ -86,9 +86,10 @@
     [(apply min dots) (apply max dots)]))
 
 (defn projections-overlap?
-  "Check if two 1D projections [min1 max1] and [min2 max2] overlap"
+  "Check if two 1D projections [min1 max1] and [min2 max2] overlap.
+   Uses strict inequality so pieces that are merely touching are allowed."
   [[min1 max1] [min2 max2]]
-  (and (<= min1 max2) (<= min2 max1)))
+  (and (< min1 max2) (< min2 max1)))
 
 (defn polygons-intersect?
   "Check if two convex polygons intersect using SAT"
