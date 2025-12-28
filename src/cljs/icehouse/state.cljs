@@ -9,7 +9,7 @@
 
 (defonce player-name (r/atom ""))
 
-(defonce player-colour (r/atom "#ff6b6b"))
+(defonce player-colour (r/atom "#e53935"))  ;; Default to red
 
 (defonce players (r/atom []))
 
@@ -31,12 +31,15 @@
 ;; {:x :y} or nil when mouse is not over canvas
 (defonce hover-pos (r/atom nil))
 
+;; Traditional Looney Labs pyramid stash colours
+;; Rainbow stash: red, yellow, green, blue, black
+;; Xeno stash: purple, cyan, orange, white
 (def colours
-  ["#ff6b6b"   ; red
-   "#4ecdc4"   ; teal
-   "#ffe66d"   ; yellow
-   "#95e1d3"   ; mint
-   "#f38181"   ; coral
-   "#aa96da"   ; lavender
-   "#fcbad3"   ; pink
-   "#a8d8ea"]) ; sky blue
+  ["#e53935"   ; red (Rainbow)
+   "#fdd835"   ; yellow (Rainbow)
+   "#43a047"   ; green (Rainbow)
+   "#1e88e5"   ; blue (Rainbow)
+   "#7b1fa2"   ; purple (Xeno)
+   "#00acc1"   ; cyan (Xeno)
+   "#fb8c00"   ; orange (Xeno)
+   "#212121"]) ; black (Rainbow)

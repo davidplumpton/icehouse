@@ -281,10 +281,15 @@
    :players (into {} (map (fn [p] [(:id p) {:name (:name p)
                                             :colour (:colour p)
                                             :pieces (initial-pieces)
-                                            :captured {:small 0 :medium 0 :large 0}}])
+                                            :captured []}])  ;; List of {:size :colour}
                           players))
    :board []
    :started-at (System/currentTimeMillis)})
+
+(defn count-captured-by-size
+  "Count captured pieces of a given size"
+  [captured size]
+  (count (filter #(= (:size %) size) captured)))
 
 (defn validate-placement
   "Validate piece placement, returns nil if valid or error message if invalid.
@@ -295,7 +300,7 @@
    (let [player (get-in game [:players player-id])
          size (:size piece)
          remaining (if using-captured?
-                     (get-in player [:captured size] 0)
+                     (count-captured-by-size (:captured player) size)
                      (get-in player [:pieces size] 0))
          board (:board game)
          is-attacking? (= (:orientation piece) :pointing)]
@@ -467,7 +472,14 @@
         (swap! games update-in [room-id :board] conj piece)
         ;; Decrement from captured or regular pieces
         (if using-captured?
-          (swap! games update-in [room-id :players player-id :captured (:size piece)] dec)
+          ;; Remove one piece of matching size from captured list
+          (swap! games update-in [room-id :players player-id :captured]
+                 (fn [caps]
+                   (let [size (:size piece)
+                         idx (.indexOf (mapv :size caps) size)]
+                     (if (>= idx 0)
+                       (into (subvec (vec caps) 0 idx) (subvec (vec caps) (inc idx)))
+                       caps))))
           (swap! games update-in [room-id :players player-id :pieces (:size piece)] dec))
         (let [updated-game (get @games room-id)]
           (utils/broadcast-room! clients room-id
@@ -521,12 +533,16 @@
         error (when game (validate-capture game player-id piece-id))]
     (if (and game (nil? error))
       (let [piece (find-piece-by-id (:board game) piece-id)
-            piece-size (:size piece)]
+            piece-size (:size piece)
+            ;; Get the original owner's colour
+            original-owner (:player-id piece)
+            original-colour (get-in game [:players original-owner :colour])]
         ;; Remove piece from board
         (swap! games update-in [room-id :board]
                (fn [board] (vec (remove #(= (:id %) piece-id) board))))
-        ;; Add to capturing player's captured stash
-        (swap! games update-in [room-id :players player-id :captured piece-size] inc)
+        ;; Add to capturing player's captured stash with original colour
+        (swap! games update-in [room-id :players player-id :captured]
+               conj {:size piece-size :colour original-colour})
         ;; Broadcast updated game state
         (let [updated-game (get @games room-id)]
           (utils/broadcast-room! clients room-id

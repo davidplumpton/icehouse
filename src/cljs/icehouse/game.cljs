@@ -330,6 +330,7 @@
               (let [{:keys [x y]} (get-canvas-coords e)]
                 (reset! state/drag-state {:start-x x :start-y y
                                           :current-x x :current-y y
+                                          :last-x x :last-y y
                                           :locked-angle 0})))
             :on-mouse-move
             (fn [e]
@@ -339,15 +340,24 @@
                 (reset! state/hover-pos {:x x :y y})
                 ;; Update drag state if dragging
                 (when-let [drag @state/drag-state]
-                  (if shift-held
-                    ;; Shift held: move position, keep locked angle
-                    (reset! state/drag-state
-                            (assoc drag :start-x x :start-y y :current-x x :current-y y))
-                    ;; Normal: update current position for angle calculation, lock that angle
-                    (let [new-angle (calculate-angle (:start-x drag) (:start-y drag) x y)]
-                      (swap! state/drag-state assoc
-                             :current-x x :current-y y
-                             :locked-angle new-angle))))))
+                  (let [{:keys [start-x start-y last-x last-y]} drag
+                        dx (- x last-x)
+                        dy (- y last-y)]
+                    (if shift-held
+                      ;; Shift held: move position by delta, keep locked angle
+                      (reset! state/drag-state
+                              (assoc drag
+                                     :start-x (+ start-x dx)
+                                     :start-y (+ start-y dy)
+                                     :current-x (+ start-x dx)
+                                     :current-y (+ start-y dy)
+                                     :last-x x :last-y y))
+                      ;; Normal: update current position for angle calculation, lock that angle
+                      (let [new-angle (calculate-angle start-x start-y x y)]
+                        (swap! state/drag-state assoc
+                               :current-x x :current-y y
+                               :last-x x :last-y y
+                               :locked-angle new-angle)))))))
             :on-mouse-up
             (fn [e]
               (when-let [drag @state/drag-state]
@@ -376,10 +386,8 @@
   (let [game @state/game-state
         player-id @state/player-id
         player-data (get-in game [:players player-id])
-        captured (or (:captured player-data) {:small 0 :medium 0 :large 0})]
-    (pos? (+ (get captured :small 0)
-             (get captured :medium 0)
-             (get captured :large 0)))))
+        captured (or (:captured player-data) [])]
+    (pos? (count captured))))
 
 (defn try-capture-hovered-piece!
   "Attempt to capture the piece under the cursor"
@@ -453,13 +461,11 @@
 (defn player-stash [player-id player-data]
   "Renders a single player's stash of unplayed pieces"
   (let [pieces (or (:pieces player-data) default-pieces)
-        captured (or (:captured player-data) {:small 0 :medium 0 :large 0})
+        captured (or (:captured player-data) [])  ;; Now a list of {:size :colour}
         colour (or (:colour player-data) "#888")
         player-name (or (:name player-data) "Player")
         is-me (= (name player-id) @state/player-id)
-        has-captured? (pos? (+ (get captured :small 0)
-                               (get captured :medium 0)
-                               (get captured :large 0)))]
+        has-captured? (pos? (count captured))]
     [:div.player-stash {:class (when is-me "is-me")}
      [:div.stash-header {:style {:color colour}}
       player-name
@@ -472,9 +478,10 @@
        [:div.captured-pieces
         [:div.captured-header {:style {:color "#ffd700" :font-size "0.8em" :margin-top "0.5rem"}}
          "Captured:"]
-        [piece-size-row :large "L" captured colour {:captured? true}]
-        [piece-size-row :medium "M" captured colour {:captured? true}]
-        [piece-size-row :small "S" captured colour {:captured? true}]])]))
+        ;; Render each captured piece with its original colour
+        (for [[idx cap-piece] (map-indexed vector captured)]
+          ^{:key (str "cap-" idx)}
+          [draw-stash-pyramid (keyword (:size cap-piece)) (:colour cap-piece) {:captured? true}])])]))
 
 (defn stash-panel [position]
   "Renders stash panels for players on left or right side"
