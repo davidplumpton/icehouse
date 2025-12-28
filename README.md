@@ -14,31 +14,45 @@ A real-time multiplayer implementation of Classic Icehouse for 3-4 players. Play
 - 3-4 player support
 - Classic Icehouse rules (standing = defense, pointing = attack)
 
+## Prerequisites
+
+- Java 11+ (for Clojure backend)
+- Node.js 16+ (for ClojureScript tooling)
+- Clojure CLI tools (`brew install clojure/tools/clojure` on macOS)
+
 ## Installation
 
-Requires Java and Node.js.
-
 ```bash
-# Install ClojureScript dependencies
+# Install shadow-cljs globally
 npm install -g shadow-cljs
 
-# Install Clojure dependencies
+# Download Clojure dependencies
 clojure -P
 ```
 
-## Usage
+## Running the App
 
-Start the backend server:
+You need two terminal windows:
+
+**Terminal 1 - Backend server:**
 ```bash
 clojure -M:run
 ```
+This starts the WebSocket server on port 3000.
 
-Start the ClojureScript dev build (in another terminal):
+**Terminal 2 - Frontend dev build:**
 ```bash
-shadow-cljs watch app
+npx shadow-cljs watch app
 ```
+This compiles ClojureScript and watches for changes.
 
-Open http://localhost:3000 in your browser.
+Once both are running, open http://localhost:3000 in your browser.
+
+## Running Tests
+
+```bash
+clojure -M:test
+```
 
 ## Project Structure
 
