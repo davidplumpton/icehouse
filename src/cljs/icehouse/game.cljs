@@ -15,6 +15,7 @@
 ;; Piece sizes for canvas rendering (base width in pixels)
 ;; Sized so small height = large base, medium is halfway between
 (def piece-sizes {:small 40 :medium 50 :large 60})
+(def default-piece-size 40)  ;; Fallback for unknown piece sizes
 
 ;; Piece sizes for stash SVG rendering [width height]
 ;; 3:2 height:base ratio, small height = large base
@@ -25,6 +26,11 @@
 
 ;; Points per piece size (pip values)
 (def pips {:small 1 :medium 2 :large 3})
+
+(defn piece-pips
+  "Get pip value for a piece (1 for small, 2 for medium, 3 for large)"
+  [piece]
+  (get pips (keyword (:size piece)) 0))
 
 ;; Geometry constants
 (def tip-offset-ratio 0.75)        ;; Triangle tip extends 0.75 * base-size from center
@@ -57,7 +63,7 @@
 (defn piece-vertices
   "Get vertices of a piece in world coordinates"
   [{:keys [x y size orientation angle]}]
-  (let [base-size (get piece-sizes (keyword size) 30)
+  (let [base-size (get piece-sizes (keyword size) default-piece-size)
         half (/ base-size 2)
         angle (or angle 0)
         local-verts (if (= (keyword orientation) :standing)
@@ -115,7 +121,7 @@
 (defn attack-strength
   "Sum of pip values of all attackers"
   [attackers]
-  (reduce + (map #(get pips (keyword (:size %)) 0) attackers)))
+  (reduce + (map piece-pips attackers)))
 
 (defn calculate-over-ice
   "Returns a map of defender-id -> {:excess pips :attackers [...] :defender-owner player-id}
@@ -125,7 +131,7 @@
     (reduce-kv
      (fn [result target-id attackers]
        (let [defender (find-piece-by-id board target-id)
-             defender-pips (get pips (keyword (:size defender)) 0)
+             defender-pips (piece-pips defender)
              attacker-pips (attack-strength attackers)
              excess (- attacker-pips (+ defender-pips 1))]
          (if (and defender (> attacker-pips defender-pips) (pos? excess))
@@ -146,7 +152,7 @@
           target-id (:target-id piece)]
       (when-let [info (get over-ice target-id)]
         (and (= (:defender-owner info) player-id)
-             (<= (get pips (keyword (:size piece)) 0) (:excess info)))))))
+             (<= (piece-pips piece) (:excess info)))))))
 
 (defn get-hovered-piece
   "Get the piece currently under the mouse cursor, if any"
@@ -158,7 +164,7 @@
 (defn draw-pyramid [ctx x y size colour orientation angle]
   (let [size-kw (keyword size)
         orient-kw (keyword orientation)
-        base-size (get piece-sizes size-kw 30)
+        base-size (get piece-sizes size-kw default-piece-size)
         half-size (/ base-size 2)
         rotation (or angle 0)]
     (.save ctx)
@@ -265,7 +271,7 @@
   (when drag-state
     (let [{:keys [start-x start-y current-x current-y locked-angle]} drag-state
           {:keys [size orientation]} selected-piece
-          base-size (get piece-sizes size 30)
+          base-size (get piece-sizes size default-piece-size)
           ;; In shift mode (position adjustment), start equals current, so use locked-angle
           ;; In normal mode, calculate angle from start to current
           in-shift-mode? (and (= start-x current-x) (= start-y current-y))

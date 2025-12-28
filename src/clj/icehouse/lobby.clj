@@ -44,7 +44,7 @@
 (defn get-room-players [clients room-id]
   (->> @clients
        (filter (fn [[_ c]] (= (:room-id c) room-id)))
-       (map (fn [[ch c]] {:id (str (hash ch))
+       (map (fn [[ch c]] {:id (game/player-id-from-channel ch)
                           :name (:name c)
                           :colour (:colour c)
                           :ready (:ready c)}))))
@@ -72,7 +72,7 @@
             :colour default-colour})
     (utils/send-msg! channel {:type "joined"
                               :room-id room-id
-                              :player-id (str (hash channel))
+                              :player-id (game/player-id-from-channel channel)
                               :name default-name
                               :colour default-colour})
     (broadcast-players! clients room-id)))

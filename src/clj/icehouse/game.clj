@@ -13,6 +13,7 @@
 ;; Piece sizes in pixels (must match frontend)
 ;; Sized so small height = large base, medium is halfway between
 (def piece-sizes {:small 40 :medium 50 :large 60})
+(def default-piece-size 40)  ;; Fallback for unknown piece sizes
 
 ;; Play area dimensions (must match frontend canvas)
 (def play-area-width 1000)
@@ -25,6 +26,27 @@
 ;; Game rules constants
 (def icehouse-min-pieces 8)       ;; Minimum pieces to trigger icehouse rule
 (def initial-piece-counts {:small 5 :medium 5 :large 5})
+
+;; Message types (for WebSocket communication)
+(def msg-types
+  {:piece-placed "piece-placed"
+   :game-over "game-over"
+   :piece-captured "piece-captured"
+   :error "error"})
+
+;; =============================================================================
+;; Helper Functions
+;; =============================================================================
+
+(defn piece-pips
+  "Get pip value for a piece (1 for small, 2 for medium, 3 for large)"
+  [piece]
+  (get pips (:size piece) 0))
+
+(defn player-id-from-channel
+  "Extract player ID from a WebSocket channel"
+  [channel]
+  (str (hash channel)))
 
 ;; Collision detection using Separating Axis Theorem (SAT)
 
@@ -39,7 +61,7 @@
 (defn piece-vertices
   "Get vertices of a piece in world coordinates"
   [{:keys [x y size orientation angle]}]
-  (let [base-size (get piece-sizes size 30)
+  (let [base-size (get piece-sizes size default-piece-size)
         half (/ base-size 2)
         angle (or angle 0)
         ;; Local vertices relative to center
@@ -148,7 +170,7 @@
 (defn attacker-tip
   "Get the tip position of a pointing piece (where the attack ray originates)"
   [piece]
-  (let [base-size (get piece-sizes (:size piece) 30)
+  (let [base-size (get piece-sizes (:size piece) default-piece-size)
         tip-offset (* base-size tip-offset-ratio)
         angle (or (:angle piece) 0)
         [dx dy] [(Math/cos angle) (Math/sin angle)]]
@@ -195,7 +217,7 @@
 (defn attack-range
   "Get the attack range for a piece (its own length)"
   [piece]
-  (get piece-sizes (:size piece) 30))
+  (get piece-sizes (:size piece) default-piece-size))
 
 (defn point-to-segment-distance
   "Calculate minimum distance from point p to line segment [a b]"
@@ -353,7 +375,7 @@
 (defn attack-strength
   "Sum of pip values of all attackers targeting a piece"
   [attackers]
-  (reduce + (map #(get pips (:size %) 0) attackers)))
+  (reduce + (map piece-pips attackers)))
 
 (defn find-piece-by-id [board id]
   (first (filter #(= (:id %) id) board)))
@@ -366,7 +388,7 @@
     (reduce-kv
      (fn [iced target-id attackers]
        (let [defender (find-piece-by-id board target-id)
-             defender-pips (get pips (:size defender) 0)
+             defender-pips (piece-pips defender)
              attacker-pips (attack-strength attackers)]
          (if (and defender (> attacker-pips defender-pips))
            (conj iced target-id)
@@ -382,7 +404,7 @@
     (reduce-kv
      (fn [result target-id attackers]
        (let [defender (find-piece-by-id board target-id)
-             defender-pips (get pips (:size defender) 0)
+             defender-pips (piece-pips defender)
              attacker-pips (attack-strength attackers)
              ;; Minimum to ice is defender-pips + 1, excess is anything beyond that
              excess (- attacker-pips (+ defender-pips 1))]
@@ -401,7 +423,7 @@
   (let [{:keys [excess attackers]} over-ice-info]
     ;; Sort by pip value ascending so smaller pieces can be captured first
     (->> attackers
-         (map (fn [a] {:attacker a :pips (get pips (:size a) 0)}))
+         (map (fn [a] {:attacker a :pips (piece-pips a)}))
          (filter #(<= (:pips %) excess))
          (sort-by :pips))))
 
@@ -448,7 +470,7 @@
            (if (or (= (:orientation piece) :pointing)
                    (contains? iced (:id piece)))
              scores
-             (let [points (get pips (:size piece) 0)]
+             (let [points (piece-pips piece)]
                (update scores player-id (fnil + 0) points))))))
      {}
      board)))
@@ -460,7 +482,7 @@
 
 (defn handle-place-piece [clients channel msg]
   (let [room-id (get-in @clients [channel :room-id])
-        player-id (str (hash channel))
+        player-id (player-id-from-channel channel)
         game (get @games room-id)
         player-colour (get-in game [:players player-id :colour])
         using-captured? (boolean (:captured msg))
@@ -492,7 +514,7 @@
           (swap! games update-in [room-id :players player-id :pieces (:size piece)] dec))
         (let [updated-game (get @games room-id)]
           (utils/broadcast-room! clients room-id
-                                 {:type "piece-placed"
+                                 {:type (:piece-placed msg-types)
                                   :piece piece
                                   :game updated-game})
           (when (game-over? updated-game)
@@ -500,11 +522,11 @@
                   over-ice (calculate-over-ice board)
                   icehouse-players (calculate-icehouse-players board)]
               (utils/broadcast-room! clients room-id
-                                     {:type "game-over"
+                                     {:type (:game-over msg-types)
                                       :scores (calculate-scores updated-game)
                                       :over-ice over-ice
                                       :icehouse-players (vec icehouse-players)})))))
-      (utils/send-msg! channel {:type "error" :message (or error "Invalid game state")}))))
+      (utils/send-msg! channel {:type (:error msg-types) :message (or error "Invalid game state")}))))
 
 (defn validate-capture
   "Validate that a piece can be captured by the player.
@@ -529,14 +551,14 @@
       (not= (:defender-owner (get over-ice (:target-id piece))) player-id)
       "You can only capture attackers targeting your own pieces"
 
-      (> (get pips (:size piece) 0) (:excess (get over-ice (:target-id piece))))
+      (> (piece-pips piece) (:excess (get over-ice (:target-id piece))))
       "Attacker's pip value exceeds remaining excess"
 
       :else nil)))
 
 (defn handle-capture-piece [clients channel msg]
   (let [room-id (get-in @clients [channel :room-id])
-        player-id (str (hash channel))
+        player-id (player-id-from-channel channel)
         game (get @games room-id)
         piece-id (:piece-id msg)
         error (when game (validate-capture game player-id piece-id))]
@@ -555,11 +577,11 @@
         ;; Broadcast updated game state
         (let [updated-game (get @games room-id)]
           (utils/broadcast-room! clients room-id
-                                 {:type "piece-captured"
+                                 {:type (:piece-captured msg-types)
                                   :piece-id piece-id
                                   :captured-by player-id
                                   :game updated-game})))
-      (utils/send-msg! channel {:type "error" :message (or error "Invalid capture")}))))
+      (utils/send-msg! channel {:type (:error msg-types) :message (or error "Invalid capture")}))))
 
 (defn start-game! [room-id players]
   (swap! games assoc room-id (create-game room-id players)))
