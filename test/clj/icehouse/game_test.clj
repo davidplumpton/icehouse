@@ -144,6 +144,22 @@
       (is (= {} (game/calculate-scores game))))))
 
 (deftest icehouse-rule-test
+  (testing "icehouse threshold is 8 pieces (fewer than 8 unplayed = 8+ placed)"
+    (is (= 8 game/icehouse-min-pieces)))
+
+  (testing "player not in icehouse with exactly 7 pieces (edge case)"
+    ;; 7 pieces placed means 8 unplayed, so icehouse rule doesn't apply
+    (let [alice-pieces (for [i (range 6)]
+                         {:id (str "alice-a" i) :player-id "alice"
+                          :size :small :orientation :pointing :target-id "bob-d0"})
+          alice-defender {:id "alice-d0" :player-id "alice" :size :small :orientation :standing}
+          bob-attacker {:id "bob-a0" :player-id "bob" :size :large :orientation :pointing :target-id "alice-d0"}
+          bob-defender {:id "bob-d0" :player-id "bob" :size :large :orientation :standing}
+          board (concat alice-pieces [alice-defender bob-attacker bob-defender])
+          icehouse-players (game/calculate-icehouse-players board)]
+      ;; Alice has 7 pieces with her only defender iced, but not in icehouse (needs 8+)
+      (is (= #{} icehouse-players))))
+
   (testing "player not in icehouse with fewer than 8 pieces"
     ;; Even if all defenders are iced, need 8+ pieces to be in icehouse
     (let [board [{:id "a1" :player-id "bob" :size :large :orientation :pointing :target-id "d1"}
