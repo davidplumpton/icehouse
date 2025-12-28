@@ -8,8 +8,8 @@
 ;; =============================================================================
 
 ;; Canvas/play area dimensions
-(def canvas-width 800)
-(def canvas-height 600)
+(def canvas-width 1000)
+(def canvas-height 750)
 (def grid-size 50)
 
 ;; Piece sizes for canvas rendering (base width in pixels)
@@ -18,7 +18,7 @@
 
 ;; Piece sizes for stash SVG rendering [width height]
 ;; 3:2 height:base ratio, small height = large base
-(def stash-sizes {:small [32 48] :medium [40 60] :large [48 72]})
+(def stash-sizes {:small [24 36] :medium [30 45] :large [36 54]})
 
 ;; Default piece counts per player
 (def default-pieces {:small 5 :medium 5 :large 5})
@@ -463,7 +463,7 @@
 (defn draw-stash-pyramid [size colour & [{:keys [captured?]}]]
   "Returns SVG element for a pyramid in the stash"
   (let [[width height] (get stash-sizes size [24 36])]
-    [:svg {:width width :height height :style {:display "inline-block" :margin "2px"}}
+    [:svg {:width width :height height :style {:display "inline-block" :margin "1px"}}
      [:polygon {:points (str (/ width 2) ",0 0," height " " width "," height)
                 :fill colour
                 :stroke (if captured? "#ffd700" "#000")
