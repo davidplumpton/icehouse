@@ -545,20 +545,22 @@
          (when (< seconds 10) "0") seconds)))
 
 (defn game-timer []
-  "Display elapsed game time"
+  "Display remaining game time"
   (let [game @state/game-state
         current @state/current-time]
-    (when-let [started-at (:started-at game)]
-      (let [elapsed (- current started-at)]
+    (when-let [ends-at (:ends-at game)]
+      (let [remaining (max 0 (- ends-at current))
+            urgent? (< remaining 30000)]  ;; Last 30 seconds
         [:div.game-timer
          {:style {:font-family "monospace"
                   :font-size "1.2rem"
                   :padding "0.25rem 0.5rem"
-                  :background "#333"
+                  :background (if urgent? "#f44336" "#333")
                   :color "#fff"
                   :border-radius "4px"
-                  :display "inline-block"}}
-         (format-time elapsed)]))))
+                  :display "inline-block"
+                  :animation (when urgent? "pulse 1s infinite")}}
+         (format-time remaining)]))))
 
 (defn game-results-overlay []
   "Display final scores when game ends"

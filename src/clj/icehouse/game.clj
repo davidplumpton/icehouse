@@ -27,6 +27,10 @@
 (def icehouse-min-pieces 8)       ;; Minimum pieces to trigger icehouse rule
 (def initial-piece-counts {:small 5 :medium 5 :large 5})
 
+;; Game duration in milliseconds (random between min and max)
+(def game-duration-min-ms (* 2 60 1000))  ;; 2 minutes
+(def game-duration-max-ms (* 5 60 1000))  ;; 5 minutes
+
 ;; Message types (for WebSocket communication)
 (def msg-types
   {:piece-placed "piece-placed"
@@ -305,15 +309,24 @@
            first
            :target))))
 
+(defn random-game-duration
+  "Generate a random game duration between min and max"
+  []
+  (+ game-duration-min-ms
+     (rand-int (- game-duration-max-ms game-duration-min-ms))))
+
 (defn create-game [room-id players]
-  {:room-id room-id
-   :players (into {} (map (fn [p] [(:id p) {:name (:name p)
-                                            :colour (:colour p)
-                                            :pieces initial-piece-counts
-                                            :captured []}])  ;; List of {:size :colour}
-                          players))
-   :board []
-   :started-at (System/currentTimeMillis)})
+  (let [now (System/currentTimeMillis)
+        duration (random-game-duration)]
+    {:room-id room-id
+     :players (into {} (map (fn [p] [(:id p) {:name (:name p)
+                                              :colour (:colour p)
+                                              :pieces initial-piece-counts
+                                              :captured []}])  ;; List of {:size :colour}
+                            players))
+     :board []
+     :started-at now
+     :ends-at (+ now duration)}))
 
 (defn count-captured-by-size
   "Count captured pieces of a given size"
@@ -475,10 +488,21 @@
      {}
      board)))
 
-(defn game-over? [game]
+(defn all-pieces-placed? [game]
+  "Check if all players have placed all their pieces"
   (every? (fn [[_ player]]
             (every? zero? (vals (:pieces player))))
           (:players game)))
+
+(defn time-up? [game]
+  "Check if the game time has expired"
+  (when-let [ends-at (:ends-at game)]
+    (>= (System/currentTimeMillis) ends-at)))
+
+(defn game-over? [game]
+  "Game ends when all pieces are placed OR time runs out"
+  (or (all-pieces-placed? game)
+      (time-up? game)))
 
 (defn handle-place-piece [clients channel msg]
   (let [room-id (get-in @clients [channel :room-id])
