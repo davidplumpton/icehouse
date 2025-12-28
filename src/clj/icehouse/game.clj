@@ -250,7 +250,8 @@
   {:room-id room-id
    :players (into {} (map (fn [p] [(:id p) {:name (:name p)
                                             :colour (:colour p)
-                                            :pieces (initial-pieces)}])
+                                            :pieces (initial-pieces)
+                                            :captured {:small 0 :medium 0 :large 0}}])
                           players))
    :board []
    :started-at (System/currentTimeMillis)})

@@ -232,28 +232,32 @@
         "Press 1/2/3 for size, A/D for mode, Esc to cancel"
         "Press 1/2/3 for size, D for defend, Esc to cancel (attack unlocks after 2 moves)")]]))
 
-(defn draw-stash-pyramid [size colour]
+(defn draw-stash-pyramid [size colour & [{:keys [captured?]}]]
   "Returns SVG element for a pyramid in the stash"
   (let [[width height] (get stash-sizes size [24 36])]
     [:svg {:width width :height height :style {:display "inline-block" :margin "2px"}}
      [:polygon {:points (str (/ width 2) ",0 0," height " " width "," height)
                 :fill colour
-                :stroke "#000"
-                :stroke-width "1"}]]))
+                :stroke (if captured? "#ffd700" "#000")
+                :stroke-width (if captured? "2" "1")}]]))
 
-(defn piece-size-row [size label pieces colour]
+(defn piece-size-row [size label pieces colour & [{:keys [captured?]}]]
   [:div.piece-row
    [:span.size-label label]
    (for [i (range (get pieces size 0))]
      ^{:key (str (name size) "-" i)}
-     [draw-stash-pyramid size colour])])
+     [draw-stash-pyramid size colour {:captured? captured?}])])
 
 (defn player-stash [player-id player-data]
   "Renders a single player's stash of unplayed pieces"
   (let [pieces (or (:pieces player-data) default-pieces)
+        captured (or (:captured player-data) {:small 0 :medium 0 :large 0})
         colour (or (:colour player-data) "#888")
         player-name (or (:name player-data) "Player")
-        is-me (= (name player-id) @state/player-id)]
+        is-me (= (name player-id) @state/player-id)
+        has-captured? (pos? (+ (get captured :small 0)
+                               (get captured :medium 0)
+                               (get captured :large 0)))]
     [:div.player-stash {:class (when is-me "is-me")}
      [:div.stash-header {:style {:color colour}}
       player-name
@@ -261,7 +265,14 @@
      [:div.stash-pieces
       [piece-size-row :large "L" pieces colour]
       [piece-size-row :medium "M" pieces colour]
-      [piece-size-row :small "S" pieces colour]]]))
+      [piece-size-row :small "S" pieces colour]]
+     (when has-captured?
+       [:div.captured-pieces
+        [:div.captured-header {:style {:color "#ffd700" :font-size "0.8em" :margin-top "0.5rem"}}
+         "Captured:"]
+        [piece-size-row :large "L" captured colour {:captured? true}]
+        [piece-size-row :medium "M" captured colour {:captured? true}]
+        [piece-size-row :small "S" captured colour {:captured? true}]])]))
 
 (defn stash-panel [position]
   "Renders stash panels for players on left or right side"
