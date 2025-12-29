@@ -10,7 +10,8 @@
 
 (defroutes routes
   (GET "/ws" req (ws/handler req))
-  (GET "/" [] (response/resource-response "index.html" {:root "public"}))
+  (GET "/" [] (-> (response/resource-response "index.html" {:root "public"})
+                  (response/content-type "text/html")))
   (route/resources "/")
   (route/not-found "Not Found"))
 
