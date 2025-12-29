@@ -203,6 +203,32 @@
         ;; Ray hits segment if t >= 0 (forward direction) and 0 <= u <= 1 (on segment)
         (and (>= t 0) (>= u 0) (<= u 1))))))
 
+(defn ray-segment-intersection-distance
+  "Get the distance (parameter t) at which a ray from origin in direction dir
+   intersects line segment [p1 p2]. Returns nil if no intersection."
+  [[ox oy] [dx dy] [[p1x p1y] [p2x p2y]]]
+  (let [sx (- p2x p1x)
+        sy (- p2y p1y)
+        denom (- (* dx sy) (* dy sx))]
+    (when (>= (Math/abs denom) parallel-threshold)
+      (let [ox-p1x (- p1x ox)
+            oy-p1y (- p1y oy)
+            t (/ (- (* ox-p1x sy) (* oy-p1y sx)) denom)
+            u (/ (- (* ox-p1x dy) (* oy-p1y dx)) denom)]
+        (when (and (>= t 0) (>= u 0) (<= u 1))
+          t)))))
+
+(defn ray-polygon-intersection-distance
+  "Get the minimum distance at which a ray hits any edge of a polygon.
+   Returns nil if no intersection."
+  [origin direction vertices]
+  (let [n (count vertices)
+        edges (map (fn [i] [(nth vertices i) (nth vertices (mod (inc i) n))])
+                   (range n))
+        distances (keep #(ray-segment-intersection-distance origin direction %) edges)]
+    (when (seq distances)
+      (apply min distances))))
+
 (defn ray-intersects-polygon?
   "Check if a ray from origin in direction dir intersects any edge of polygon"
   [origin direction vertices]
@@ -216,8 +242,36 @@
   [attacker target]
   (let [tip (attacker-tip attacker)
         dir (attack-direction attacker)
-        target-verts (piece-vertices target)]
-    (ray-intersects-polygon? tip dir target-verts)))
+        target-verts (piece-vertices target)
+        result (ray-intersects-polygon? tip dir target-verts)]
+    (println "in-front-of?" {:tip tip
+                             :dir dir
+                             :target-verts target-verts
+                             :result result})
+    result))
+
+(defn clear-line-of-sight?
+  "Check if there are no pieces blocking the line between attacker and target.
+   The target must be the first piece hit by the attack ray."
+  [attacker target board]
+  (let [tip (attacker-tip attacker)
+        dir (attack-direction attacker)
+        target-verts (piece-vertices target)
+        target-dist (ray-polygon-intersection-distance tip dir target-verts)
+        ;; Get all pieces except attacker and target
+        other-pieces (remove #(or (= (:id %) (:id attacker))
+                                  (= (:id %) (:id target)))
+                             board)]
+    ;; If we can't hit the target, line of sight is blocked (shouldn't happen if in-front-of? passed)
+    (if (nil? target-dist)
+      false
+      ;; Check if any other piece is hit before the target
+      (not-any? (fn [piece]
+                  (let [piece-verts (piece-vertices piece)
+                        piece-dist (ray-polygon-intersection-distance tip dir piece-verts)]
+                    ;; If a piece is hit before the target, line of sight is blocked
+                    (and piece-dist (< piece-dist target-dist))))
+                other-pieces))))
 
 (defn attack-range
   "Get the attack range for a piece (its height/length, not base width)"
@@ -269,16 +323,31 @@
   "Check if target could be attacked based on trajectory only (ignoring range).
    Returns true if the target is an opponent's standing piece in the attack path."
   [attacker target attacker-player-id]
-  (and (not= (:player-id target) attacker-player-id)  ;; Different player
-       (= (:orientation target) :standing)             ;; Must be a defender (standing)
-       (in-front-of? attacker target)))                ;; In trajectory
+  (let [diff-player (not= (:player-id target) attacker-player-id)
+        is-standing (= (:orientation target) :standing)]
+    (if (and diff-player is-standing)
+      ;; Only check in-front-of? for standing opponent pieces
+      (let [in-front (in-front-of? attacker target)]
+        (println "potential-target?" {:target-player (:player-id target)
+                                      :attacker-player attacker-player-id
+                                      :diff-player diff-player
+                                      :is-standing is-standing
+                                      :in-front in-front
+                                      :result in-front
+                                      :attacker-pos [(:x attacker) (:y attacker)]
+                                      :attacker-angle (:angle attacker)
+                                      :target-pos [(:x target) (:y target)]})
+        in-front)
+      false)))
 
 (defn valid-target?
   "Check if target is a valid attack target for the attacker.
-   Per Icehouse rules, can only target standing (defending) opponent pieces."
-  [attacker target attacker-player-id]
+   Per Icehouse rules, can only target standing (defending) opponent pieces.
+   Also checks that no other pieces are blocking the line of sight."
+  [attacker target attacker-player-id board]
   (and (potential-target? attacker target attacker-player-id)
-       (within-range? attacker target)))               ;; Within range
+       (within-range? attacker target)
+       (clear-line-of-sight? attacker target board)))
 
 (defn find-potential-targets
   "Find all targets in the attack trajectory (ignoring range)"
@@ -293,12 +362,31 @@
 (defn find-valid-targets
   "Find all valid targets for an attacking piece"
   [attacker player-id board]
-  (filter #(valid-target? attacker % player-id) board))
+  (filter #(valid-target? attacker % player-id board) board))
 
 (defn has-valid-target?
   "Check if an attacking piece has at least one valid target"
   [piece player-id board]
   (seq (find-valid-targets piece player-id board)))
+
+(defn find-targets-in-range
+  "Find all targets that are in trajectory and range (ignoring line of sight)"
+  [attacker player-id board]
+  (filter #(and (potential-target? attacker % player-id)
+                (within-range? attacker %))
+          board))
+
+(defn has-target-in-range?
+  "Check if an attacking piece has at least one target in range (ignoring line of sight)"
+  [piece player-id board]
+  (seq (find-targets-in-range piece player-id board)))
+
+(defn has-blocked-target?
+  "Check if an attacking piece has a target in range that is blocked by another piece"
+  [piece player-id board]
+  (let [in-range (find-targets-in-range piece player-id board)]
+    (and (seq in-range)
+         (not-any? #(clear-line-of-sight? piece % board) in-range))))
 
 (defn find-closest-target
   "Find the closest valid target for an attacking piece"
@@ -381,6 +469,14 @@
                      (get-in player [:pieces size] 0))
          board (:board game)
          is-attacking? (= (:orientation piece) :pointing)]
+     (when is-attacking?
+       (println "validate-placement attack:" {:piece-pos [(:x piece) (:y piece)]
+                                               :angle (:angle piece)
+                                               :size size
+                                               :player-id player-id
+                                               :has-potential? (has-potential-target? piece player-id board)
+                                               :has-valid? (has-valid-target? piece player-id board)
+                                               :board-count (count board)}))
      (cond
        (not (pos? remaining))
        (if using-captured?
@@ -396,8 +492,11 @@
        (and is-attacking? (not (has-potential-target? piece player-id board)))
        "Attacking piece must be pointed at an opponent's piece"
 
-       (and is-attacking? (not (has-valid-target? piece player-id board)))
+       (and is-attacking? (not (has-target-in-range? piece player-id board)))
        "Target is out of range"
+
+       (and is-attacking? (has-blocked-target? piece player-id board))
+       "Another piece is blocking the line of attack"
 
        :else nil))))
 

@@ -502,6 +502,64 @@
           defender {:x 255 :y 100 :size :small :orientation :standing :angle 0}]
       (is (game/within-range? attacker defender) "Edge at exact range should count"))))
 
+(deftest line-of-sight-test
+  "Test that attacks fail when line of sight is blocked"
+  (testing "clear line of sight allows attack"
+    (let [defender {:id "d1" :player-id "bob" :x 300 :y 100 :size :small :orientation :standing :angle 0}
+          attacker {:id "a1" :player-id "alice" :x 100 :y 100 :size :large :orientation :pointing :angle 0}
+          board [defender]]
+      (is (game/clear-line-of-sight? attacker defender board))))
+
+  (testing "piece in the way blocks line of sight"
+    (let [defender {:id "d1" :player-id "bob" :x 300 :y 100 :size :small :orientation :standing :angle 0}
+          blocker {:id "b1" :player-id "alice" :x 200 :y 100 :size :small :orientation :standing :angle 0}
+          attacker {:id "a1" :player-id "alice" :x 100 :y 100 :size :large :orientation :pointing :angle 0}
+          board [defender blocker]]
+      (is (not (game/clear-line-of-sight? attacker defender board)))))
+
+  (testing "enemy piece in the way also blocks"
+    (let [defender {:id "d1" :player-id "bob" :x 300 :y 100 :size :small :orientation :standing :angle 0}
+          blocker {:id "b1" :player-id "bob" :x 200 :y 100 :size :small :orientation :standing :angle 0}
+          attacker {:id "a1" :player-id "alice" :x 100 :y 100 :size :large :orientation :pointing :angle 0}
+          board [defender blocker]]
+      (is (not (game/clear-line-of-sight? attacker defender board)))))
+
+  (testing "piece to the side does not block"
+    (let [defender {:id "d1" :player-id "bob" :x 300 :y 100 :size :small :orientation :standing :angle 0}
+          bystander {:id "b1" :player-id "alice" :x 200 :y 200 :size :small :orientation :standing :angle 0}
+          attacker {:id "a1" :player-id "alice" :x 100 :y 100 :size :large :orientation :pointing :angle 0}
+          board [defender bystander]]
+      (is (game/clear-line-of-sight? attacker defender board))))
+
+  (testing "piece behind target does not block"
+    (let [defender {:id "d1" :player-id "bob" :x 200 :y 100 :size :small :orientation :standing :angle 0}
+          behind {:id "b1" :player-id "bob" :x 300 :y 100 :size :small :orientation :standing :angle 0}
+          attacker {:id "a1" :player-id "alice" :x 100 :y 100 :size :large :orientation :pointing :angle 0}
+          board [defender behind]]
+      (is (game/clear-line-of-sight? attacker defender board)))))
+
+(deftest blocked-attack-validation-test
+  "Test that validate-placement returns correct error for blocked attacks"
+  (testing "attack blocked by piece returns specific error"
+    ;; Large attacker at x=50, tip at x=95 (50 + 45)
+    ;; Large range = 90px, so max reach is x=185
+    ;; Blocker at x=120 (left edge at 100), defender at x=160 (left edge at 140)
+    ;; Both in range, but blocker is hit first
+    (let [defender {:id "d1" :player-id "bob" :x 160 :y 100 :size :small :orientation :standing :angle 0}
+          blocker {:id "b1" :player-id "alice" :x 120 :y 100 :size :small :orientation :standing :angle 0}
+          game {:players {"alice" {:pieces {:small 5 :medium 5 :large 5}}}
+                :board [defender blocker]}
+          attacker {:x 50 :y 100 :size :large :orientation :pointing :angle 0}]
+      (is (= "Another piece is blocking the line of attack"
+             (game/validate-placement game "alice" attacker)))))
+
+  (testing "valid attack with no blockers succeeds"
+    (let [defender {:id "d1" :player-id "bob" :x 200 :y 100 :size :small :orientation :standing :angle 0}
+          game {:players {"alice" {:pieces {:small 5 :medium 5 :large 5}}}
+                :board [defender]}
+          attacker {:x 100 :y 100 :size :large :orientation :pointing :angle 0}]
+      (is (nil? (game/validate-placement game "alice" attacker))))))
+
 (deftest attack-placement-integration-test
   "Test full attack validation flow as would happen in actual gameplay"
   (testing "valid attack passes all checks"
