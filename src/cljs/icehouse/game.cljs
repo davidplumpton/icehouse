@@ -396,8 +396,16 @@
     (.stroke ctx)
     (.restore ctx)))
 
-(defn draw-with-preview [ctx game drag-state selected-piece player-colour hover-pos player-id]
+(defn draw-with-preview [ctx game drag-state selected-piece player-colour hover-pos player-id zoom-state]
   "Draw the board and optionally a preview of the piece being placed"
+  ;; Apply zoom transform if active
+  (when zoom-state
+    (let [{:keys [center-x center-y scale]} zoom-state]
+      (.save ctx)
+      ;; Translate to zoom center, scale, translate back
+      (.translate ctx center-x center-y)
+      (.scale ctx scale scale)
+      (.translate ctx (- center-x) (- center-y))))
   (draw-board ctx game hover-pos player-id)
   ;; Draw preview if dragging
   (when drag-state
@@ -453,7 +461,10 @@
       (.save ctx)
       (set! (.-globalAlpha ctx) preview-alpha)
       (draw-pyramid ctx start-x start-y size player-colour orientation angle)
-      (.restore ctx))))
+      (.restore ctx)))
+  ;; Restore zoom transform if it was applied
+  (when zoom-state
+    (.restore ctx)))
 
 (defn has-pieces-of-size? [size use-captured?]
   "Returns true if current player has pieces of the given size to place"
@@ -475,19 +486,28 @@
       (fn [this]
         (when-let [canvas @canvas-ref]
           (let [ctx (.getContext canvas "2d")]
-            (draw-board ctx @state/game-state @state/hover-pos @state/player-id))))
+            (draw-with-preview ctx @state/game-state nil @state/selected-piece
+                               @state/player-colour @state/hover-pos @state/player-id nil))))
 
       :component-did-update
       (fn [this]
         (when-let [canvas @canvas-ref]
-          (let [ctx (.getContext canvas "2d")]
+          (let [ctx (.getContext canvas "2d")
+                zoom? @state/zoom-active
+                hover @state/hover-pos
+                ;; Create zoom state map if zoom is active
+                zoom-state (when zoom?
+                             {:center-x (if hover (:x hover) (/ canvas-width 2))
+                              :center-y (if hover (:y hover) (/ canvas-height 2))
+                              :scale 4})]
             (draw-with-preview ctx
                                @state/game-state
                                @state/drag-state
                                @state/selected-piece
                                @state/player-colour
                                @state/hover-pos
-                               @state/player-id))))
+                               @state/player-id
+                               zoom-state))))
 
       :reagent-render
       (fn []
@@ -495,7 +515,8 @@
         (let [_ @state/game-state
               _ @state/drag-state
               _ @state/selected-piece
-              _ @state/hover-pos]
+              _ @state/hover-pos
+              _ @state/zoom-active]
           [:canvas
            {:ref #(reset! canvas-ref %)
             :width canvas-width
@@ -549,7 +570,8 @@
                               locked-angle
                               (calculate-angle start-x start-y current-x current-y))]
                   (ws/place-piece! start-x start-y size orientation angle nil captured?)
-                  (reset! state/drag-state nil))))
+                  (reset! state/drag-state nil)
+                  (reset! state/zoom-active false))))
             :on-mouse-leave
             (fn [e]
               (reset! state/hover-pos nil)
@@ -596,14 +618,17 @@
                     (swap! state/selected-piece update :captured? not)))
       "Escape" (do
                  (reset! state/drag-state nil)
-                 (reset! state/show-help false))
+                 (reset! state/show-help false)
+                 (reset! state/zoom-active false))
       "?" (swap! state/show-help not)
+      ("z" "Z") (swap! state/zoom-active not)
       nil)))
 
 (defn piece-selector []
   (let [{:keys [size orientation captured?]} @state/selected-piece
         attack-allowed (can-attack?)
-        has-captured (has-captured-pieces?)]
+        has-captured (has-captured-pieces?)
+        zoom? @state/zoom-active]
     [:div.piece-selector
      [:div.hotkey-display
       [:span.current-size
@@ -613,17 +638,20 @@
        (if (= orientation :standing) "Defend (D)" "Attack (A)")]
       (when captured?
         [:span.captured-indicator {:style {:color "#ffd700" :margin-left "0.5rem"}}
-         "[Captured]"])]
+         "[Captured]"])
+      (when zoom?
+        [:span.zoom-indicator {:style {:color "#00ff00" :margin-left "0.5rem"}}
+         "[ZOOM 4x]"])]
      [:div.hotkey-hint
       (cond
         (not attack-allowed)
-        "1/2/3 size, D defend, Shift+drag | ? help (attack unlocks after 2 moves)"
+        "1/2/3 size, D defend, Z zoom, Shift+drag | ? help (attack unlocks after 2 moves)"
 
         has-captured
-        "1/2/3 size, A/D mode, C captured, Shift+drag | ? help"
+        "1/2/3 size, A/D mode, C captured, Z zoom, Shift+drag | ? help"
 
         :else
-        "1/2/3 size, A/D mode, Shift+drag | ? help")]]))
+        "1/2/3 size, A/D mode, Z zoom, Shift+drag | ? help")]]))
 
 (defn draw-stash-pyramid [size colour & [{:keys [captured?]}]]
   "Returns SVG element for a pyramid in the stash"
@@ -802,6 +830,8 @@
          [:td {:style {:padding "0.5rem"}} "Attack mode (pointing piece)"]]
         [:tr [:td {:style {:padding "0.5rem" :color "#ffd700"}} "C"]
          [:td {:style {:padding "0.5rem"}} "Capture piece / Toggle captured mode"]]
+        [:tr [:td {:style {:padding "0.5rem" :color "#ffd700"}} "Z"]
+         [:td {:style {:padding "0.5rem"}} "Toggle 4x zoom for fine placement"]]
         [:tr [:td {:style {:padding "0.5rem" :color "#ffd700"}} "Shift + Drag"]
          [:td {:style {:padding "0.5rem"}} "Adjust position without changing angle"]]
         [:tr [:td {:style {:padding "0.5rem" :color "#ffd700"}} "Escape"]
