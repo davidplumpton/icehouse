@@ -1,6 +1,7 @@
 (ns icehouse.lobby
   (:require [reagent.core :as r]
             [icehouse.state :as state]
+            [icehouse.theme :as theme]
             [icehouse.websocket :as ws]))
 
 (defn colour-picker []
@@ -52,7 +53,7 @@
     (when options
       [:div.game-options {:style {:margin-top "20px"
                                    :padding "15px"
-                                   :background "#2a2a3e"
+                                   :background theme/board-background
                                    :border-radius "8px"}}
        [:h3 {:style {:margin-top 0 :color "#aaa"}} "Game Options"]
        [:div.option {:style {:margin "10px 0"}}
@@ -79,7 +80,7 @@
    {:on-click #(ws/list-games!)
     :style {:margin-top "20px"
             :padding "10px 20px"
-            :background "#4CAF50"
+            :background theme/green
             :color "white"
             :border "none"
             :border-radius "4px"

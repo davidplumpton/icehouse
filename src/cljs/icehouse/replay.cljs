@@ -1,6 +1,7 @@
 (ns icehouse.replay
   (:require [reagent.core :as r]
             [icehouse.state :as state]
+            [icehouse.theme :as theme]
             [icehouse.utils :as utils]
             [icehouse.websocket :as ws]
             [icehouse.game :as game]))
@@ -150,7 +151,7 @@
           (for [s [0.5 1 2 4]]
             ^{:key s}
             [:button.speed-btn {:on-click #(set-speed! s)
-                                :style {:background (if (= speed s) "#4CAF50" "#333")
+                                :style {:background (if (= speed s) theme/green theme/button-inactive)
                                         :margin "0 5px"}}
              (str s "x")])]
 
@@ -192,7 +193,7 @@
       [:button {:on-click ws/list-games!
                 :style {:margin-right "10px"
                         :padding "8px 16px"
-                        :background "#4CAF50"
+                        :background theme/green
                         :color "white"
                         :border "none"
                         :border-radius "4px"

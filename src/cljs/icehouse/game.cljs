@@ -1,6 +1,7 @@
 (ns icehouse.game
   (:require [reagent.core :as r]
             [icehouse.state :as state]
+            [icehouse.theme :as theme]
             [icehouse.utils :as utils]
             [icehouse.websocket :as ws]))
 
@@ -355,9 +356,9 @@
   [ctx piece]
   (let [verts (piece-vertices piece)]
     (.save ctx)
-    (set! (.-strokeStyle ctx) "#ffd700")
+    (set! (.-strokeStyle ctx) theme/gold)
     (set! (.-lineWidth ctx) 4)
-    (set! (.-shadowColor ctx) "#ffd700")
+    (set! (.-shadowColor ctx) theme/gold)
     (set! (.-shadowBlur ctx) 10)
     (.beginPath ctx)
     (let [[x0 y0] (first verts)]
@@ -369,10 +370,10 @@
     (.restore ctx)))
 
 (defn draw-board [ctx game hover-pos current-player-id]
-  (set! (.-fillStyle ctx) "#2a2a3e")
+  (set! (.-fillStyle ctx) theme/board-background)
   (.fillRect ctx 0 0 canvas-width canvas-height)
 
-  (set! (.-strokeStyle ctx) "#3a3a4e")
+  (set! (.-strokeStyle ctx) theme/grid-color)
   (set! (.-lineWidth ctx) 1)
   (doseq [x (range 0 canvas-width grid-size)]
     (.beginPath ctx)
@@ -675,7 +676,7 @@
       [:span.current-mode
        (if (= orientation :standing) "Defend (D)" "Attack (A)")]
       (when captured?
-        [:span.captured-indicator {:style {:color "#ffd700" :margin-left "0.5rem"}}
+        [:span.captured-indicator {:style {:color theme/gold :margin-left "0.5rem"}}
          "[Captured]"])
       (when zoom?
         [:span.zoom-indicator {:style {:color "#00ff00" :margin-left "0.5rem"}}
@@ -697,7 +698,7 @@
     [:svg {:width width :height height :style {:display "inline-block" :margin "1px"}}
      [:polygon {:points (str (/ width 2) ",0 0," height " " width "," height)
                 :fill colour
-                :stroke (if captured? "#ffd700" "#000")
+                :stroke (if captured? theme/gold "#000")
                 :stroke-width (if captured? "2" "1")}]]))
 
 (defn piece-size-row [size label pieces colour & [{:keys [captured?]}]]
@@ -725,7 +726,7 @@
       [piece-size-row :small "S" pieces colour]]
      (when has-captured?
        [:div.captured-pieces
-        [:div.captured-header {:style {:color "#ffd700" :font-size "0.8em" :margin-top "0.5rem"}}
+        [:div.captured-header {:style {:color theme/gold :font-size "0.8em" :margin-top "0.5rem"}}
          "Captured:"]
         ;; Render each captured piece with its original colour
         (doall
@@ -771,7 +772,7 @@
          {:style {:font-family "monospace"
                   :font-size "1.2rem"
                   :padding "0.25rem 0.5rem"
-                  :background (if urgent? "#f44336" "#333")
+                  :background (if urgent? theme/red theme/button-inactive)
                   :color "#fff"
                   :border-radius "4px"
                   :display "inline-block"
@@ -820,7 +821,7 @@
                 [:span {:style {:color player-colour :font-weight "bold"}}
                  player-name]
                 (when in-icehouse?
-                  [:span {:style {:color "#f44336" :margin-left "0.5rem" :font-size "0.8em"}}
+                  [:span {:style {:color theme/red :margin-left "0.5rem" :font-size "0.8em"}}
                    "(Icehouse!)"])]
                [:td {:style {:text-align "right" :padding "0.5rem" :font-size "1.2em"}}
                 score]]))]]
@@ -828,7 +829,7 @@
          {:style {:padding "0.5rem 2rem"
                   :font-size "1rem"
                   :cursor "pointer"
-                  :background "#4CAF50"
+                  :background theme/green
                   :color "#fff"
                   :border "none"
                   :border-radius "4px"}
@@ -851,7 +852,7 @@
               :z-index 1000}
       :on-click #(reset! state/show-help false)}
      [:div.help-content
-      {:style {:background "#2a2a3e"
+      {:style {:background theme/board-background
                :padding "2rem"
                :border-radius "8px"
                :max-width "500px"
@@ -860,21 +861,21 @@
       [:h2 {:style {:margin-top 0 :text-align "center"}} "Keyboard Controls"]
       [:table {:style {:width "100%" :border-collapse "collapse"}}
        [:tbody
-        [:tr [:td {:style {:padding "0.5rem" :color "#ffd700"}} "1 / 2 / 3"]
+        [:tr [:td {:style {:padding "0.5rem" :color theme/gold}} "1 / 2 / 3"]
          [:td {:style {:padding "0.5rem"}} "Select piece size (Small / Medium / Large)"]]
-        [:tr [:td {:style {:padding "0.5rem" :color "#ffd700"}} "D"]
+        [:tr [:td {:style {:padding "0.5rem" :color theme/gold}} "D"]
          [:td {:style {:padding "0.5rem"}} "Defend mode (standing piece)"]]
-        [:tr [:td {:style {:padding "0.5rem" :color "#ffd700"}} "A"]
+        [:tr [:td {:style {:padding "0.5rem" :color theme/gold}} "A"]
          [:td {:style {:padding "0.5rem"}} "Attack mode (pointing piece)"]]
-        [:tr [:td {:style {:padding "0.5rem" :color "#ffd700"}} "C"]
+        [:tr [:td {:style {:padding "0.5rem" :color theme/gold}} "C"]
          [:td {:style {:padding "0.5rem"}} "Capture piece / Toggle captured mode"]]
-        [:tr [:td {:style {:padding "0.5rem" :color "#ffd700"}} "Z"]
+        [:tr [:td {:style {:padding "0.5rem" :color theme/gold}} "Z"]
          [:td {:style {:padding "0.5rem"}} "Toggle 4x zoom for fine placement"]]
-        [:tr [:td {:style {:padding "0.5rem" :color "#ffd700"}} "Shift + Drag"]
+        [:tr [:td {:style {:padding "0.5rem" :color theme/gold}} "Shift + Drag"]
          [:td {:style {:padding "0.5rem"}} "Adjust position without changing angle"]]
-        [:tr [:td {:style {:padding "0.5rem" :color "#ffd700"}} "Escape"]
+        [:tr [:td {:style {:padding "0.5rem" :color theme/gold}} "Escape"]
          [:td {:style {:padding "0.5rem"}} "Cancel placement / Close help"]]
-        [:tr [:td {:style {:padding "0.5rem" :color "#ffd700"}} "?"]
+        [:tr [:td {:style {:padding "0.5rem" :color theme/gold}} "?"]
          [:td {:style {:padding "0.5rem"}} "Toggle this help"]]]]
       [:h3 {:style {:margin-top "1.5rem"}} "Gameplay Tips"]
       [:ul {:style {:padding-left "1.5rem" :line-height "1.6"}}
