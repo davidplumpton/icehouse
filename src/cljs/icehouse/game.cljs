@@ -263,6 +263,23 @@
      #{}
      attacks)))
 
+;; Track last board to avoid unnecessary recalculations
+(defonce ^:private last-board (atom nil))
+
+(defn- update-cached-iced-pieces!
+  "Update the cached iced pieces when the board changes"
+  [board]
+  (when (not= board @last-board)
+    (reset! last-board board)
+    (reset! state/cached-iced-pieces (calculate-iced-pieces board))))
+
+;; Set up a watch to update cached iced pieces when game state changes
+(defonce ^:private _iced-cache-watch
+  (add-watch state/game-state ::iced-pieces-cache
+             (fn [_ _ _ new-state]
+               (when new-state
+                 (update-cached-iced-pieces! (:board new-state))))))
+
 (defn calculate-over-ice
   "Returns a map of defender-id -> {:excess pips :attackers [...] :defender-owner player-id}
    for each over-iced defender"
@@ -379,28 +396,34 @@
     (.stroke ctx)
     (.restore ctx)))
 
-(defn draw-board [ctx game hover-pos current-player-id]
-  (set! (.-fillStyle ctx) theme/board-background)
-  (.fillRect ctx 0 0 canvas-width canvas-height)
+(defn draw-board
+  "Draw the game board. opts can include :iced-pieces to provide pre-computed iced pieces."
+  ([ctx game hover-pos current-player-id]
+   (draw-board ctx game hover-pos current-player-id nil))
+  ([ctx game hover-pos current-player-id opts]
+   (set! (.-fillStyle ctx) theme/board-background)
+   (.fillRect ctx 0 0 canvas-width canvas-height)
 
-  (set! (.-strokeStyle ctx) theme/grid-color)
-  (set! (.-lineWidth ctx) 1)
-  (doseq [x (range 0 canvas-width grid-size)]
-    (.beginPath ctx)
-    (.moveTo ctx x 0)
-    (.lineTo ctx x canvas-height)
-    (.stroke ctx))
-  (doseq [y (range 0 canvas-height grid-size)]
-    (.beginPath ctx)
-    (.moveTo ctx 0 y)
-    (.lineTo ctx canvas-width y)
-    (.stroke ctx))
+   (set! (.-strokeStyle ctx) theme/grid-color)
+   (set! (.-lineWidth ctx) 1)
+   (doseq [x (range 0 canvas-width grid-size)]
+     (.beginPath ctx)
+     (.moveTo ctx x 0)
+     (.lineTo ctx x canvas-height)
+     (.stroke ctx))
+   (doseq [y (range 0 canvas-height grid-size)]
+     (.beginPath ctx)
+     (.moveTo ctx 0 y)
+     (.lineTo ctx canvas-width y)
+     (.stroke ctx))
 
-  (when game
-    (let [board (:board game)
-          hovered-piece (when hover-pos
-                          (find-piece-at (:x hover-pos) (:y hover-pos) board))
-          iced-pieces (calculate-iced-pieces board)]
+   (when game
+     (let [board (:board game)
+           hovered-piece (when hover-pos
+                           (find-piece-at (:x hover-pos) (:y hover-pos) board))
+           ;; Use provided iced-pieces, or cached value, or calculate
+           iced-pieces (or (:iced-pieces opts)
+                           @state/cached-iced-pieces)]
       ;; Draw all pieces
       (doseq [piece board]
         (let [player-id (:player-id piece)
@@ -418,7 +441,7 @@
       ;; Draw capture highlight if hovering over a capturable piece
       (when (and hovered-piece
                  (capturable-piece? hovered-piece current-player-id board))
-        (draw-capture-highlight ctx hovered-piece)))))
+        (draw-capture-highlight ctx hovered-piece))))))
 
 (defn get-canvas-coords [e]
   "Get coordinates relative to canvas from mouse event"

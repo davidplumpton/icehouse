@@ -51,6 +51,10 @@
 ;; Whether zoom mode is active for fine placement (4x zoom)
 (defonce zoom-active (r/atom false))
 
+;; Cached iced pieces calculation (set of piece IDs)
+;; Updated automatically when board changes to avoid recalculating every frame
+(defonce cached-iced-pieces (r/atom #{}))
+
 ;; Game options for the current room
 ;; {:icehouse-rule true, :timer-enabled true, :timer-duration :random}
 (defonce game-options (r/atom nil))

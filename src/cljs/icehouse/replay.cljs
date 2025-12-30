@@ -89,8 +89,10 @@
     (let [ctx (.getContext canvas "2d")
           replay @state/replay-state
           game-state (when replay
-                       (game-state-at-move (:record replay) (:current-move replay)))]
-      (game/draw-board ctx game-state nil nil))))
+                       (game-state-at-move (:record replay) (:current-move replay)))
+          iced-pieces (when game-state
+                        (game/calculate-iced-pieces (:board game-state)))]
+      (game/draw-board ctx game-state nil nil {:iced-pieces iced-pieces}))))
 
 (defn replay-canvas
   "Canvas component for rendering replay board state"
