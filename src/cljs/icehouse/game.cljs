@@ -236,6 +236,22 @@
   [attackers]
   (reduce + (map piece-pips attackers)))
 
+(defn calculate-iced-pieces
+  "Returns set of piece IDs that are successfully iced.
+   Per Icehouse rules: a defender is iced when total attacker pips > defender pips"
+  [board]
+  (let [attacks (attackers-by-target board)]
+    (reduce-kv
+     (fn [iced target-id attackers]
+       (let [defender (find-piece-by-id board target-id)
+             defender-pips (piece-pips defender)
+             attacker-pips (attack-strength attackers)]
+         (if (and defender (> attacker-pips defender-pips))
+           (conj iced target-id)
+           iced)))
+     #{}
+     attacks)))
+
 (defn calculate-over-ice
   "Returns a map of defender-id -> {:excess pips :attackers [...] :defender-owner player-id}
    for each over-iced defender"
@@ -274,17 +290,36 @@
     (when-let [game @state/game-state]
       (find-piece-at x y (:board game)))))
 
-(defn draw-pyramid [ctx x y size colour orientation angle]
+(defn lighten-color
+  "Lighten a hex color by blending it towards white"
+  [hex-color]
+  (let [;; Parse hex color
+        r (js/parseInt (.substring hex-color 1 3) 16)
+        g (js/parseInt (.substring hex-color 3 5) 16)
+        b (js/parseInt (.substring hex-color 5 7) 16)
+        ;; Blend towards white (increase brightness by 50%)
+        blend-factor 0.5
+        new-r (js/Math.round (+ r (* (- 255 r) blend-factor)))
+        new-g (js/Math.round (+ g (* (- 255 g) blend-factor)))
+        new-b (js/Math.round (+ b (* (- 255 b) blend-factor)))
+        ;; Convert back to hex
+        r-hex (.padStart (.toString new-r 16) 2 "0")
+        g-hex (.padStart (.toString new-g 16) 2 "0")
+        b-hex (.padStart (.toString new-b 16) 2 "0")]
+    (str "#" r-hex g-hex b-hex)))
+
+(defn draw-pyramid [ctx x y size colour orientation angle & [{:keys [iced?]}]]
   (let [size-kw (keyword size)
         orient-kw (keyword orientation)
         base-size (get piece-sizes size-kw default-piece-size)
         half-size (/ base-size 2)
-        rotation (or angle 0)]
+        rotation (or angle 0)
+        final-colour (if iced? (lighten-color colour) colour)]
     (.save ctx)
     (.translate ctx x y)
     (.rotate ctx rotation)
 
-    (set! (.-fillStyle ctx) colour)
+    (set! (.-fillStyle ctx) final-colour)
     (set! (.-strokeStyle ctx) "#000")
     (set! (.-lineWidth ctx) 2)
 
@@ -353,19 +388,22 @@
   (when game
     (let [board (:board game)
           hovered-piece (when hover-pos
-                          (find-piece-at (:x hover-pos) (:y hover-pos) board))]
+                          (find-piece-at (:x hover-pos) (:y hover-pos) board))
+          iced-pieces (calculate-iced-pieces board)]
       ;; Draw all pieces
       (doseq [piece board]
         (let [player-id (:player-id piece)
               player-data (get-in game [:players player-id])
-              colour (or (:colour piece) (:colour player-data) "#888")]
+              colour (or (:colour piece) (:colour player-data) "#888")
+              is-iced? (contains? iced-pieces (:id piece))]
           (draw-pyramid ctx
                         (:x piece)
                         (:y piece)
                         (:size piece)
                         colour
                         (:orientation piece)
-                        (:angle piece))))
+                        (:angle piece)
+                        {:iced? is-iced?})))
       ;; Draw capture highlight if hovering over a capturable piece
       (when (and hovered-piece
                  (capturable-piece? hovered-piece current-player-id board))
