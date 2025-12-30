@@ -226,13 +226,8 @@
   [attacker target]
   (let [tip (attacker-tip attacker)
         dir (attack-direction attacker)
-        target-verts (piece-vertices target)
-        result (ray-intersects-polygon? tip dir target-verts)]
-    (println "in-front-of?" {:tip tip
-                             :dir dir
-                             :target-verts target-verts
-                             :result result})
-    result))
+        target-verts (piece-vertices target)]
+    (ray-intersects-polygon? tip dir target-verts)))
 
 (defn clear-line-of-sight?
   "Check if there are no pieces blocking the line between attacker and target.
@@ -311,17 +306,7 @@
         is-standing (= (:orientation target) :standing)]
     (if (and diff-player is-standing)
       ;; Only check in-front-of? for standing opponent pieces
-      (let [in-front (in-front-of? attacker target)]
-        (println "potential-target?" {:target-player (:player-id target)
-                                      :attacker-player attacker-player-id
-                                      :diff-player diff-player
-                                      :is-standing is-standing
-                                      :in-front in-front
-                                      :result in-front
-                                      :attacker-pos [(:x attacker) (:y attacker)]
-                                      :attacker-angle (:angle attacker)
-                                      :target-pos [(:x target) (:y target)]})
-        in-front)
+      (in-front-of? attacker target)
       false)))
 
 (defn valid-target?
@@ -453,14 +438,6 @@
                      (get-in player [:pieces size] 0))
          board (:board game)
          is-attacking? (= (:orientation piece) :pointing)]
-     (when is-attacking?
-       (println "validate-placement attack:" {:piece-pos [(:x piece) (:y piece)]
-                                               :angle (:angle piece)
-                                               :size size
-                                               :player-id player-id
-                                               :has-potential? (has-potential-target? piece player-id board)
-                                               :has-valid? (has-valid-target? piece player-id board)
-                                               :board-count (count board)}))
      (cond
        (not (pos? remaining))
        (if using-captured?

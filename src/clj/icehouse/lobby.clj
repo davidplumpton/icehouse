@@ -109,13 +109,8 @@
 (defn handle-ready [clients channel]
   (let [room-id (get-in @clients [channel :room-id])]
     (swap! clients update-in [channel :ready] not)
-    (let [players (get-room-players clients room-id)]
-      (println "Ready toggled. Players:" (count players) "All ready?" (all-ready? clients room-id))
-      (doseq [p players]
-        (println "  -" (:name p) "ready:" (:ready p))))
     (broadcast-players! clients room-id)
     (when (all-ready? clients room-id)
-      (println "All ready! Starting game for room:" room-id)
       (let [players (get-room-players clients room-id)
             options (get-room-options room-id)]
         (game/start-game! room-id players options)

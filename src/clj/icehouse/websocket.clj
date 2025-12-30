@@ -33,11 +33,9 @@
 (defn handler [req]
   (http/with-channel req channel
     (swap! clients assoc channel {:room-id nil :name nil :colour nil :ready false})
-    (println "Client connected")
 
     (http/on-close channel
-      (fn [status]
-        (println "Client disconnected:" status)
+      (fn [_status]
         (lobby/handle-disconnect clients channel)
         (swap! clients dissoc channel)))
 
