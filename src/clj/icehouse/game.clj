@@ -64,28 +64,30 @@
      (+ (* x sin-a) (* y cos-a))]))
 
 (defn piece-vertices
-  "Get vertices of a piece in world coordinates"
-  [{:keys [x y size orientation angle]}]
-  (let [base-size (get piece-sizes size default-piece-size)
-        half (/ base-size 2)
-        angle (or angle 0)
-        ;; Local vertices relative to center
-        local-verts (if (= orientation :standing)
-                      ;; Standing: square
-                      [[(- half) (- half)]
-                       [half (- half)]
-                       [half half]
-                       [(- half) half]]
-                      ;; Pointing: triangle (3:2 length:base ratio to match frontend)
-                      (let [half-width (* base-size tip-offset-ratio)]
-                        [[half-width 0]
-                         [(- half-width) (- half)]
-                         [(- half-width) half]]))]
-    ;; Rotate and translate to world coordinates
-    (mapv (fn [[lx ly]]
-            (let [[rx ry] (rotate-point [lx ly] angle)]
-              [(+ x rx) (+ y ry)]))
-          local-verts)))
+  "Get vertices of a piece in world coordinates.
+   Returns nil if piece is nil or missing required coordinates."
+  [{:keys [x y size orientation angle] :as piece}]
+  (when (and piece x y)
+    (let [base-size (get piece-sizes size default-piece-size)
+          half (/ base-size 2)
+          angle (or angle 0)
+          ;; Local vertices relative to center
+          local-verts (if (= orientation :standing)
+                        ;; Standing: square
+                        [[(- half) (- half)]
+                         [half (- half)]
+                         [half half]
+                         [(- half) half]]
+                        ;; Pointing: triangle (3:2 length:base ratio to match frontend)
+                        (let [half-width (* base-size tip-offset-ratio)]
+                          [[half-width 0]
+                           [(- half-width) (- half)]
+                           [(- half-width) half]]))]
+      ;; Rotate and translate to world coordinates
+      (mapv (fn [[lx ly]]
+              (let [[rx ry] (rotate-point [lx ly] angle)]
+                [(+ x rx) (+ y ry)]))
+            local-verts))))
 
 (defn edge-normal
   "Get perpendicular normal vector for edge from v1 to v2"
@@ -162,9 +164,10 @@
                 (* (- y2 y1) (- y2 y1)))))
 
 (defn piece-center
-  "Get the center point of a piece"
+  "Get the center point of a piece. Returns nil if piece is nil or missing coordinates."
   [piece]
-  [(:x piece) (:y piece)])
+  (when (and piece (:x piece) (:y piece))
+    [(:x piece) (:y piece)]))
 
 (defn attack-direction
   "Get the unit direction vector for an attacking piece"
@@ -173,14 +176,16 @@
     [(Math/cos angle) (Math/sin angle)]))
 
 (defn attacker-tip
-  "Get the tip position of a pointing piece (where the attack ray originates)"
+  "Get the tip position of a pointing piece (where the attack ray originates).
+   Returns nil if piece is nil or missing required coordinates."
   [piece]
-  (let [base-size (get piece-sizes (:size piece) default-piece-size)
-        tip-offset (* base-size tip-offset-ratio)
-        angle (or (:angle piece) 0)
-        [dx dy] [(Math/cos angle) (Math/sin angle)]]
-    [(+ (:x piece) (* dx tip-offset))
-     (+ (:y piece) (* dy tip-offset))]))
+  (when (and piece (:x piece) (:y piece))
+    (let [base-size (get piece-sizes (:size piece) default-piece-size)
+          tip-offset (* base-size tip-offset-ratio)
+          angle (or (:angle piece) 0)
+          [dx dy] [(Math/cos angle) (Math/sin angle)]]
+      [(+ (:x piece) (* dx tip-offset))
+       (+ (:y piece) (* dy tip-offset))])))
 
 (defn ray-segment-intersection-distance
   "Get the distance (parameter t) at which a ray from origin in direction dir

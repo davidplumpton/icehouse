@@ -16,9 +16,12 @@
       (.send socket (js/JSON.stringify (clj->js msg))))))
 
 (defn handle-message [event]
-  (let [data (js->clj (js/JSON.parse (.-data event)) :keywordize-keys true)
-        msg-type (:type data)]
-    (case msg-type
+  (try
+    (let [data (js->clj (js/JSON.parse (.-data event)) :keywordize-keys true)
+          msg-type (:type data)]
+      (when-not msg-type
+        (js/console.warn "Received message without type:" data))
+      (case msg-type
       "joined"
       (do
         (reset! state/player-id (:player-id data))
@@ -71,7 +74,10 @@
         ;; Auto-clear after 3 seconds
         (js/setTimeout #(reset! state/error-message nil) 3000))
 
-      (js/console.log "Unknown message:" msg-type))))
+      (js/console.log "Unknown message:" msg-type)))
+    (catch js/Error e
+      (js/console.error "Failed to parse WebSocket message:" e)
+      (js/console.error "Raw data:" (.-data event)))))
 
 (defn connect! []
   (reset! state/ws-status :connecting)

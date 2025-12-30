@@ -30,9 +30,12 @@
 (def pips {:small 1 :medium 2 :large 3})
 
 (defn piece-pips
-  "Get pip value for a piece (1 for small, 2 for medium, 3 for large)"
+  "Get pip value for a piece (1 for small, 2 for medium, 3 for large).
+   Returns 0 if piece is nil."
   [piece]
-  (get pips (keyword (:size piece)) 0))
+  (if piece
+    (get pips (keyword (:size piece)) 0)
+    0))
 
 ;; Geometry constants
 (def tip-offset-ratio 0.75)        ;; Triangle tip extends 0.75 * base-size from center
@@ -63,24 +66,26 @@
      (+ (* x sin-a) (* y cos-a))]))
 
 (defn piece-vertices
-  "Get vertices of a piece in world coordinates"
-  [{:keys [x y size orientation angle]}]
-  (let [base-size (get piece-sizes (keyword size) default-piece-size)
-        half (/ base-size 2)
-        angle (or angle 0)
-        local-verts (if (= (keyword orientation) :standing)
-                      [[(- half) (- half)]
-                       [half (- half)]
-                       [half half]
-                       [(- half) half]]
-                      (let [half-width (* base-size tip-offset-ratio)]
-                        [[half-width 0]
-                         [(- half-width) (- half)]
-                         [(- half-width) half]]))]
-    (mapv (fn [[lx ly]]
-            (let [[rx ry] (rotate-point [lx ly] angle)]
-              [(+ x rx) (+ y ry)]))
-          local-verts)))
+  "Get vertices of a piece in world coordinates.
+   Returns nil if piece is nil or missing required coordinates."
+  [{:keys [x y size orientation angle] :as piece}]
+  (when (and piece x y)
+    (let [base-size (get piece-sizes (keyword size) default-piece-size)
+          half (/ base-size 2)
+          angle (or angle 0)
+          local-verts (if (= (keyword orientation) :standing)
+                        [[(- half) (- half)]
+                         [half (- half)]
+                         [half half]
+                         [(- half) half]]
+                        (let [half-width (* base-size tip-offset-ratio)]
+                          [[half-width 0]
+                           [(- half-width) (- half)]
+                           [(- half-width) half]]))]
+      (mapv (fn [[lx ly]]
+              (let [[rx ry] (rotate-point [lx ly] angle)]
+                [(+ x rx) (+ y ry)]))
+            local-verts))))
 
 (defn point-in-polygon?
   "Check if point [px py] is inside polygon (ray casting algorithm)"
@@ -106,13 +111,15 @@
 (def parallel-threshold 0.0001)
 
 (defn attacker-tip
-  "Get the tip position of a pointing piece"
-  [{:keys [x y size angle]}]
-  (let [base-size (get piece-sizes (keyword size) default-piece-size)
-        tip-offset (* base-size tip-offset-ratio)
-        angle (or angle 0)]
-    [(+ x (* (js/Math.cos angle) tip-offset))
-     (+ y (* (js/Math.sin angle) tip-offset))]))
+  "Get the tip position of a pointing piece.
+   Returns nil if piece is nil or missing required coordinates."
+  [{:keys [x y size angle] :as piece}]
+  (when (and piece x y)
+    (let [base-size (get piece-sizes (keyword size) default-piece-size)
+          tip-offset (* base-size tip-offset-ratio)
+          angle (or angle 0)]
+      [(+ x (* (js/Math.cos angle) tip-offset))
+       (+ y (* (js/Math.sin angle) tip-offset))])))
 
 (defn attack-direction
   "Get the unit direction vector for an attack"
@@ -176,11 +183,14 @@
     (apply min (map #(point-to-segment-distance point %) edges))))
 
 (defn attack-range
-  "Get attack range for a piece (its height/length, not base width)"
+  "Get attack range for a piece (its height/length, not base width).
+   Returns 0 if piece is nil."
   [piece]
-  (let [base-size (get piece-sizes (keyword (:size piece)) default-piece-size)]
-    ;; Height = 2 * tip-offset-ratio * base-size
-    (* 2 tip-offset-ratio base-size)))
+  (if piece
+    (let [base-size (get piece-sizes (keyword (:size piece)) default-piece-size)]
+      ;; Height = 2 * tip-offset-ratio * base-size
+      (* 2 tip-offset-ratio base-size))
+    0))
 
 (defn within-range?
   "Check if target is within attack range of attacker"
