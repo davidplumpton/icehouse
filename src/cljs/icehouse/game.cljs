@@ -809,6 +809,37 @@
                   :animation (when urgent? "pulse 1s infinite")}}
          (utils/format-time remaining)]))))
 
+(defn finish-button []
+  "Button for players to signal they want to end the game"
+  (let [game @state/game-state
+        player-id (:id @state/current-player)
+        finished-set (or (:finished game) #{})
+        players-map (:players game)
+        player-count (count players-map)
+        finished-count (count finished-set)
+        i-finished? (contains? finished-set player-id)]
+    [:div.finish-controls
+     {:style {:display "flex"
+              :align-items "center"
+              :gap "0.5rem"}}
+     [:button.finish-btn
+      {:style {:padding "0.25rem 0.75rem"
+               :font-size "0.9rem"
+               :cursor (if i-finished? "default" "pointer")
+               :background (if i-finished? theme/green theme/button-inactive)
+               :color "#fff"
+               :border "none"
+               :border-radius "4px"
+               :opacity (if i-finished? 0.8 1)}
+       :disabled i-finished?
+       :on-click #(when-not i-finished? (ws/finish!))}
+      (if i-finished? "Finished" "Finish")]
+     (when (pos? finished-count)
+       [:span.finish-status
+        {:style {:font-size "0.8rem"
+                 :color "#aaa"}}
+        (str finished-count "/" player-count)])]))
+
 (defn game-results-overlay []
   "Display final scores when game ends"
   (when-let [result @state/game-result]
@@ -942,7 +973,9 @@
                    :align-items "center"
                    :margin-bottom "0.5rem"}}
           [:h2 {:style {:margin 0}} "Icehouse"]
-          [game-timer]]
+          [:div {:style {:display "flex" :align-items "center" :gap "1rem"}}
+           [finish-button]
+           [game-timer]]]
          [error-display]
          [game-results-overlay]
          [help-overlay]

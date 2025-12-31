@@ -47,6 +47,9 @@
       "piece-captured"
       (reset! state/game-state (:game data))
 
+      "player-finished"
+      (reset! state/game-state (:game data))
+
       "game-over"
       (reset! state/game-result {:scores (:scores data)
                                   :icehouse-players (:icehouse-players data)
@@ -138,3 +141,8 @@
   "Set a game option for the room"
   [key value]
   (send! {:type "set-option" :key (name key) :value value}))
+
+(defn finish!
+  "Signal that the player wants to end the game"
+  []
+  (send! {:type "finish"}))

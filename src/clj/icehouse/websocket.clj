@@ -26,6 +26,7 @@
           ;; Game messages
           "place-piece" (game/handle-place-piece clients channel msg)
           "capture-piece" (game/handle-capture-piece clients channel msg)
+          "finish" (game/handle-finish clients channel msg)
 
           ;; Replay messages
           "list-games" (game/handle-list-games channel)

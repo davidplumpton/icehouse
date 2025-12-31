@@ -37,6 +37,7 @@
   {:piece-placed "piece-placed"
    :game-over "game-over"
    :piece-captured "piece-captured"
+   :player-finished "player-finished"
    :error "error"})
 
 ;; =============================================================================
@@ -748,6 +749,50 @@
                                   :captured-by player-id
                                   :game updated-game})))
       (utils/send-msg! channel {:type (:error msg-types) :message (or error "Invalid capture")}))))
+
+(defn all-players-finished?
+  "Check if all players have pressed finish"
+  [game]
+  (let [player-ids (set (keys (:players game)))
+        finished (or (:finished game) #{})]
+    (and (seq player-ids)
+         (= player-ids finished))))
+
+(defn end-game!
+  "End the game, calculate scores, save record, and broadcast game-over"
+  [clients room-id end-reason]
+  (when-let [game (get @games room-id)]
+    (let [board (:board game)
+          options (get game :options {})
+          over-ice (calculate-over-ice board)
+          icehouse-players (calculate-icehouse-players board options)
+          record (build-game-record game end-reason)]
+      (storage/save-game-record! record)
+      (utils/broadcast-room! clients room-id
+                             {:type (:game-over msg-types)
+                              :game-id (:game-id game)
+                              :scores (calculate-scores game)
+                              :over-ice over-ice
+                              :icehouse-players (vec icehouse-players)}))))
+
+(defn handle-finish
+  "Handle a player pressing the finish button"
+  [clients channel _msg]
+  (let [room-id (get-in @clients [channel :room-id])
+        player-id (player-id-from-channel channel)
+        game (get @games room-id)]
+    (when game
+      ;; Add player to finished set
+      (swap! games update-in [room-id :finished] (fnil conj #{}) player-id)
+      (let [updated-game (get @games room-id)]
+        ;; Broadcast that this player finished
+        (utils/broadcast-room! clients room-id
+                               {:type (:player-finished msg-types)
+                                :player-id player-id
+                                :game updated-game})
+        ;; Check if all players have finished
+        (when (all-players-finished? updated-game)
+          (end-game! clients room-id :all-players-finished))))))
 
 (defn start-game!
   "Start a new game with the given players and options"
