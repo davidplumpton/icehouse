@@ -3,6 +3,8 @@
             [clojure.java.io :as io]
             [clojure.string :as str]))
 
+(def ^:private edn-extension ".edn")
+
 (def games-dir "data/games")
 
 ;; UUID pattern for game-id validation
@@ -24,7 +26,7 @@
    Returns nil if game-id is invalid."
   [game-id]
   (when (valid-game-id? game-id)
-    (str games-dir "/" game-id ".edn")))
+    (str games-dir "/" game-id edn-extension)))
 
 (defn save-game-record!
   "Save a game record to disk as EDN. Returns the file path, or nil if game-id is invalid."
@@ -41,14 +43,19 @@
     (when (.exists (io/file path))
       (edn/read-string {:readers {}} (slurp path)))))
 
+(defn- extract-game-id
+  "Extract game-id from an EDN filename"
+  [^java.io.File file]
+  (let [name (.getName file)]
+    (when (str/ends-with? name edn-extension)
+      (subs name 0 (- (count name) (count edn-extension))))))
+
 (defn list-game-records
   "List all saved game record IDs, sorted by filename"
   []
   (ensure-games-dir!)
-  (let [files (.listFiles (io/file games-dir))]
-    (when files
-      (->> files
-           (filter #(and (.isFile %)
-                         (.endsWith (.getName %) ".edn")))
-           (map #(subs (.getName %) 0 (- (count (.getName %)) 4)))
-           (sort)))))
+  (when-let [files (.listFiles (io/file games-dir))]
+    (->> files
+         (filter #(.isFile ^java.io.File %))
+         (keep extract-game-id)
+         (sort))))
