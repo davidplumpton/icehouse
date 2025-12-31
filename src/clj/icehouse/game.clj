@@ -45,9 +45,12 @@
 ;; =============================================================================
 
 (defn piece-pips
-  "Get pip value for a piece (1 for small, 2 for medium, 3 for large)"
+  "Get pip value for a piece (1 for small, 2 for medium, 3 for large).
+   Returns 0 if piece is nil."
   [piece]
-  (get pips (:size piece) 0))
+  (if piece
+    (get pips (:size piece) 0)
+    0))
 
 (defn player-id-from-channel
   "Extract player ID from a WebSocket channel"
@@ -259,11 +262,14 @@
                 other-pieces))))
 
 (defn attack-range
-  "Get the attack range for a piece (its height/length, not base width)"
+  "Get the attack range for a piece (its height/length, not base width).
+   Returns 0 if piece is nil."
   [piece]
-  (let [base-size (get piece-sizes (:size piece) default-piece-size)]
-    ;; Height = 2 * tip-offset-ratio * base-size (tip extends 0.75 * base from center in each direction)
-    (* 2 tip-offset-ratio base-size)))
+  (if piece
+    (let [base-size (get piece-sizes (:size piece) default-piece-size)]
+      ;; Height = 2 * tip-offset-ratio * base-size (tip extends 0.75 * base from center in each direction)
+      (* 2 tip-offset-ratio base-size))
+    0))
 
 (defn point-to-segment-distance
   "Calculate minimum distance from point p to line segment [a b]"

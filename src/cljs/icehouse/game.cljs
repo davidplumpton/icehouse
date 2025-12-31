@@ -47,6 +47,7 @@
 
 ;; Game rules
 (def attack-unlock-threshold 2)    ;; Number of pieces before attacking is allowed
+(def timer-urgent-threshold-ms 30000) ;; Timer turns red in last 30 seconds
 
 ;; =============================================================================
 ;; Utility Functions
@@ -797,7 +798,7 @@
         current @state/current-time]
     (when-let [ends-at (:ends-at game)]
       (let [remaining (max 0 (- ends-at current))
-            urgent? (< remaining 30000)]  ;; Last 30 seconds
+            urgent? (< remaining timer-urgent-threshold-ms)]
         [:div.game-timer
          {:style {:font-family "monospace"
                   :font-size "1.2rem"
