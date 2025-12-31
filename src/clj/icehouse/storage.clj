@@ -39,15 +39,16 @@
   [game-id]
   (when-let [path (game-record-path game-id)]
     (when (.exists (io/file path))
-      (edn/read-string (slurp path)))))
+      (edn/read-string {:readers {}} (slurp path)))))
 
 (defn list-game-records
   "List all saved game record IDs, sorted by filename"
   []
   (ensure-games-dir!)
-  (->> (io/file games-dir)
-       (.listFiles)
-       (filter #(and (.isFile %)
-                     (.endsWith (.getName %) ".edn")))
-       (map #(subs (.getName %) 0 (- (count (.getName %)) 4)))
-       (sort)))
+  (let [files (.listFiles (io/file games-dir))]
+    (when files
+      (->> files
+           (filter #(and (.isFile %)
+                         (.endsWith (.getName %) ".edn")))
+           (map #(subs (.getName %) 0 (- (count (.getName %)) 4)))
+           (sort)))))
