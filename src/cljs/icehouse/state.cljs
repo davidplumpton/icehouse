@@ -1,35 +1,42 @@
 (ns icehouse.state
   (:require [reagent.core :as r]))
 
+;; =============================================================================
+;; Player Identity
+;; =============================================================================
+
+;; Current player's identity and preferences
+;; {:id nil :name "" :colour "#e53935"}
+(defonce current-player (r/atom {:id nil
+                                  :name ""
+                                  :colour "#e53935"}))  ;; Default to red
+
+;; =============================================================================
+;; Session State
+;; =============================================================================
+
+;; Current view: :lobby, :game
 (defonce current-view (r/atom :lobby))
-
-(defonce player-id (r/atom nil))
-
-(defonce room-id (r/atom nil))
-
-(defonce player-name (r/atom ""))
-
-(defonce player-colour (r/atom "#e53935"))  ;; Default to red
-
-(defonce players (r/atom []))
-
-(defonce game-state (r/atom nil))
-
-(defonce selected-piece (r/atom {:size :small :orientation :standing :captured? false}))
-
-;; Drag state for placing pieces at angles
-;; {:x :y :dragging?} - tracks the starting position of a drag operation
-(defonce drag-state (r/atom nil))
-
-;; Error message to display to the user (auto-clears after a few seconds)
-(defonce error-message (r/atom nil))
 
 ;; WebSocket connection status: :connected, :disconnected, :connecting
 (defonce ws-status (r/atom :connecting))
 
-;; Current mouse position on canvas for hover detection
-;; {:x :y} or nil when mouse is not over canvas
-(defonce hover-pos (r/atom nil))
+;; Error message to display to the user (auto-clears after a few seconds)
+(defonce error-message (r/atom nil))
+
+;; List of players in current room
+(defonce players (r/atom []))
+
+;; Game options for the current room
+;; {:icehouse-rule true, :timer-enabled true, :timer-duration :random}
+(defonce game-options (r/atom nil))
+
+;; =============================================================================
+;; Game State
+;; =============================================================================
+
+;; Main game state from server
+(defonce game-state (r/atom nil))
 
 ;; Game result when game ends
 ;; {:scores {"player-id" score} :icehouse-players ["id"] :over-ice {...}}
@@ -38,6 +45,30 @@
 ;; Current time for game timer (updated every second)
 (defonce current-time (r/atom (js/Date.now)))
 
+;; Cached iced pieces calculation (set of piece IDs)
+;; Updated automatically when board changes to avoid recalculating every frame
+(defonce cached-iced-pieces (r/atom #{}))
+
+;; =============================================================================
+;; UI Interaction State
+;; =============================================================================
+
+;; UI state for piece placement and interaction
+;; - :selected-piece - current piece being configured {:size :orientation :captured?}
+;; - :drag - drag state for placing pieces at angles {:start-x :start-y :current-x :current-y :last-x :last-y :locked-angle}
+;; - :hover-pos - current mouse position on canvas {:x :y} or nil
+;; - :zoom-active - whether 4x zoom mode is active for fine placement
+;; - :show-help - whether help overlay is visible
+(defonce ui-state (r/atom {:selected-piece {:size :small :orientation :standing :captured? false}
+                           :drag nil
+                           :hover-pos nil
+                           :zoom-active false
+                           :show-help false}))
+
+;; =============================================================================
+;; Replay State
+;; =============================================================================
+
 ;; Replay state
 ;; {:record {...} :current-move 0 :playing? false :speed 1}
 (defonce replay-state (r/atom nil))
@@ -45,19 +76,9 @@
 ;; List of available saved game IDs
 (defonce game-list (r/atom nil))
 
-;; Whether the help overlay is visible
-(defonce show-help (r/atom false))
-
-;; Whether zoom mode is active for fine placement (4x zoom)
-(defonce zoom-active (r/atom false))
-
-;; Cached iced pieces calculation (set of piece IDs)
-;; Updated automatically when board changes to avoid recalculating every frame
-(defonce cached-iced-pieces (r/atom #{}))
-
-;; Game options for the current room
-;; {:icehouse-rule true, :timer-enabled true, :timer-duration :random}
-(defonce game-options (r/atom nil))
+;; =============================================================================
+;; Constants
+;; =============================================================================
 
 ;; Traditional Looney Labs pyramid stash colours
 ;; Rainbow stash: red, yellow, green, blue, black

@@ -13,21 +13,21 @@
        ^{:key colour}
        [:div.colour-option
         {:style {:background-color colour
-                 :border (if (= colour @state/player-colour)
+                 :border (if (= colour (:colour @state/current-player))
                            "3px solid white"
                            "3px solid transparent")}
          :on-click #(do
-                      (reset! state/player-colour colour)
+                      (swap! state/current-player assoc :colour colour)
                       (ws/set-colour! colour))}]))]])
 
 (defn name-input []
   [:div.name-input
    [:label "Your name:"]
    [:input {:type "text"
-            :value @state/player-name
+            :value (:name @state/current-player)
             :placeholder "Enter your name"
-            :on-change #(reset! state/player-name (-> % .-target .-value))
-            :on-blur #(ws/set-name! @state/player-name)}]])
+            :on-change #(swap! state/current-player assoc :name (-> % .-target .-value))
+            :on-blur #(ws/set-name! (:name @state/current-player))}]])
 
 (defn player-list []
   [:div.player-list
@@ -40,13 +40,14 @@
        (when (:ready player) " - Ready")])]])
 
 (defn ready-button []
-  (let [current-player (->> @state/players
-                            (filter #(= (:id %) @state/player-id))
-                            first)]
+  (let [my-id (:id @state/current-player)
+        me (->> @state/players
+                (filter #(= (:id %) my-id))
+                first)]
     [:button.ready-btn
      {:on-click #(ws/toggle-ready!)
-      :class (when (:ready current-player) "is-ready")}
-     (if (:ready current-player) "Not Ready" "Ready!")]))
+      :class (when (:ready me) "is-ready")}
+     (if (:ready me) "Not Ready" "Ready!")]))
 
 (defn game-options-panel []
   (let [options @state/game-options]

@@ -23,13 +23,10 @@
         (js/console.warn "Received message without type:" data))
       (case msg-type
       "joined"
-      (do
-        (reset! state/player-id (:player-id data))
-        (reset! state/room-id (:room-id data))
-        (when-let [name (:name data)]
-          (reset! state/player-name name))
-        (when-let [colour (:colour data)]
-          (reset! state/player-colour colour)))
+      (swap! state/current-player merge
+             {:id (:player-id data)}
+             (when-let [n (:name data)] {:name n})
+             (when-let [c (:colour data)] {:colour c}))
 
       "players"
       (reset! state/players (:players data))
@@ -41,7 +38,7 @@
       (do
         (reset! state/game-state (:game data))
         (reset! state/game-result nil)  ;; Clear previous game result
-        (reset! state/selected-piece {:size :small :orientation :standing :captured? false})
+        (swap! state/ui-state assoc :selected-piece {:size :small :orientation :standing :captured? false})
         (reset! state/current-view :game))
 
       "piece-placed"

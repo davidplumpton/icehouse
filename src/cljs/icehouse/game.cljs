@@ -314,7 +314,7 @@
 (defn get-hovered-piece
   "Get the piece currently under the mouse cursor, if any"
   []
-  (when-let [{:keys [x y]} @state/hover-pos]
+  (when-let [{:keys [x y]} (:hover-pos @state/ui-state)]
     (when-let [game @state/game-state]
       (find-piece-at x y (:board game)))))
 
@@ -541,7 +541,7 @@
 (defn has-pieces-of-size? [size use-captured?]
   "Returns true if current player has pieces of the given size to place"
   (let [game @state/game-state
-        player-id (keyword @state/player-id)
+        player-id (keyword (:id @state/current-player))
         player-data (get-in game [:players player-id])]
     (if use-captured?
       ;; Check captured pieces
@@ -557,16 +557,20 @@
      {:component-did-mount
       (fn [this]
         (when-let [canvas @canvas-ref]
-          (let [ctx (.getContext canvas "2d")]
-            (draw-with-preview ctx @state/game-state nil @state/selected-piece
-                               @state/player-colour @state/hover-pos @state/player-id nil))))
+          (let [ctx (.getContext canvas "2d")
+                ui @state/ui-state
+                player @state/current-player]
+            (draw-with-preview ctx @state/game-state nil (:selected-piece ui)
+                               (:colour player) (:hover-pos ui) (:id player) nil))))
 
       :component-did-update
       (fn [this]
         (when-let [canvas @canvas-ref]
           (let [ctx (.getContext canvas "2d")
-                zoom? @state/zoom-active
-                hover @state/hover-pos
+                ui @state/ui-state
+                player @state/current-player
+                zoom? (:zoom-active ui)
+                hover (:hover-pos ui)
                 ;; Create zoom state map if zoom is active
                 zoom-state (when zoom?
                              {:center-x (if hover (:x hover) (/ canvas-width 2))
@@ -574,21 +578,18 @@
                               :scale 4})]
             (draw-with-preview ctx
                                @state/game-state
-                               @state/drag-state
-                               @state/selected-piece
-                               @state/player-colour
-                               @state/hover-pos
-                               @state/player-id
+                               (:drag ui)
+                               (:selected-piece ui)
+                               (:colour player)
+                               hover
+                               (:id player)
                                zoom-state))))
 
       :reagent-render
       (fn []
         ;; Deref state atoms so Reagent re-renders when they change
         (let [_ @state/game-state
-              _ @state/drag-state
-              _ @state/selected-piece
-              _ @state/hover-pos
-              _ @state/zoom-active]
+              _ @state/ui-state]
           [:canvas
            {:ref #(reset! canvas-ref %)
             :width canvas-width
@@ -598,56 +599,54 @@
             (fn [e]
               (.preventDefault e)
               (let [{:keys [x y]} (get-canvas-coords e)
-                    {:keys [size captured?]} @state/selected-piece]
+                    {:keys [size captured?]} (:selected-piece @state/ui-state)]
                 ;; Only start drag if player has pieces of this size
                 (when (has-pieces-of-size? size captured?)
-                  (reset! state/drag-state {:start-x x :start-y y
-                                            :current-x x :current-y y
-                                            :last-x x :last-y y
-                                            :locked-angle 0}))))
+                  (swap! state/ui-state assoc :drag {:start-x x :start-y y
+                                                     :current-x x :current-y y
+                                                     :last-x x :last-y y
+                                                     :locked-angle 0}))))
             :on-mouse-move
             (fn [e]
               (let [{:keys [x y]} (get-canvas-coords e)
                     shift-held (.-shiftKey e)]
                 ;; Always update hover position for capture detection
-                (reset! state/hover-pos {:x x :y y})
+                (swap! state/ui-state assoc :hover-pos {:x x :y y})
                 ;; Update drag state if dragging
-                (when-let [drag @state/drag-state]
+                (when-let [drag (:drag @state/ui-state)]
                   (let [{:keys [start-x start-y last-x last-y]} drag
                         dx (- x last-x)
                         dy (- y last-y)]
                     (if shift-held
                       ;; Shift held: move position by delta, keep locked angle
-                      (reset! state/drag-state
-                              (assoc drag
-                                     :start-x (+ start-x dx)
-                                     :start-y (+ start-y dy)
-                                     :current-x (+ start-x dx)
-                                     :current-y (+ start-y dy)
-                                     :last-x x :last-y y))
+                      (swap! state/ui-state assoc :drag
+                             (assoc drag
+                                    :start-x (+ start-x dx)
+                                    :start-y (+ start-y dy)
+                                    :current-x (+ start-x dx)
+                                    :current-y (+ start-y dy)
+                                    :last-x x :last-y y))
                       ;; Normal: update current position for angle calculation, lock that angle
                       (let [new-angle (calculate-angle start-x start-y x y)]
-                        (swap! state/drag-state assoc
+                        (swap! state/ui-state update :drag assoc
                                :current-x x :current-y y
                                :last-x x :last-y y
                                :locked-angle new-angle)))))))
             :on-mouse-up
             (fn [e]
-              (when-let [drag @state/drag-state]
+              (when-let [drag (:drag @state/ui-state)]
                 (let [{:keys [start-x start-y current-x current-y locked-angle]} drag
-                      {:keys [size orientation captured?]} @state/selected-piece
+                      {:keys [size orientation captured?]} (:selected-piece @state/ui-state)
                       shift-held (.-shiftKey e)
                       ;; Use locked angle when shift is held, otherwise calculate from position
                       angle (if shift-held
                               locked-angle
                               (calculate-angle start-x start-y current-x current-y))]
                   (ws/place-piece! start-x start-y size orientation angle nil captured?)
-                  (reset! state/drag-state nil)
-                  (reset! state/zoom-active false))))
+                  (swap! state/ui-state assoc :drag nil :zoom-active false))))
             :on-mouse-leave
             (fn [e]
-              (reset! state/hover-pos nil)
-              (reset! state/drag-state nil))}]))})))
+              (swap! state/ui-state assoc :hover-pos nil :drag nil))}]))})))
 
 (defn can-attack? []
   "Returns true if attacking is allowed (after first few moves)"
@@ -658,7 +657,7 @@
 (defn has-captured-pieces? []
   "Returns true if current player has any captured pieces"
   (let [game @state/game-state
-        player-id @state/player-id
+        player-id (:id @state/current-player)
         player-data (get-in game [:players player-id])
         captured (or (:captured player-data) [])]
     (pos? (count captured))))
@@ -668,7 +667,7 @@
   []
   (when-let [hovered (get-hovered-piece)]
     (when-let [game @state/game-state]
-      (let [player-id @state/player-id
+      (let [player-id (:id @state/current-player)
             board (:board game)]
         (when (capturable-piece? hovered player-id board)
           (ws/capture-piece! (:id hovered)))))))
@@ -676,31 +675,29 @@
 (defn handle-keydown [e]
   (let [key (.-key e)]
     (case key
-      "1" (swap! state/selected-piece assoc :size :small)
-      "2" (swap! state/selected-piece assoc :size :medium)
-      "3" (swap! state/selected-piece assoc :size :large)
+      "1" (swap! state/ui-state update :selected-piece assoc :size :small)
+      "2" (swap! state/ui-state update :selected-piece assoc :size :medium)
+      "3" (swap! state/ui-state update :selected-piece assoc :size :large)
       ("a" "A") (when (can-attack?)
-                  (swap! state/selected-piece assoc :orientation :pointing))
-      ("d" "D") (swap! state/selected-piece assoc :orientation :standing)
+                  (swap! state/ui-state update :selected-piece assoc :orientation :pointing))
+      ("d" "D") (swap! state/ui-state update :selected-piece assoc :orientation :standing)
       ("c" "C") (if (get-hovered-piece)
                   ;; If hovering over a piece, try to capture it
                   (try-capture-hovered-piece!)
                   ;; Otherwise, toggle captured piece selection
                   (when (has-captured-pieces?)
-                    (swap! state/selected-piece update :captured? not)))
-      "Escape" (do
-                 (reset! state/drag-state nil)
-                 (reset! state/show-help false)
-                 (reset! state/zoom-active false))
-      "?" (swap! state/show-help not)
-      ("z" "Z") (swap! state/zoom-active not)
+                    (swap! state/ui-state update-in [:selected-piece :captured?] not)))
+      "Escape" (swap! state/ui-state assoc :drag nil :show-help false :zoom-active false)
+      "?" (swap! state/ui-state update :show-help not)
+      ("z" "Z") (swap! state/ui-state update :zoom-active not)
       nil)))
 
 (defn piece-selector []
-  (let [{:keys [size orientation captured?]} @state/selected-piece
+  (let [ui @state/ui-state
+        {:keys [size orientation captured?]} (:selected-piece ui)
         attack-allowed (can-attack?)
         has-captured (has-captured-pieces?)
-        zoom? @state/zoom-active]
+        zoom? (:zoom-active ui)]
     [:div.piece-selector
      [:div.hotkey-display
       [:span.current-size
@@ -747,7 +744,7 @@
         captured (or (:captured player-data) [])  ;; Now a list of {:size :colour}
         colour (or (:colour player-data) "#888")
         player-name (or (:name player-data) "Player")
-        is-me (= (name player-id) @state/player-id)
+        is-me (= (name player-id) (:id @state/current-player))
         has-captured? (pos? (count captured))]
     [:div.player-stash {:class (when is-me "is-me")}
      [:div.stash-header {:style {:color colour}}
@@ -874,7 +871,7 @@
 
 (defn help-overlay []
   "Display help overlay with hotkey descriptions"
-  (when @state/show-help
+  (when (:show-help @state/ui-state)
     [:div.help-overlay
      {:style {:position "fixed"
               :top 0 :left 0 :right 0 :bottom 0
@@ -883,7 +880,7 @@
               :justify-content "center"
               :align-items "center"
               :z-index 1000}
-      :on-click #(reset! state/show-help false)}
+      :on-click #(swap! state/ui-state assoc :show-help false)}
      [:div.help-content
       {:style {:background theme/board-background
                :padding "2rem"
