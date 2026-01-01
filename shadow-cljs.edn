@@ -1,4 +1,4 @@
-{:source-paths ["src/cljs"]
+{:source-paths ["src/cljs" "src/cljc"]
 
  :dependencies [[reagent "1.2.0"]
                 [cljs-ajax "0.8.4"]]

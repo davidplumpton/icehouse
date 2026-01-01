@@ -1,5 +1,6 @@
 (ns icehouse.websocket
-  (:require [icehouse.state :as state]))
+  (:require [icehouse.messages :as msg]
+            [icehouse.state :as state]))
 
 (defonce ws (atom nil))
 
@@ -21,60 +22,60 @@
           msg-type (:type data)]
       (when-not msg-type
         (js/console.warn "Received message without type:" data))
-      (case msg-type
-      "joined"
-      (swap! state/current-player merge
-             {:id (:player-id data)}
-             (when-let [n (:name data)] {:name n})
-             (when-let [c (:colour data)] {:colour c}))
+      (condp = msg-type
+        msg/joined
+        (swap! state/current-player merge
+               {:id (:player-id data)}
+               (when-let [n (:name data)] {:name n})
+               (when-let [c (:colour data)] {:colour c}))
 
-      "players"
-      (reset! state/players (:players data))
+        msg/players
+        (reset! state/players (:players data))
 
-      "options"
-      (reset! state/game-options (:options data))
+        msg/options
+        (reset! state/game-options (:options data))
 
-      "game-start"
-      (do
+        msg/game-start
+        (do
+          (reset! state/game-state (:game data))
+          (reset! state/game-result nil)  ;; Clear previous game result
+          (swap! state/ui-state assoc :selected-piece {:size :small :orientation :standing :captured? false})
+          (reset! state/current-view :game))
+
+        msg/piece-placed
         (reset! state/game-state (:game data))
-        (reset! state/game-result nil)  ;; Clear previous game result
-        (swap! state/ui-state assoc :selected-piece {:size :small :orientation :standing :captured? false})
-        (reset! state/current-view :game))
 
-      "piece-placed"
-      (reset! state/game-state (:game data))
+        msg/piece-captured
+        (reset! state/game-state (:game data))
 
-      "piece-captured"
-      (reset! state/game-state (:game data))
+        msg/player-finished
+        (reset! state/game-state (:game data))
 
-      "player-finished"
-      (reset! state/game-state (:game data))
+        msg/game-over
+        (reset! state/game-result {:scores (:scores data)
+                                    :icehouse-players (:icehouse-players data)
+                                    :over-ice (:over-ice data)
+                                    :game-id (:game-id data)})
 
-      "game-over"
-      (reset! state/game-result {:scores (:scores data)
-                                  :icehouse-players (:icehouse-players data)
-                                  :over-ice (:over-ice data)
-                                  :game-id (:game-id data)})
+        msg/game-list
+        (reset! state/game-list (:games data))
 
-      "game-list"
-      (reset! state/game-list (:games data))
+        msg/game-record
+        (do
+          (reset! state/game-list nil)  ;; Clear game list when loading replay
+          (reset! state/replay-state {:record (:record data)
+                                       :current-move 0
+                                       :playing? false
+                                       :speed 1}))
 
-      "game-record"
-      (do
-        (reset! state/game-list nil)  ;; Clear game list when loading replay
-        (reset! state/replay-state {:record (:record data)
-                                     :current-move 0
-                                     :playing? false
-                                     :speed 1}))
+        msg/error
+        (do
+          (js/console.log "Error from server:" (:message data))
+          (reset! state/error-message (:message data))
+          ;; Auto-clear after 3 seconds
+          (js/setTimeout #(reset! state/error-message nil) 3000))
 
-      "error"
-      (do
-        (js/console.log "Error from server:" (:message data))
-        (reset! state/error-message (:message data))
-        ;; Auto-clear after 3 seconds
-        (js/setTimeout #(reset! state/error-message nil) 3000))
-
-      (js/console.log "Unknown message:" msg-type)))
+        (js/console.log "Unknown message:" msg-type)))
     (catch js/Error e
       (js/console.error "Failed to parse WebSocket message:" e)
       (js/console.error "Raw data:" (.-data event)))))
@@ -89,7 +90,7 @@
           (fn [_]
             (js/console.log "WebSocket connected")
             (reset! state/ws-status :connected)
-            (send! {:type "join"})))
+            (send! {:type msg/join})))
 
     (set! (.-onmessage socket) handle-message)
 
@@ -104,16 +105,16 @@
             (js/console.error "WebSocket error:" e)))))
 
 (defn set-name! [name]
-  (send! {:type "set-name" :name name}))
+  (send! {:type msg/set-name :name name}))
 
 (defn set-colour! [colour]
-  (send! {:type "set-colour" :colour colour}))
+  (send! {:type msg/set-colour :colour colour}))
 
 (defn toggle-ready! []
-  (send! {:type "ready"}))
+  (send! {:type msg/ready}))
 
 (defn place-piece! [x y size orientation angle target-id captured?]
-  (send! {:type "place-piece"
+  (send! {:type msg/place-piece
           :x x
           :y y
           :size (name size)
@@ -124,25 +125,25 @@
 
 (defn capture-piece! [piece-id]
   "Capture an over-iced attacker piece"
-  (send! {:type "capture-piece"
+  (send! {:type msg/capture-piece
           :piece-id piece-id}))
 
 (defn list-games!
   "Request list of saved game records"
   []
-  (send! {:type "list-games"}))
+  (send! {:type msg/list-games}))
 
 (defn load-game!
   "Load a saved game record for replay"
   [game-id]
-  (send! {:type "load-game" :game-id game-id}))
+  (send! {:type msg/load-game :game-id game-id}))
 
 (defn set-option!
   "Set a game option for the room"
   [key value]
-  (send! {:type "set-option" :key (name key) :value value}))
+  (send! {:type msg/set-option :key (name key) :value value}))
 
 (defn finish!
   "Signal that the player wants to end the game"
   []
-  (send! {:type "finish"}))
+  (send! {:type msg/finish}))

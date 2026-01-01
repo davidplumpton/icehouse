@@ -1,5 +1,6 @@
 (ns icehouse.lobby
   (:require [icehouse.game :as game]
+            [icehouse.messages :as msg]
             [icehouse.utils :as utils]))
 
 ;; Game options stored per room
@@ -63,12 +64,12 @@
 (defn broadcast-players! [clients room-id]
   (let [players (get-room-players clients room-id)]
     (utils/broadcast-room! clients room-id
-                           {:type "players"
+                           {:type msg/players
                             :players players})))
 
 (defn broadcast-options! [clients room-id]
   (utils/broadcast-room! clients room-id
-                         {:type "options"
+                         {:type msg/options
                           :options (get-room-options room-id)}))
 
 (defn all-ready? [clients room-id]
@@ -86,14 +87,14 @@
            {:room-id room-id
             :name default-name
             :colour default-colour})
-    (utils/send-msg! channel {:type "joined"
+    (utils/send-msg! channel {:type msg/joined
                               :room-id room-id
                               :player-id (game/player-id-from-channel channel)
                               :name default-name
                               :colour default-colour})
     (broadcast-players! clients room-id)
     ;; Send current game options to the new player
-    (utils/send-msg! channel {:type "options"
+    (utils/send-msg! channel {:type msg/options
                               :options (get-room-options room-id)})))
 
 (defn handle-set-name [clients channel msg]
@@ -114,7 +115,7 @@
       (let [players (get-room-players clients room-id)
             options (get-room-options room-id)]
         (game/start-game! room-id players options)
-        (utils/broadcast-room! clients room-id {:type "game-start"
+        (utils/broadcast-room! clients room-id {:type msg/game-start
                                                 :game (get @game/games room-id)})))))
 
 (defn handle-disconnect [clients channel]

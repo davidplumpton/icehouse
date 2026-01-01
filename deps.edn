@@ -1,4 +1,4 @@
-{:paths ["src/clj" "resources"]
+{:paths ["src/clj" "src/cljc" "resources"]
 
  :deps {org.clojure/clojure {:mvn/version "1.11.1"}
         http-kit/http-kit {:mvn/version "2.7.0"}

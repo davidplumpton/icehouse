@@ -1,5 +1,6 @@
 (ns icehouse.game
-  (:require [icehouse.utils :as utils]
+  (:require [icehouse.messages :as msg]
+            [icehouse.utils :as utils]
             [icehouse.storage :as storage]))
 
 (defonce games (atom {}))
@@ -32,13 +33,6 @@
 (def game-duration-min-ms (* 2 60 1000))  ;; 2 minutes
 (def game-duration-max-ms (* 5 60 1000))  ;; 5 minutes
 
-;; Message types (for WebSocket communication)
-(def msg-types
-  {:piece-placed "piece-placed"
-   :game-over "game-over"
-   :piece-captured "piece-captured"
-   :player-finished "player-finished"
-   :error "error"})
 
 ;; =============================================================================
 ;; Helper Functions
@@ -674,7 +668,7 @@
                                :using-captured? using-captured?})
         (let [updated-game (get @games room-id)]
           (utils/broadcast-room! clients room-id
-                                 {:type (:piece-placed msg-types)
+                                 {:type msg/piece-placed
                                   :piece piece
                                   :game updated-game})
           (when (game-over? updated-game)
@@ -689,12 +683,12 @@
               ;; Save the game record
               (storage/save-game-record! record)
               (utils/broadcast-room! clients room-id
-                                     {:type (:game-over msg-types)
+                                     {:type msg/game-over
                                       :game-id (:game-id updated-game)
                                       :scores (calculate-scores updated-game)
                                       :over-ice over-ice
                                       :icehouse-players (vec icehouse-players)})))))
-      (utils/send-msg! channel {:type (:error msg-types) :message (or error "Invalid game state")}))))
+      (utils/send-msg! channel {:type msg/error :message (or error "Invalid game state")}))))
 
 (defn validate-capture
   "Validate that a piece can be captured by the player.
@@ -750,11 +744,11 @@
         ;; Broadcast updated game state
         (let [updated-game (get @games room-id)]
           (utils/broadcast-room! clients room-id
-                                 {:type (:piece-captured msg-types)
+                                 {:type msg/piece-captured
                                   :piece-id piece-id
                                   :captured-by player-id
                                   :game updated-game})))
-      (utils/send-msg! channel {:type (:error msg-types) :message (or error "Invalid capture")}))))
+      (utils/send-msg! channel {:type msg/error :message (or error "Invalid capture")}))))
 
 (defn all-players-finished?
   "Check if all players have pressed finish"
@@ -775,7 +769,7 @@
           record (build-game-record game end-reason)]
       (storage/save-game-record! record)
       (utils/broadcast-room! clients room-id
-                             {:type (:game-over msg-types)
+                             {:type msg/game-over
                               :game-id (:game-id game)
                               :scores (calculate-scores game)
                               :over-ice over-ice
@@ -793,7 +787,7 @@
       (let [updated-game (get @games room-id)]
         ;; Broadcast that this player finished
         (utils/broadcast-room! clients room-id
-                               {:type (:player-finished msg-types)
+                               {:type msg/player-finished
                                 :player-id player-id
                                 :game updated-game})
         ;; Check if all players have finished
@@ -815,7 +809,7 @@
   "Send list of saved game record IDs to client"
   [channel]
   (utils/send-msg! channel
-                   {:type "game-list"
+                   {:type msg/game-list
                     :games (storage/list-game-records)}))
 
 (defn handle-load-game
@@ -823,8 +817,8 @@
   [channel msg]
   (if-let [record (storage/load-game-record (:game-id msg))]
     (utils/send-msg! channel
-                     {:type "game-record"
+                     {:type msg/game-record
                       :record record})
     (utils/send-msg! channel
-                     {:type "error"
+                     {:type msg/error
                       :message "Game not found"})))
