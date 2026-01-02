@@ -671,11 +671,16 @@
                 (let [{:keys [start-x start-y current-x current-y locked-angle]} drag
                       {:keys [size orientation captured?]} (:selected-piece @state/ui-state)
                       shift-held (.-shiftKey e)
+                      zoom-active (:zoom-active @state/ui-state)
+                      zoom-scale (if zoom-active 4 1)
+                      ;; Scale coordinates back up if zoom was active (they were scaled down on mouse-down/move)
+                      final-x (* start-x zoom-scale)
+                      final-y (* start-y zoom-scale)
                       ;; Use locked angle when shift is held, otherwise calculate from position
                       angle (if shift-held
                               locked-angle
                               (calculate-angle start-x start-y current-x current-y))]
-                  (ws/place-piece! start-x start-y size orientation angle nil captured?)
+                  (ws/place-piece! final-x final-y size orientation angle nil captured?)
                   (swap! state/ui-state assoc :drag nil :zoom-active false))))
             :on-mouse-leave
             (fn [e]
