@@ -730,9 +730,28 @@
                     (swap! state/ui-state update-in [:selected-piece :captured?] not)))
       "Escape" (swap! state/ui-state assoc :drag nil :show-help false :zoom-active false)
       "?" (swap! state/ui-state update :show-help not)
-      ("z" "Z") (when-not (:drag @state/ui-state)
-                  ;; Only toggle zoom when not actively dragging
-                  (swap! state/ui-state update :zoom-active not))
+      ("z" "Z") (let [drag (:drag @state/ui-state)
+                      currently-zoomed (:zoom-active @state/ui-state)
+                      zoom-scale 4]
+                  (if drag
+                    ;; Transform drag coordinates when toggling zoom mid-drag
+                    (let [{:keys [start-x start-y current-x current-y last-x last-y locked-angle]} drag
+                          transform-fn (if currently-zoomed
+                                         ;; Zooming out: scale coordinates up
+                                         #(* % zoom-scale)
+                                         ;; Zooming in: scale coordinates down
+                                         #(/ % zoom-scale))]
+                      (swap! state/ui-state assoc
+                             :zoom-active (not currently-zoomed)
+                             :drag {:start-x (transform-fn start-x)
+                                    :start-y (transform-fn start-y)
+                                    :current-x (transform-fn current-x)
+                                    :current-y (transform-fn current-y)
+                                    :last-x (transform-fn last-x)
+                                    :last-y (transform-fn last-y)
+                                    :locked-angle locked-angle}))
+                    ;; Not dragging: simple toggle
+                    (swap! state/ui-state update :zoom-active not)))
       nil)))
 
 (defn piece-selector []
