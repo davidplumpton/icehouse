@@ -37,7 +37,7 @@ bd sync               # Sync with git
 - Update status as you work (in_progress → closed)
 - Create new issues with `bd create` when you discover tasks
 - Use descriptive titles and set appropriate priority/type, and dependencies between related items
-- Always `bd sync` before ending session
+- Always `bd sync` before committing
 - Commit between finishing one beads issue and starting another
 - Use jj commit with a description, don't use jj new with a description
 
