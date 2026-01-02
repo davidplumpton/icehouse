@@ -202,10 +202,10 @@
   [:map
    [:type [:enum "players"]]
    [:players [:vector [:map
-                       [:id uuid-string]
-                       [:name :string]
-                       [:colour colour]
-                       [:ready {:optional true} :boolean]]]]])
+                        [:id [:or :string :int]]
+                        [:name :string]
+                        [:colour :string]
+                        [:ready {:optional true} :boolean]]]]])
 
 (def OptionsMessage
   "Server options message"

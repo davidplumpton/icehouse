@@ -34,24 +34,24 @@
             (println "Received message without type:" message)
             (utils/send-msg! channel {:type msg/error :message "Message missing 'type' field"}))
           (condp = msg-type
-          ;; Lobby messages
-          msg/join (lobby/handle-join clients channel message)
-          msg/set-name (lobby/handle-set-name clients channel message)
-          msg/set-colour (lobby/handle-set-colour clients channel message)
-          msg/set-option (lobby/handle-set-option clients channel message)
-          msg/ready (lobby/handle-ready clients channel)
+            ;; Lobby messages
+            msg/join (lobby/handle-join clients channel message)
+            msg/set-name (lobby/handle-set-name clients channel message)
+            msg/set-colour (lobby/handle-set-colour clients channel message)
+            msg/set-option (lobby/handle-set-option clients channel message)
+            msg/ready (lobby/handle-ready clients channel)
 
-          ;; Game messages
-          msg/place-piece (game/handle-place-piece clients channel message)
-          msg/capture-piece (game/handle-capture-piece clients channel message)
-          msg/finish (game/handle-finish clients channel message)
+            ;; Game messages
+            msg/place-piece (game/handle-place-piece clients channel message)
+            msg/capture-piece (game/handle-capture-piece clients channel message)
+            msg/finish (game/handle-finish clients channel message)
 
-          ;; Replay messages
-          msg/list-games (game/handle-list-games channel)
-          msg/load-game (game/handle-load-game channel message)
+            ;; Replay messages
+            msg/list-games (game/handle-list-games channel)
+            msg/load-game (game/handle-load-game channel message)
 
-          ;; Unknown
-          (utils/send-msg! channel {:type msg/error :message (str "Unknown message type: " msg-type)}))))))
+            ;; Unknown
+            (utils/send-msg! channel {:type msg/error :message (str "Unknown message type: " msg-type)})))))
     (catch com.fasterxml.jackson.core.JsonParseException e
       (println "Failed to parse WebSocket message:" (.getMessage e))
       (println "Raw data:" data)
