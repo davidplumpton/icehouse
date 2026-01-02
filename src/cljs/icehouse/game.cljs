@@ -728,7 +728,9 @@
                     (swap! state/ui-state update-in [:selected-piece :captured?] not)))
       "Escape" (swap! state/ui-state assoc :drag nil :show-help false :zoom-active false)
       "?" (swap! state/ui-state update :show-help not)
-      ("z" "Z") (swap! state/ui-state update :zoom-active not)
+      ("z" "Z") (when-not (:drag @state/ui-state)
+                  ;; Only toggle zoom when not actively dragging
+                  (swap! state/ui-state update :zoom-active not))
       nil)))
 
 (defn piece-selector []
