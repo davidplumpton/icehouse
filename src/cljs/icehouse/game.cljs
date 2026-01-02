@@ -610,24 +610,34 @@
             (fn [e]
               (.preventDefault e)
               (let [{:keys [x y]} (get-canvas-coords e)
-                    {:keys [size captured?]} (:selected-piece @state/ui-state)]
+                    {:keys [size captured?]} (:selected-piece @state/ui-state)
+                    zoom-active (:zoom-active @state/ui-state)
+                    zoom-scale (if zoom-active 4 1)
+                    ;; Scale down position when zoomed to account for canvas scaling
+                    adjusted-x (if zoom-active (/ x zoom-scale) x)
+                    adjusted-y (if zoom-active (/ y zoom-scale) y)]
                 ;; Only start drag if player has pieces of this size
                 (when (has-pieces-of-size? size captured?)
-                  (swap! state/ui-state assoc :drag {:start-x x :start-y y
-                                                     :current-x x :current-y y
-                                                     :last-x x :last-y y
+                  (swap! state/ui-state assoc :drag {:start-x adjusted-x :start-y adjusted-y
+                                                     :current-x adjusted-x :current-y adjusted-y
+                                                     :last-x adjusted-x :last-y adjusted-y
                                                      :locked-angle 0}))))
             :on-mouse-move
             (fn [e]
               (let [{:keys [x y]} (get-canvas-coords e)
-                    shift-held (.-shiftKey e)]
-                ;; Always update hover position for capture detection
+                    shift-held (.-shiftKey e)
+                    zoom-active (:zoom-active @state/ui-state)
+                    zoom-scale (if zoom-active 4 1)
+                    ;; Scale down movement when zoomed to account for canvas scaling
+                    adjusted-x (if zoom-active (/ x zoom-scale) x)
+                    adjusted-y (if zoom-active (/ y zoom-scale) y)]
+                ;; Always update hover position for capture detection (use original unscaled coords)
                 (swap! state/ui-state assoc :hover-pos {:x x :y y})
                 ;; Update drag state if dragging
                 (when-let [drag (:drag @state/ui-state)]
                   (let [{:keys [start-x start-y last-x last-y]} drag
-                        dx (- x last-x)
-                        dy (- y last-y)]
+                        dx (- adjusted-x last-x)
+                        dy (- adjusted-y last-y)]
                     (if shift-held
                       ;; Shift held: move position by delta, keep locked angle
                       (swap! state/ui-state assoc :drag
@@ -636,12 +646,12 @@
                                     :start-y (+ start-y dy)
                                     :current-x (+ start-x dx)
                                     :current-y (+ start-y dy)
-                                    :last-x x :last-y y))
+                                    :last-x adjusted-x :last-y adjusted-y))
                       ;; Normal: update current position for angle calculation, lock that angle
-                      (let [new-angle (calculate-angle start-x start-y x y)]
+                      (let [new-angle (calculate-angle start-x start-y adjusted-x adjusted-y)]
                         (swap! state/ui-state update :drag assoc
-                               :current-x x :current-y y
-                               :last-x x :last-y y
+                               :current-x adjusted-x :current-y adjusted-y
+                               :last-x adjusted-x :last-y adjusted-y
                                :locked-angle new-angle)))))))
             :on-mouse-up
             (fn [e]
