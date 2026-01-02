@@ -584,13 +584,14 @@
                 drag (:drag ui)
                 ;; When dragging, zoom center should be on the piece being placed
                 ;; When not dragging, zoom center should be on hover position
+                ;; Drag coordinates are stored in scaled space, so scale them back up for zoom center
                 zoom-center-x (if drag
-                                (:start-x drag)
+                                (* (:start-x drag) (if zoom? 4 1))
                                 (if-let [hover (:hover-pos ui)]
                                   (:x hover)
                                   (/ canvas-width 2)))
                 zoom-center-y (if drag
-                                (:start-y drag)
+                                (* (:start-y drag) (if zoom? 4 1))
                                 (if-let [hover (:hover-pos ui)]
                                   (:y hover)
                                   (/ canvas-height 2)))
