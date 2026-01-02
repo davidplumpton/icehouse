@@ -29,13 +29,15 @@ bd sync               # Sync with git
 - Clojure back end
 - Websockets
 - Canvas for rendering graphics
-- Version control using jj
+- Version control using jj, never use git commands
 
 ### Best Practices
 
 - Check `bd ready` at session start to find available work
 - Update status as you work (in_progress → closed)
 - Create new issues with `bd create` when you discover tasks
-- Use descriptive titles and set appropriate priority/type
+- Use descriptive titles and set appropriate priority/type, and dependencies between related items
 - Always `bd sync` before ending session
+- Commit between finishing one beads issue and starting another
+- Use jj commit with a description, don't use jj new with a description
 
