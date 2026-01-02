@@ -53,6 +53,15 @@
 ;; Utility Functions
 ;; =============================================================================
 
+(defn set-line-width
+  "Set line width, accounting for zoom scale if present"
+  [ctx width zoom-state]
+  (set! (.-lineWidth ctx)
+        (if zoom-state
+          (let [{:keys [scale]} zoom-state]
+            (/ width scale))
+          width)))
+
 (defn calculate-angle
   "Calculate angle in radians from point (x1,y1) to (x2,y2)"
   [x1 y1 x2 y2]
@@ -337,7 +346,7 @@
         b-hex (.padStart (.toString new-b 16) 2 "0")]
     (str "#" r-hex g-hex b-hex)))
 
-(defn draw-pyramid [ctx x y size colour orientation angle & [{:keys [iced?]}]]
+(defn draw-pyramid [ctx x y size colour orientation angle & [{:keys [iced? zoom-state]}]]
   (let [size-kw (keyword size)
         orient-kw (keyword orientation)
         base-size (get piece-sizes size-kw default-piece-size)
@@ -350,7 +359,7 @@
 
     (set! (.-fillStyle ctx) final-colour)
     (set! (.-strokeStyle ctx) "#000")
-    (set! (.-lineWidth ctx) 2)
+    (set-line-width ctx 2 zoom-state)
 
     (if (= orient-kw :standing)
       ;; Standing/defensive: pyramid viewed from above (square with X)
@@ -381,11 +390,11 @@
 
 (defn draw-capture-highlight
   "Draw a highlight around a capturable piece"
-  [ctx piece]
+  [ctx piece zoom-state]
   (let [verts (piece-vertices piece)]
     (.save ctx)
     (set! (.-strokeStyle ctx) theme/gold)
-    (set! (.-lineWidth ctx) 4)
+    (set-line-width ctx 4 zoom-state)
     (set! (.-shadowColor ctx) theme/gold)
     (set! (.-shadowBlur ctx) 10)
     (.beginPath ctx)
@@ -398,7 +407,7 @@
     (.restore ctx)))
 
 (defn draw-board
-  "Draw the game board. opts can include :iced-pieces to provide pre-computed iced pieces."
+  "Draw the game board. opts can include :iced-pieces to provide pre-computed iced pieces and :zoom-state for zoom rendering."
   ([ctx game hover-pos current-player-id]
    (draw-board ctx game hover-pos current-player-id nil))
   ([ctx game hover-pos current-player-id opts]
@@ -406,7 +415,7 @@
    (.fillRect ctx 0 0 canvas-width canvas-height)
 
    (set! (.-strokeStyle ctx) theme/grid-color)
-   (set! (.-lineWidth ctx) 1)
+   (set-line-width ctx 1 (:zoom-state opts))
    (doseq [x (range 0 canvas-width grid-size)]
      (.beginPath ctx)
      (.moveTo ctx x 0)
@@ -424,25 +433,26 @@
                            (find-piece-at (:x hover-pos) (:y hover-pos) board))
            ;; Use provided iced-pieces, or cached value, or calculate
            iced-pieces (or (:iced-pieces opts)
-                           @state/cached-iced-pieces)]
-      ;; Draw all pieces
-      (doseq [piece board]
-        (let [player-id (:player-id piece)
-              player-data (get-in game [:players player-id])
-              colour (or (:colour piece) (:colour player-data) "#888")
-              is-iced? (contains? iced-pieces (:id piece))]
-          (draw-pyramid ctx
-                        (:x piece)
-                        (:y piece)
-                        (:size piece)
-                        colour
-                        (:orientation piece)
-                        (:angle piece)
-                        {:iced? is-iced?})))
-      ;; Draw capture highlight if hovering over a capturable piece
-      (when (and hovered-piece
-                 (capturable-piece? hovered-piece current-player-id board))
-        (draw-capture-highlight ctx hovered-piece))))))
+                           @state/cached-iced-pieces)
+           zoom-state (:zoom-state opts)]
+       ;; Draw all pieces
+       (doseq [piece board]
+         (let [player-id (:player-id piece)
+               player-data (get-in game [:players player-id])
+               colour (or (:colour piece) (:colour player-data) "#888")
+               is-iced? (contains? iced-pieces (:id piece))]
+           (draw-pyramid ctx
+                         (:x piece)
+                         (:y piece)
+                         (:size piece)
+                         colour
+                         (:orientation piece)
+                         (:angle piece)
+                         {:iced? is-iced? :zoom-state zoom-state})))
+       ;; Draw capture highlight if hovering over a capturable piece
+       (when (and hovered-piece
+                  (capturable-piece? hovered-piece current-player-id board))
+         (draw-capture-highlight ctx hovered-piece zoom-state))))))
 
 (defn get-canvas-coords [e]
   "Get coordinates relative to canvas from mouse event"
@@ -452,12 +462,12 @@
 
 (defn draw-target-highlight
   "Draw a highlight around a target piece - green for valid, red for out of range"
-  [ctx piece valid?]
+  [ctx piece valid? zoom-state]
   (let [verts (piece-vertices piece)
         color (if valid? "rgba(0,255,0,0.5)" "rgba(255,0,0,0.5)")]
     (.save ctx)
     (set! (.-strokeStyle ctx) color)
-    (set! (.-lineWidth ctx) 4)
+    (set-line-width ctx 4 zoom-state)
     (set! (.-lineCap ctx) "round")
     (set! (.-lineJoin ctx) "round")
     (.beginPath ctx)
@@ -479,7 +489,7 @@
       (.translate ctx center-x center-y)
       (.scale ctx scale scale)
       (.translate ctx (- center-x) (- center-y))))
-  (draw-board ctx game hover-pos player-id)
+  (draw-board ctx game hover-pos player-id {:zoom-state zoom-state})
   ;; Draw preview if dragging
   (when drag-state
     (let [{:keys [start-x start-y current-x current-y locked-angle]} drag-state
@@ -497,7 +507,7 @@
       ;; Draw a line showing the direction (only in normal mode)
       (when (and current-x current-y (not in-shift-mode?))
         (set! (.-strokeStyle ctx) "rgba(255,255,255,0.5)")
-        (set! (.-lineWidth ctx) 2)
+        (set-line-width ctx 2 zoom-state)
         (.beginPath ctx)
         (.moveTo ctx start-x start-y)
         (.lineTo ctx current-x current-y)
@@ -517,10 +527,10 @@
               {:keys [valid]} (find-targets-for-attack preview-attacker player-id board)]
           ;; Highlight valid targets (green)
           (doseq [target valid]
-            (draw-target-highlight ctx target true))
+            (draw-target-highlight ctx target true zoom-state))
           ;; Draw range line from tip
           (set! (.-strokeStyle ctx) "rgba(255,100,100,0.7)")
-          (set! (.-lineWidth ctx) 3)
+          (set-line-width ctx 3 zoom-state)
           (set! (.-lineCap ctx) "round")
           (.beginPath ctx)
           (.moveTo ctx tip-x tip-y)
@@ -531,10 +541,10 @@
           (.arc ctx range-end-x range-end-y 5 0 (* 2 js/Math.PI))
           (.stroke ctx)))
       ;; Draw preview piece with transparency
-      (.save ctx)
-      (set! (.-globalAlpha ctx) preview-alpha)
-      (draw-pyramid ctx start-x start-y size player-colour orientation angle)
-      (.restore ctx)))
+       (.save ctx)
+       (set! (.-globalAlpha ctx) preview-alpha)
+       (draw-pyramid ctx start-x start-y size player-colour orientation angle {:zoom-state zoom-state})
+       (.restore ctx)))
   ;; Restore zoom transform if it was applied
   (when zoom-state
     (.restore ctx)))
