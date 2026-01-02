@@ -1,22 +1,39 @@
 (ns icehouse.websocket
   (:require [org.httpkit.server :as http]
-            [cheshire.core :as json]
-            [icehouse.lobby :as lobby]
-            [icehouse.game :as game]
-            [icehouse.messages :as msg]
-            [icehouse.utils :as utils]))
+             [cheshire.core :as json]
+             [icehouse.lobby :as lobby]
+             [icehouse.game :as game]
+             [icehouse.messages :as msg]
+             [icehouse.utils :as utils]
+             [icehouse.schema :as schema]
+             [malli.core :as m]))
 
 (defonce clients (atom {}))
+
+(defn validate-incoming-message
+  "Validate incoming client message against schema"
+  [message]
+  (if (m/validate schema/ClientMessage message)
+    message
+    (do
+      (println "Invalid client message:" message)
+      (println "Validation errors:" (m/explain schema/ClientMessage message))
+      nil)))
 
 (defn handle-message [channel data]
   (try
     (let [message (json/parse-string data true)
+          validated-message (validate-incoming-message message)
           msg-type (:type message)]
-      (if-not msg-type
+      (if-not validated-message
         (do
-          (println "Received message without type:" message)
-          (utils/send-msg! channel {:type msg/error :message "Message missing 'type' field"}))
-        (condp = msg-type
+          (println "Invalid message, discarding:" message)
+          (utils/send-msg! channel {:type msg/error :message "Invalid message format"}))
+        (if-not msg-type
+          (do
+            (println "Received message without type:" message)
+            (utils/send-msg! channel {:type msg/error :message "Message missing 'type' field"}))
+          (condp = msg-type
           ;; Lobby messages
           msg/join (lobby/handle-join clients channel message)
           msg/set-name (lobby/handle-set-name clients channel message)
@@ -34,7 +51,7 @@
           msg/load-game (game/handle-load-game channel message)
 
           ;; Unknown
-          (utils/send-msg! channel {:type msg/error :message (str "Unknown message type: " msg-type)}))))
+          (utils/send-msg! channel {:type msg/error :message (str "Unknown message type: " msg-type)}))))))
     (catch com.fasterxml.jackson.core.JsonParseException e
       (println "Failed to parse WebSocket message:" (.getMessage e))
       (println "Raw data:" data)

@@ -1,8 +1,34 @@
 (ns icehouse.websocket
   (:require [icehouse.messages :as msg]
-            [icehouse.state :as state]))
+             [icehouse.state :as state]
+             [icehouse.schema :as schema]
+             [malli.core :as m]))
 
 (defonce ws (atom nil))
+
+;; =============================================================================
+;; Validation Helpers
+;; =============================================================================
+
+(defn validate-incoming-message
+  "Validate incoming server message against schema"
+  [data]
+  (if (m/validate schema/ServerMessage data)
+    data
+    (do
+      (js/console.error "Invalid incoming message:" data)
+      (js/console.error "Validation errors:" (m/explain schema/ServerMessage data))
+      nil)))
+
+(defn validate-outgoing-message
+  "Validate outgoing client message against schema"
+  [data]
+  (if (m/validate schema/ClientMessage data)
+    data
+    (do
+      (js/console.error "Invalid outgoing message:" data)
+      (js/console.error "Validation errors:" (m/explain schema/ClientMessage data))
+      nil)))
 
 (defn get-ws-url []
   (let [loc (.-location js/window)
@@ -12,17 +38,25 @@
     (str protocol "//" host ":3000/ws")))
 
 (defn send! [msg]
-  (when-let [socket @ws]
-    (when (= 1 (.-readyState socket))
-      (.send socket (js/JSON.stringify (clj->js msg))))))
+  (if-let [validated (validate-outgoing-message msg)]
+    (when-let [socket @ws]
+      (when (= 1 (.-readyState socket))
+        (.send socket (js/JSON.stringify (clj->js validated)))))
+    (js/console.error "Message validation failed, not sending:" msg)))
 
 (defn handle-message [event]
   (try
-    (let [data (js->clj (js/JSON.parse (.-data event)) :keywordize-keys true)
-          msg-type (:type data)]
-      (when-not msg-type
-        (js/console.warn "Received message without type:" data))
-      (condp = msg-type
+    (let [raw-data (js->clj (js/JSON.parse (.-data event)) :keywordize-keys true)
+          data (validate-incoming-message raw-data)]
+      (when-not data
+        (js/console.error "Invalid incoming message, discarding")
+        (reset! state/error-message "Invalid message from server")
+        (js/setTimeout #(reset! state/error-message nil) 3000))
+      (when data
+        (let [msg-type (:type data)]
+          (when-not msg-type
+            (js/console.warn "Received message without type:" data))
+          (condp = msg-type
         msg/joined
         (swap! state/current-player merge
                {:id (:player-id data)}
@@ -75,7 +109,7 @@
           ;; Auto-clear after 3 seconds
           (js/setTimeout #(reset! state/error-message nil) 3000))
 
-        (js/console.log "Unknown message:" msg-type)))
+        (js/console.log "Unknown message:" msg-type)))))
     (catch js/Error e
       (js/console.error "Failed to parse WebSocket message:" e)
       (js/console.error "Raw data:" (.-data event)))))
