@@ -581,11 +581,23 @@
                 ui @state/ui-state
                 player @state/current-player
                 zoom? (:zoom-active ui)
-                hover (:hover-pos ui)
+                drag (:drag ui)
+                ;; When dragging, zoom center should be on the piece being placed
+                ;; When not dragging, zoom center should be on hover position
+                zoom-center-x (if drag
+                                (:start-x drag)
+                                (if-let [hover (:hover-pos ui)]
+                                  (:x hover)
+                                  (/ canvas-width 2)))
+                zoom-center-y (if drag
+                                (:start-y drag)
+                                (if-let [hover (:hover-pos ui)]
+                                  (:y hover)
+                                  (/ canvas-height 2)))
                 ;; Create zoom state map if zoom is active
                 zoom-state (when zoom?
-                             {:center-x (if hover (:x hover) (/ canvas-width 2))
-                              :center-y (if hover (:y hover) (/ canvas-height 2))
+                             {:center-x zoom-center-x
+                              :center-y zoom-center-y
                               :scale 4})]
             (draw-with-preview ctx
                                @state/game-state
