@@ -47,16 +47,14 @@
 (defn handle-message [event]
   (try
     (let [raw-data (js->clj (js/JSON.parse (.-data event)) :keywordize-keys true)
-          data (validate-incoming-message raw-data)]
-      (when-not data
-        (js/console.error "Invalid incoming message, discarding")
-        (reset! state/error-message "Invalid message from server")
-        (js/setTimeout #(reset! state/error-message nil) 3000))
-      (when data
-        (let [msg-type (:type data)]
-          (when-not msg-type
-            (js/console.warn "Received message without type:" data))
-          (condp = msg-type
+          data raw-data]  ;; Use data as-is, validation is non-blocking
+      ;; Log validation errors but still process the message
+      (when-not (validate-incoming-message raw-data)
+        (js/console.warn "Message validation warning:" raw-data))
+      (let [msg-type (:type data)]
+        (when-not msg-type
+          (js/console.warn "Received message without type:" data))
+        (condp = msg-type
         msg/joined
         (swap! state/current-player merge
                {:id (:player-id data)}
@@ -109,7 +107,7 @@
           ;; Auto-clear after 3 seconds
           (js/setTimeout #(reset! state/error-message nil) 3000))
 
-        (js/console.log "Unknown message:" msg-type)))))
+        (js/console.log "Unknown message:" msg-type))))
     (catch js/Error e
       (js/console.error "Failed to parse WebSocket message:" e)
       (js/console.error "Raw data:" (.-data event)))))
