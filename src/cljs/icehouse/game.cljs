@@ -54,12 +54,14 @@
 ;; =============================================================================
 
 (defn set-line-width
-  "Set line width, accounting for zoom scale if present"
+  "Set line width, accounting for zoom scale if present. Maintains minimum width for visibility."
   [ctx width zoom-state]
   (set! (.-lineWidth ctx)
         (if zoom-state
-          (let [{:keys [scale]} zoom-state]
-            (/ width scale))
+          (let [{:keys [scale]} zoom-state
+                scaled-width (/ width scale)]
+            ;; Ensure minimum width of 0.5 for visibility when zoomed
+            (max 0.5 scaled-width))
           width)))
 
 (defn calculate-angle
