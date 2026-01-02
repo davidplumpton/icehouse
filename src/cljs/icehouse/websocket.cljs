@@ -38,11 +38,12 @@
     (str protocol "//" host ":3000/ws")))
 
 (defn send! [msg]
-  (if-let [validated (validate-outgoing-message msg)]
-    (when-let [socket @ws]
-      (when (= 1 (.-readyState socket))
-        (.send socket (js/JSON.stringify (clj->js validated)))))
-    (js/console.error "Message validation failed, not sending:" msg)))
+  ;; Validation is non-blocking - log warnings but send anyway
+  (when-not (validate-outgoing-message msg)
+    (js/console.warn "Message validation warning:" msg))
+  (when-let [socket @ws]
+    (when (= 1 (.-readyState socket))
+      (.send socket (js/JSON.stringify (clj->js msg))))))
 
 (defn handle-message [event]
   (try

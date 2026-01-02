@@ -150,8 +150,8 @@
    [:type [:enum "place-piece"]]
    [:x :int]
    [:y :int]
-   [:size piece-size]
-   [:orientation orientation]
+   [:size :string]  ;; Frontend sends as string via (name size)
+   [:orientation :string]  ;; Frontend sends as string via (name orientation)
    [:angle [:or :double :int]]
    [:target-id [:or uuid-string :nil]]
    [:captured :boolean]])
