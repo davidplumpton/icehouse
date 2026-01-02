@@ -765,11 +765,13 @@
         {:keys [size orientation captured?]} (:selected-piece ui)
         attack-allowed (can-attack?)
         has-captured (has-captured-pieces?)
-        zoom? (:zoom-active ui)]
+        zoom? (:zoom-active ui)
+        has-size? (has-pieces-of-size? size captured?)]
     [:div.piece-selector
      [:div.hotkey-display
-      [:span.current-size
-       (case size :small "Small (1)" :medium "Medium (2)" :large "Large (3)" "Small (1)")]
+      [:span.current-size {:style (when-not has-size? {:color theme/red})}
+       (case size :small "Small (1)" :medium "Medium (2)" :large "Large (3)" "Small (1)")
+       (when-not has-size? " [NONE]")]
       [:span.separator " | "]
       [:span.current-mode
        (if (= orientation :standing) "Defend (D)" "Attack (A)")]
