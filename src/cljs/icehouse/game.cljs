@@ -497,6 +497,12 @@
     (let [{:keys [start-x start-y current-x current-y locked-angle]} drag-state
           {:keys [size orientation]} selected-piece
           base-size (get piece-sizes size default-piece-size)
+          ;; When zoom is active, drag coords are in scaled space - convert to world coords for drawing
+          zoom-scale (if zoom-state (:scale zoom-state) 1)
+          draw-start-x (* start-x zoom-scale)
+          draw-start-y (* start-y zoom-scale)
+          draw-current-x (* current-x zoom-scale)
+          draw-current-y (* current-y zoom-scale)
           ;; In shift mode (position adjustment), start equals current, so use locked-angle
           ;; In normal mode, calculate angle from start to current
           in-shift-mode? (and (= start-x current-x) (= start-y current-y))
@@ -511,20 +517,20 @@
         (set! (.-strokeStyle ctx) "rgba(255,255,255,0.5)")
         (set-line-width ctx 2 zoom-state)
         (.beginPath ctx)
-        (.moveTo ctx start-x start-y)
-        (.lineTo ctx current-x current-y)
+        (.moveTo ctx draw-start-x draw-start-y)
+        (.lineTo ctx draw-current-x draw-current-y)
         (.stroke ctx))
       ;; Draw attack range indicator and target highlights for attacking pieces
       (when (and is-attacking? current-x current-y)
         (let [tip-offset (* base-size tip-offset-ratio)
-              tip-x (+ start-x (* (js/Math.cos angle) tip-offset))
-              tip-y (+ start-y (* (js/Math.sin angle) tip-offset))
+              tip-x (+ draw-start-x (* (js/Math.cos angle) tip-offset))
+              tip-y (+ draw-start-y (* (js/Math.sin angle) tip-offset))
               ;; Attack range extends piece height from tip (height = 2 * tip-offset-ratio * base-size)
               piece-height (* 2 tip-offset-ratio base-size)
               range-end-x (+ tip-x (* (js/Math.cos angle) piece-height))
               range-end-y (+ tip-y (* (js/Math.sin angle) piece-height))
-              ;; Create preview attacker to find targets
-              preview-attacker {:x start-x :y start-y :size size :orientation :pointing :angle angle}
+              ;; Create preview attacker to find targets (use world coords)
+              preview-attacker {:x draw-start-x :y draw-start-y :size size :orientation :pointing :angle angle}
               board (:board game)
               {:keys [valid]} (find-targets-for-attack preview-attacker player-id board)]
           ;; Highlight valid targets (green)
@@ -545,7 +551,7 @@
       ;; Draw preview piece with transparency
        (.save ctx)
        (set! (.-globalAlpha ctx) preview-alpha)
-       (draw-pyramid ctx start-x start-y size player-colour orientation angle {:zoom-state zoom-state})
+       (draw-pyramid ctx draw-start-x draw-start-y size player-colour orientation angle {:zoom-state zoom-state})
        (.restore ctx)))
   ;; Restore zoom transform if it was applied
   (when zoom-state
