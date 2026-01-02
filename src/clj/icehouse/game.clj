@@ -1,9 +1,22 @@
 (ns icehouse.game
   (:require [icehouse.messages :as msg]
-            [icehouse.utils :as utils]
-            [icehouse.storage :as storage]))
+             [icehouse.utils :as utils]
+             [icehouse.storage :as storage]
+             [icehouse.schema :as schema]
+             [malli.core :as m]))
 
 (defonce games (atom {}))
+
+;; =============================================================================
+;; Validation Functions
+;; =============================================================================
+
+(defn validate-game-state
+  "Validate game state against schema, returns nil if valid or error message"
+  [game]
+  (if (m/validate schema/GameState game)
+    nil
+    (str "Invalid game state: " (m/explain schema/GameState game))))
 
 ;; =============================================================================
 ;; Game Constants
