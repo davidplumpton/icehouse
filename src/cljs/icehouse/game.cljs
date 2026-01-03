@@ -570,6 +570,14 @@
       (let [pieces (or (:pieces player-data) {})]
         (pos? (get pieces size 0))))))
 
+(defn available-captured-sizes []
+  "Returns a vector of distinct sizes of captured pieces in order they appear"
+  (let [game @state/game-state
+        player-id (keyword (:id @state/current-player))
+        player-data (get-in game [:players player-id])
+        captured (or (:captured player-data) [])]
+    (vec (distinct (map #(keyword (:size %)) captured)))))
+
 (defn game-canvas []
   (let [canvas-ref (r/atom nil)]
     (r/create-class
@@ -705,7 +713,7 @@
 (defn has-captured-pieces? []
   "Returns true if current player has any captured pieces"
   (let [game @state/game-state
-        player-id (:id @state/current-player)
+        player-id (keyword (:id @state/current-player))
         player-data (get-in game [:players player-id])
         captured (or (:captured player-data) [])]
     (pos? (count captured))))
@@ -715,7 +723,7 @@
   []
   (when-let [hovered (get-hovered-piece)]
     (when-let [game @state/game-state]
-      (let [player-id (:id @state/current-player)
+      (let [player-id (keyword (:id @state/current-player))
             board (:board game)]
         (when (capturable-piece? hovered player-id board)
           (ws/capture-piece! (:id hovered)))))))
@@ -726,12 +734,13 @@
       "1" (swap! state/ui-state update :selected-piece assoc :size :small :captured? false)
       "2" (swap! state/ui-state update :selected-piece assoc :size :medium :captured? false)
       "3" (swap! state/ui-state update :selected-piece assoc :size :large :captured? false)
-      "4" (when (has-captured-pieces?)
-            (swap! state/ui-state update :selected-piece assoc :size :small :captured? true))
-      "5" (when (has-captured-pieces?)
-            (swap! state/ui-state update :selected-piece assoc :size :medium :captured? true))
-      "6" (when (has-captured-pieces?)
-            (swap! state/ui-state update :selected-piece assoc :size :large :captured? true))
+      ;; 4, 5, 6 select captured pieces dynamically based on what's available
+      "4" (when-let [size (first (available-captured-sizes))]
+            (swap! state/ui-state update :selected-piece assoc :size size :captured? true))
+      "5" (when-let [size (second (available-captured-sizes))]
+            (swap! state/ui-state update :selected-piece assoc :size size :captured? true))
+      "6" (when-let [size (nth (available-captured-sizes) 2 nil)]
+            (swap! state/ui-state update :selected-piece assoc :size size :captured? true))
       ("a" "A") (when (can-attack?)
                   (swap! state/ui-state update :selected-piece assoc :orientation :pointing))
       ("d" "D") (swap! state/ui-state update :selected-piece assoc :orientation :standing)
