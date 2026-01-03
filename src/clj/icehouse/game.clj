@@ -319,11 +319,16 @@
 
 (defn potential-target?
   "Check if target could be attacked based on trajectory only (ignoring range).
-   Returns true if the target is an opponent's standing piece in the attack path."
-  [attacker target attacker-player-id]
-  (let [diff-player (not= (:player-id target) attacker-player-id)
+   Returns true if the target is a different-coloured standing piece in the attack path.
+   Uses colour-based validation so captured pieces attack based on their original colour.
+   Falls back to player-id comparison if colours aren't set."
+  [attacker target]
+  (let [;; Use colour comparison if both pieces have colours, otherwise fall back to player-id
+        is-opponent (if (and (:colour attacker) (:colour target))
+                      (not= (:colour target) (:colour attacker))
+                      (not= (:player-id target) (:player-id attacker)))
         is-standing (= (:orientation target) :standing)]
-    (if (and diff-player is-standing)
+    (if (and is-opponent is-standing)
       ;; Only check in-front-of? for standing opponent pieces
       (in-front-of? attacker target)
       false)))
@@ -332,54 +337,54 @@
   "Check if target is a valid attack target for the attacker.
    Per Icehouse rules, can only target standing (defending) opponent pieces.
    Also checks that no other pieces are blocking the line of sight."
-  [attacker target attacker-player-id board]
-  (and (potential-target? attacker target attacker-player-id)
+  [attacker target board]
+  (and (potential-target? attacker target)
        (within-range? attacker target)
        (clear-line-of-sight? attacker target board)))
 
 (defn find-potential-targets
   "Find all targets in the attack trajectory (ignoring range)"
-  [attacker player-id board]
-  (filter #(potential-target? attacker % player-id) board))
+  [attacker board]
+  (filter #(potential-target? attacker %) board))
 
 (defn has-potential-target?
   "Check if an attacking piece has at least one target in its trajectory"
-  [piece player-id board]
-  (seq (find-potential-targets piece player-id board)))
+  [piece board]
+  (seq (find-potential-targets piece board)))
 
 (defn find-valid-targets
   "Find all valid targets for an attacking piece"
-  [attacker player-id board]
-  (filter #(valid-target? attacker % player-id board) board))
+  [attacker board]
+  (filter #(valid-target? attacker % board) board))
 
 (defn has-valid-target?
   "Check if an attacking piece has at least one valid target"
-  [piece player-id board]
-  (seq (find-valid-targets piece player-id board)))
+  [piece board]
+  (seq (find-valid-targets piece board)))
 
 (defn find-targets-in-range
   "Find all targets that are in trajectory and range (ignoring line of sight)"
-  [attacker player-id board]
-  (filter #(and (potential-target? attacker % player-id)
+  [attacker board]
+  (filter #(and (potential-target? attacker %)
                 (within-range? attacker %))
           board))
 
 (defn has-target-in-range?
   "Check if an attacking piece has at least one target in range (ignoring line of sight)"
-  [piece player-id board]
-  (seq (find-targets-in-range piece player-id board)))
+  [piece board]
+  (seq (find-targets-in-range piece board)))
 
 (defn has-blocked-target?
   "Check if an attacking piece has a target in range that is blocked by another piece"
-  [piece player-id board]
-  (let [in-range (find-targets-in-range piece player-id board)]
+  [piece board]
+  (let [in-range (find-targets-in-range piece board)]
     (and (seq in-range)
          (not-any? #(clear-line-of-sight? piece % board) in-range))))
 
 (defn find-closest-target
   "Find the closest valid target for an attacking piece"
-  [piece player-id board]
-  (let [targets (find-valid-targets piece player-id board)]
+  [piece board]
+  (let [targets (find-valid-targets piece board)]
     (when (seq targets)
       (->> targets
            (map (fn [t] {:target t
@@ -436,6 +441,11 @@
   [captured size]
   (count (filter #(= (:size %) size) captured)))
 
+(defn get-first-captured-by-size
+  "Get the first captured piece of a given size, or nil if none"
+  [captured size]
+  (first (filter #(= (:size %) size) captured)))
+
 (defn remove-first-captured
   "Remove the first captured piece of the given size from the list"
   [captured size]
@@ -456,26 +466,35 @@
                      (count-captured-by-size (:captured player) size)
                      (get-in player [:pieces size] 0))
          board (:board game)
-         is-attacking? (= (:orientation piece) :pointing)]
+         is-attacking? (= (:orientation piece) :pointing)
+         ;; Ensure piece has player-id and colour for validation
+         ;; For captured pieces, get the original colour; otherwise use player's colour
+         piece-colour (if using-captured?
+                        (let [cap-piece (get-first-captured-by-size (:captured player) size)]
+                          (or (:colour cap-piece) (:colour player)))
+                        (:colour player))
+         piece-with-owner (assoc piece
+                                 :player-id player-id
+                                 :colour (or (:colour piece) piece-colour))]
      (cond
        (not (pos? remaining))
        (if using-captured?
          "No captured pieces of that size remaining"
          "No pieces of that size remaining")
 
-       (not (within-play-area? piece))
+       (not (within-play-area? piece-with-owner))
        "Piece must be placed within the play area"
 
-       (intersects-any-piece? piece board)
+       (intersects-any-piece? piece-with-owner board)
        "Piece would overlap with existing piece"
 
-       (and is-attacking? (not (has-potential-target? piece player-id board)))
+       (and is-attacking? (not (has-potential-target? piece-with-owner board)))
        "Attacking piece must be pointed at an opponent's piece"
 
-       (and is-attacking? (not (has-target-in-range? piece player-id board)))
+       (and is-attacking? (not (has-target-in-range? piece-with-owner board)))
        "Target is out of range"
 
-       (and is-attacking? (has-blocked-target? piece player-id board))
+       (and is-attacking? (has-blocked-target? piece-with-owner board))
        "Another piece is blocking the line of attack"
 
        :else nil))))
@@ -648,12 +667,19 @@
         game (get @games room-id)
         player-colour (get-in game [:players player-id :colour])
         using-captured? (boolean (:captured msg))
+        piece-size (keyword (:size msg))
+        ;; For captured pieces, use the original colour; for regular pieces, use player's colour
+        piece-colour (if using-captured?
+                       (let [captured (get-in game [:players player-id :captured])
+                             cap-piece (get-first-captured-by-size captured piece-size)]
+                         (or (:colour cap-piece) player-colour))
+                       player-colour)
         base-piece {:id (str (java.util.UUID/randomUUID))
                     :player-id player-id
-                    :colour player-colour
+                    :colour piece-colour
                     :x (:x msg)
                     :y (:y msg)
-                    :size (keyword (:size msg))
+                    :size piece-size
                     :orientation (keyword (:orientation msg))
                     :angle (:angle msg)
                     :target-id (:target-id msg)}
@@ -661,7 +687,7 @@
         piece (if (and (= (:orientation base-piece) :pointing)
                        (nil? (:target-id base-piece))
                        game)
-                (if-let [target (find-closest-target base-piece player-id (:board game))]
+                (if-let [target (find-closest-target base-piece (:board game))]
                   (assoc base-piece :target-id (:id target))
                   base-piece)
                 base-piece)
