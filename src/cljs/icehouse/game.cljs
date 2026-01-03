@@ -496,7 +496,14 @@
   ;; Draw preview if dragging
   (when drag-state
     (let [{:keys [start-x start-y current-x current-y locked-angle]} drag-state
-          {:keys [size orientation]} selected-piece
+          {:keys [size orientation captured?]} selected-piece
+          ;; For captured pieces, use the captured piece's original colour
+          preview-colour (if captured?
+                           (let [player-data (get-in game [:players (keyword player-id)])
+                                 captured-pieces (or (:captured player-data) [])
+                                 cap-piece (first (filter #(= (keyword (:size %)) size) captured-pieces))]
+                             (or (:colour cap-piece) player-colour))
+                           player-colour)
           base-size (get piece-sizes size default-piece-size)
           ;; When zoom is active, drag coords are in scaled space - convert to world coords for drawing
           zoom-scale (if zoom-state (:scale zoom-state) 1)
@@ -552,7 +559,7 @@
       ;; Draw preview piece with transparency
        (.save ctx)
        (set! (.-globalAlpha ctx) preview-alpha)
-       (draw-pyramid ctx draw-start-x draw-start-y size player-colour orientation angle {:zoom-state zoom-state})
+       (draw-pyramid ctx draw-start-x draw-start-y size preview-colour orientation angle {:zoom-state zoom-state})
        (.restore ctx)))
   ;; Restore zoom transform if it was applied
   (when zoom-state
