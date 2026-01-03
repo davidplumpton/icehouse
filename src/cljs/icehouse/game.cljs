@@ -722,9 +722,15 @@
 (defn handle-keydown [e]
   (let [key (.-key e)]
     (case key
-      "1" (swap! state/ui-state update :selected-piece assoc :size :small)
-      "2" (swap! state/ui-state update :selected-piece assoc :size :medium)
-      "3" (swap! state/ui-state update :selected-piece assoc :size :large)
+      "1" (swap! state/ui-state update :selected-piece assoc :size :small :captured? false)
+      "2" (swap! state/ui-state update :selected-piece assoc :size :medium :captured? false)
+      "3" (swap! state/ui-state update :selected-piece assoc :size :large :captured? false)
+      "4" (when (has-captured-pieces?)
+            (swap! state/ui-state update :selected-piece assoc :size :small :captured? true))
+      "5" (when (has-captured-pieces?)
+            (swap! state/ui-state update :selected-piece assoc :size :medium :captured? true))
+      "6" (when (has-captured-pieces?)
+            (swap! state/ui-state update :selected-piece assoc :size :large :captured? true))
       ("a" "A") (when (can-attack?)
                   (swap! state/ui-state update :selected-piece assoc :orientation :pointing))
       ("d" "D") (swap! state/ui-state update :selected-piece assoc :orientation :standing)
@@ -770,7 +776,9 @@
     [:div.piece-selector
      [:div.hotkey-display
       [:span.current-size {:style (when-not has-size? {:color theme/red})}
-       (case size :small "Small (1)" :medium "Medium (2)" :large "Large (3)" "Small (1)")
+       (if captured?
+         (case size :small "Small (4)" :medium "Medium (5)" :large "Large (6)" "Small (4)")
+         (case size :small "Small (1)" :medium "Medium (2)" :large "Large (3)" "Small (1)"))
        (when-not has-size? " [NONE]")]
       [:span.separator " | "]
       [:span.current-mode
@@ -783,11 +791,14 @@
          "[ZOOM 4x]"])]
      [:div.hotkey-hint
       (cond
+        (and (not attack-allowed) has-captured)
+        "1/2/3 stash, 4/5/6 captured, D defend, Z zoom, Shift+drag | ? help"
+
         (not attack-allowed)
         "1/2/3 size, D defend, Z zoom, Shift+drag | ? help (attack unlocks after 2 moves)"
 
         has-captured
-        "1/2/3 size, A/D mode, C captured, Z zoom, Shift+drag | ? help"
+        "1/2/3 stash, 4/5/6 captured, A/D mode, Z zoom, Shift+drag | ? help"
 
         :else
         "1/2/3 size, A/D mode, Z zoom, Shift+drag | ? help")]]))
@@ -994,6 +1005,8 @@
        [:tbody
         [:tr [:td {:style {:padding "0.5rem" :color theme/gold}} "1 / 2 / 3"]
          [:td {:style {:padding "0.5rem"}} "Select piece size (Small / Medium / Large)"]]
+        [:tr [:td {:style {:padding "0.5rem" :color theme/gold}} "4 / 5 / 6"]
+         [:td {:style {:padding "0.5rem"}} "Select captured piece (Small / Medium / Large)"]]
         [:tr [:td {:style {:padding "0.5rem" :color theme/gold}} "D"]
          [:td {:style {:padding "0.5rem"}} "Defend mode (standing piece)"]]
         [:tr [:td {:style {:padding "0.5rem" :color theme/gold}} "A"]
