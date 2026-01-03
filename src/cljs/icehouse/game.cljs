@@ -812,8 +812,11 @@
                 :stroke (if captured? theme/gold "#000")
                 :stroke-width (if captured? "2" "1")}]]))
 
-(defn piece-size-row [size label pieces colour & [{:keys [captured?]}]]
-  [:div.piece-row
+(defn piece-size-row [size label pieces colour & [{:keys [captured? selected?]}]]
+  [:div.piece-row {:style (when selected?
+                            {:background "rgba(255, 255, 255, 0.15)"
+                             :border-radius "4px"
+                             :box-shadow "0 0 8px rgba(255, 255, 255, 0.3)"})}
    [:span.size-label label]
    (for [i (range (get pieces size 0))]
      ^{:key (str (name size) "-" i)}
@@ -826,24 +829,38 @@
         colour (or (:colour player-data) "#888")
         player-name (or (:name player-data) "Player")
         is-me (= (name player-id) (:id @state/current-player))
-        has-captured? (pos? (count captured))]
+        has-captured? (pos? (count captured))
+        ;; Get selection state for highlighting
+        {:keys [size captured?]} (when is-me (:selected-piece @state/ui-state))
+        ;; Group captured pieces by size for selection highlighting
+        captured-by-size (when is-me (group-by #(keyword (:size %)) captured))]
     [:div.player-stash {:class (when is-me "is-me")}
      [:div.stash-header {:style {:color colour}}
       player-name
       (when is-me " (you)")]
      [:div.stash-pieces
-      [piece-size-row :large "L" pieces colour]
-      [piece-size-row :medium "M" pieces colour]
-      [piece-size-row :small "S" pieces colour]]
+      [piece-size-row :large "L" pieces colour
+       {:selected? (and is-me (not captured?) (= size :large))}]
+      [piece-size-row :medium "M" pieces colour
+       {:selected? (and is-me (not captured?) (= size :medium))}]
+      [piece-size-row :small "S" pieces colour
+       {:selected? (and is-me (not captured?) (= size :small))}]]
      (when has-captured?
        [:div.captured-pieces
         [:div.captured-header {:style {:color theme/gold :font-size "0.8em" :margin-top "0.5rem"}}
          "Captured:"]
-        ;; Render each captured piece with its original colour
-        (doall
-          (for [[idx cap-piece] (map-indexed vector captured)]
-            ^{:key (str "cap-" idx)}
-            [draw-stash-pyramid (keyword (:size cap-piece)) (:colour cap-piece) {:captured? true}]))])]))
+        ;; Group captured pieces by size and render with selection indicator
+        (for [sz [:large :medium :small]
+              :let [caps (get captured-by-size sz)]
+              :when (seq caps)]
+          ^{:key (str "cap-row-" (name sz))}
+          [:div.captured-row {:style (when (and is-me captured? (= size sz))
+                                       {:background "rgba(255, 215, 0, 0.2)"
+                                        :border-radius "4px"
+                                        :box-shadow "0 0 8px rgba(255, 215, 0, 0.4)"})}
+           (for [[idx cap-piece] (map-indexed vector caps)]
+             ^{:key (str "cap-" (name sz) "-" idx)}
+             [draw-stash-pyramid sz (:colour cap-piece) {:captured? true}])])])]))
 
 (defn stash-panel [position]
   "Renders stash panels for players on left or right side"
