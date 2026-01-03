@@ -320,7 +320,8 @@
     (let [over-ice (calculate-over-ice board)
           target-id (:target-id piece)]
       (when-let [info (get over-ice target-id)]
-        (and (= (:defender-owner info) player-id)
+        ;; defender-owner is a string from JSON, player-id is a keyword
+        (and (= (keyword (:defender-owner info)) player-id)
              (<= (piece-pips piece) (:excess info)))))))
 
 (defn get-hovered-piece
