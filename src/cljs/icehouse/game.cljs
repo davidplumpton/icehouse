@@ -683,8 +683,9 @@
                       zoom-active (:zoom-active @state/ui-state)
                       zoom-scale (if zoom-active 4 1)
                       ;; Scale coordinates back up if zoom was active (they were scaled down on mouse-down/move)
-                      final-x (* start-x zoom-scale)
-                      final-y (* start-y zoom-scale)
+                      ;; Round coordinates to integers (schema expects :int)
+                      final-x (js/Math.round (* start-x zoom-scale))
+                      final-y (js/Math.round (* start-y zoom-scale))
                       ;; Use locked angle when shift is held, otherwise calculate from position
                       angle (if shift-held
                               locked-angle

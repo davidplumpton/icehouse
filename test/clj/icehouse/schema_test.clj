@@ -88,8 +88,8 @@
         place-piece-msg {:type "place-piece"
                          :x 500
                          :y 375
-                         :size :small
-                         :orientation :standing
+                         :size "small"
+                         :orientation "standing"
                          :angle 0
                          :target-id nil
                          :captured false}]
