@@ -449,24 +449,6 @@
                     :timestamp (System/currentTimeMillis)
                     :elapsed-ms elapsed)))))
 
-(defn count-captured-by-size
-  "Count captured pieces of a given size"
-  [captured size]
-  (count (filter (utils/by-size size) captured)))
-
-(defn get-first-captured-by-size
-  "Get the first captured piece of a given size, or nil if none"
-  [captured size]
-  (first (filter (utils/by-size size) captured)))
-
-(defn remove-first-captured
-  "Remove the first captured piece of the given size from the list"
-  [captured size]
-  (let [idx (first (keep-indexed #(when ((utils/by-size size) %2) %1) captured))]
-    (if idx
-      (vec (concat (subvec captured 0 idx) (subvec captured (inc idx))))
-      captured)))
-
 (defn validate-placement
   "Validate piece placement, returns nil if valid or error message if invalid.
    If using-captured? is true, checks captured pieces instead of regular pieces."
@@ -476,14 +458,14 @@
    (let [player (get-in game [:players player-id])
          size (:size piece)
          remaining (if using-captured?
-                     (count-captured-by-size (:captured player) size)
+                     (utils/count-captured-by-size (:captured player) size)
                      (get-in player [:pieces size] 0))
          board (:board game)
          is-attacking? (utils/pointing? piece)
          ;; Ensure piece has player-id and colour for validation
          ;; For captured pieces, get the original colour; otherwise use player's colour
          piece-colour (if using-captured?
-                        (let [cap-piece (get-first-captured-by-size (:captured player) size)]
+                        (let [cap-piece (utils/get-captured-piece (:captured player) size)]
                           (or (:colour cap-piece) (:colour player)))
                         (:colour player))
          piece-with-owner (assoc piece
@@ -693,7 +675,7 @@
         ;; For captured pieces, use the original colour; for regular pieces, use player's colour
         piece-colour (if using-captured?
                        (let [captured (get-in game [:players player-id :captured])
-                             cap-piece (get-first-captured-by-size captured piece-size)]
+                             cap-piece (utils/get-captured-piece captured piece-size)]
                          (or (:colour cap-piece) player-colour))
                        player-colour)
         base-piece {:id (str (java.util.UUID/randomUUID))
@@ -723,7 +705,7 @@
                                        (update-in [room-id :board] refresh-all-targets))]
                    (if using-captured?
                      (update-in game-update [room-id :players player-id :captured]
-                                remove-first-captured (:size piece))
+                                utils/remove-first-captured (:size piece))
                      (update-in game-update [room-id :players player-id :pieces (:size piece)] dec))))))
 
 (defn handle-post-placement!

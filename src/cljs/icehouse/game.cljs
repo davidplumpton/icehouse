@@ -567,7 +567,7 @@
         preview-colour (if captured?
                          (let [player-data (get-in game [:players (keyword player-id)])
                                captured-pieces (or (:captured player-data) [])
-                               cap-piece (first (filter (utils/by-size size) captured-pieces))]
+                               cap-piece (utils/get-captured-piece captured-pieces size)]
                            (or (:colour cap-piece) player-colour))
                          player-colour)
         ;; When zoom is active, drag coords are in scaled space - convert to world coords for drawing
@@ -619,7 +619,7 @@
     (if use-captured?
       ;; Check captured pieces
       (let [captured (or (:captured player-data) [])]
-        (some (utils/by-size size) captured))
+        (pos? (utils/count-captured-by-size captured size)))
       ;; Check regular pieces
       (let [pieces (or (:pieces player-data) {})]
         (pos? (get pieces size 0))))))

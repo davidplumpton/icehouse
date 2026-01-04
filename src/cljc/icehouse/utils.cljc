@@ -50,6 +50,28 @@
   (= (keyword (:orientation piece)) :pointing))
 
 ;; =============================================================================
+;; Captured Piece Helpers
+;; =============================================================================
+
+(defn count-captured-by-size
+  "Count captured pieces of a given size"
+  [captured size]
+  (count (filter (by-size size) captured)))
+
+(defn get-captured-piece
+  "Get the first captured piece of a given size, or nil if none"
+  [captured size]
+  (first (filter (by-size size) captured)))
+
+(defn remove-first-captured
+  "Remove the first captured piece of the given size from the list"
+  [captured size]
+  (let [idx (first (keep-indexed #(when ((by-size size) %2) %1) captured))]
+    (if idx
+      (vec (concat (subvec captured 0 idx) (subvec captured (inc idx))))
+      captured)))
+
+;; =============================================================================
 ;; Format Helpers
 ;; =============================================================================
 

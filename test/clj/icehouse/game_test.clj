@@ -1,6 +1,7 @@
 (ns icehouse.game-test
   (:require [clojure.test :refer [deftest is testing]]
-            [icehouse.game :as game]))
+            [icehouse.game :as game]
+            [icehouse.utils :as utils]))
 
 (deftest initial-pieces-test
   (testing "initial-piece-counts has correct starting pieces"
@@ -690,45 +691,45 @@
 
 (deftest count-captured-by-size-test
   (testing "empty captured list"
-    (is (= 0 (game/count-captured-by-size [] :small))))
+    (is (= 0 (utils/count-captured-by-size [] :small))))
 
-  (testing "counts matching sizes"
+  (testing "counts correctly by size"
     (let [captured [{:size :small :colour "#ff0000"}
-                    {:size :medium :colour "#00ff00"}
-                    {:size :small :colour "#0000ff"}
-                    {:size :large :colour "#ff0000"}]]
-      (is (= 2 (game/count-captured-by-size captured :small)))
-      (is (= 1 (game/count-captured-by-size captured :medium)))
-      (is (= 1 (game/count-captured-by-size captured :large)))))
+                    {:size :medium :colour "#ff0000"}
+                    {:size :small :colour "#00ff00"}
+                    {:size :large :colour "#0000ff"}]]
+      (is (= 2 (utils/count-captured-by-size captured :small)))
+      (is (= 1 (utils/count-captured-by-size captured :medium)))
+      (is (= 1 (utils/count-captured-by-size captured :large)))))
 
-  (testing "returns 0 for missing size"
+  (testing "returns 0 when size not present"
     (let [captured [{:size :small :colour "#ff0000"}]]
-      (is (= 0 (game/count-captured-by-size captured :large))))))
+      (is (= 0 (utils/count-captured-by-size captured :large))))))
 
 (deftest remove-first-captured-test
   (testing "removes first matching piece"
     (let [captured [{:size :small :colour "#ff0000"}
                     {:size :medium :colour "#00ff00"}
                     {:size :small :colour "#0000ff"}]
-          result (game/remove-first-captured captured :small)]
+          result (utils/remove-first-captured captured :small)]
       (is (= 2 (count result)))
       (is (= {:size :medium :colour "#00ff00"} (first result)))
       (is (= {:size :small :colour "#0000ff"} (second result)))))
 
   (testing "returns unchanged if size not found"
     (let [captured [{:size :small :colour "#ff0000"}]
-          result (game/remove-first-captured captured :large)]
+          result (utils/remove-first-captured captured :large)]
       (is (= captured result))))
 
   (testing "empty list returns empty"
-    (is (= [] (game/remove-first-captured [] :small))))
+    (is (= [] (utils/remove-first-captured [] :small))))
 
   (testing "removes only first occurrence"
     (let [captured [{:size :large :colour "#111"}
                     {:size :small :colour "#222"}
                     {:size :small :colour "#333"}
                     {:size :small :colour "#444"}]
-          result (game/remove-first-captured captured :small)]
+          result (utils/remove-first-captured captured :small)]
       ;; Should remove the one with colour #222
       (is (= 3 (count result)))
       (is (= "#111" (:colour (first result))))
