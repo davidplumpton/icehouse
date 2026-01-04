@@ -86,8 +86,8 @@
           half (/ base-size 2)
           ;; Standing pieces don't rotate - they're viewed from above and look the same at any angle
           ;; Only pointing pieces use the angle for their attack direction
-          effective-angle (if (= (keyword orientation) :standing) 0 (or angle 0))
-          local-verts (if (= (keyword orientation) :standing)
+          effective-angle (if (utils/standing? piece) 0 (or angle 0))
+          local-verts (if (utils/standing? piece)
                         ;; Standing: square (axis-aligned, no rotation)
                         [[(- half) (- half)]
                          [half (- half)]
@@ -222,7 +222,7 @@
   [attacker target attacker-player-id]
   (and (not= (utils/normalize-player-id (:player-id target))
              (utils/normalize-player-id attacker-player-id))
-       (= (keyword (:orientation target)) :standing)
+       (utils/standing? target)
        (in-front-of? attacker target)))
 
 (defn valid-target?
@@ -276,7 +276,7 @@
 (defn attackers-by-target
   "Returns a map of target-id -> list of attackers targeting that piece"
   [board]
-  (let [pointing-pieces (filter #(and (= (keyword (:orientation %)) :pointing)
+  (let [pointing-pieces (filter #(and (utils/pointing? %)
                                       (:target-id %))
                                 board)]
     (group-by :target-id pointing-pieces)))
@@ -343,7 +343,7 @@
    Returns true if piece is an attacker in an over-iced situation where
    the current player owns the defender and the attacker's pips <= excess."
   [piece player-id board]
-  (when (and piece (= (keyword (:orientation piece)) :pointing))
+  (when (and piece (utils/pointing? piece))
     (let [over-ice (calculate-over-ice board)
           target-id (:target-id piece)]
       (when-let [info (get over-ice target-id)]
@@ -584,7 +584,7 @@
                 (if (and current-x current-y)
                   (calculate-angle start-x start-y current-x current-y)
                   0))
-        is-attacking? (= orientation :pointing)]
+        is-attacking? (utils/pointing? selected-piece)]
     ;; Draw a line showing the direction (only in normal mode)
     (when (and current-x current-y (not in-shift-mode?))
       (set! (.-strokeStyle ctx) "rgba(255,255,255,0.5)")
@@ -849,7 +849,7 @@
        (when-not has-size? " [NONE]")]
       [:span.separator " | "]
       [:span.current-mode
-       (if (= orientation :standing) "Defend (D)" "Attack (A)")]
+       (if (utils/standing? (:selected-piece ui)) "Defend (D)" "Attack (A)")]
       (when captured?
         [:span.captured-indicator {:style {:color theme/gold :margin-left "0.5rem"}}
          "[Captured]"])

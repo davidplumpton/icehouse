@@ -83,9 +83,9 @@
           half (/ base-size 2)
           ;; Standing pieces don't rotate - they're viewed from above and look the same at any angle
           ;; Only pointing pieces use the angle for their attack direction
-          effective-angle (if (= orientation :standing) 0 (or angle 0))
+          effective-angle (if (utils/standing? piece) 0 (or angle 0))
           ;; Local vertices relative to center
-          local-verts (if (= orientation :standing)
+          local-verts (if (utils/standing? piece)
                         ;; Standing: square (axis-aligned, no rotation)
                         [[(- half) (- half)]
                          [half (- half)]
@@ -330,7 +330,7 @@
                       (not= (:colour target) (:colour attacker))
                       (not= (utils/normalize-player-id (:player-id target))
                             (utils/normalize-player-id (:player-id attacker))))
-        is-standing (= (:orientation target) :standing)]
+        is-standing (utils/standing? target)]
     (if (and is-opponent is-standing)
       ;; Only check in-front-of? for standing opponent pieces
       (in-front-of? attacker target)
@@ -469,7 +469,7 @@
                      (count-captured-by-size (:captured player) size)
                      (get-in player [:pieces size] 0))
          board (:board game)
-         is-attacking? (= (:orientation piece) :pointing)
+         is-attacking? (utils/pointing? piece)
          ;; Ensure piece has player-id and colour for validation
          ;; For captured pieces, get the original colour; otherwise use player's colour
          piece-colour (if using-captured?
@@ -508,7 +508,7 @@
 (defn attackers-by-target
   "Returns a map of target-id -> list of attackers targeting that piece"
   [board]
-  (let [pointing-pieces (filter #(and (= (:orientation %) :pointing)
+  (let [pointing-pieces (filter #(and (utils/pointing? %)
                                       (:target-id %))
                                 board)]
     (group-by :target-id pointing-pieces)))
@@ -587,7 +587,7 @@
   "Get all standing (defender) pieces for a player"
   [board player-id]
   (filter #(and ((utils/by-player-id player-id) %)
-                (= (:orientation %) :standing))
+                (utils/standing? %))
           board))
 
 (defn in-icehouse?
@@ -624,7 +624,7 @@
          (if (contains? icehouse-players player-id)
            (assoc scores player-id 0)
            ;; Only standing (defending) pieces that aren't iced score points
-           (if (or (= (:orientation piece) :pointing)
+           (if (or (utils/pointing? piece)
                    (contains? iced (:id piece)))
              scores
              (let [points (piece-pips piece)]
@@ -696,7 +696,7 @@
                     :angle (:angle msg)
                     :target-id (:target-id msg)}]
     ;; Auto-assign target-id for attacking pieces if not provided
-    (if (and (= (:orientation base-piece) :pointing)
+    (if (and (utils/pointing? base-piece)
              (nil? (:target-id base-piece))
              game)
       (if-let [target (find-closest-target base-piece (:board game))]
@@ -770,7 +770,7 @@
       (nil? piece)
       "Piece not found"
 
-      (not= (:orientation piece) :pointing)
+      (not (utils/pointing? piece))
       "Can only capture attacking pieces"
 
       (not (:target-id piece))
