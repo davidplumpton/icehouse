@@ -233,6 +233,28 @@
     {:valid (filter #(within-range? attacker %) potential)
      :invalid (remove #(within-range? attacker %) potential)}))
 
+(defn distance
+  "Calculate distance between two points"
+  [[x1 y1] [x2 y2]]
+  (js/Math.sqrt (+ (* (- x2 x1) (- x2 x1)) (* (- y2 y1) (- y2 y1)))))
+
+(defn piece-center
+  "Get the center point of a piece"
+  [piece]
+  [(:x piece) (:y piece)])
+
+(defn find-closest-target
+  "Find the closest valid target for an attacking piece"
+  [attacker player-id board]
+  (let [{:keys [valid]} (find-targets-for-attack attacker player-id board)]
+    (when (seq valid)
+      (->> valid
+           (map (fn [t] {:target t
+                         :dist (distance (piece-center attacker) (piece-center t))}))
+           (sort-by :dist)
+           first
+           :target))))
+
 (defn find-piece-at
   "Find the piece at the given x,y position, or nil if none"
   [x y board]
@@ -540,10 +562,11 @@
               ;; Create preview attacker to find targets (use world coords)
               preview-attacker {:x draw-start-x :y draw-start-y :size size :orientation :pointing :angle angle}
               board (:board game)
-              {:keys [valid]} (find-targets-for-attack preview-attacker player-id board)]
-          ;; Highlight valid targets (green)
-          (doseq [target valid]
-            (draw-target-highlight ctx target true zoom-state))
+              ;; Only highlight the closest target (per Icehouse rules)
+              closest-target (find-closest-target preview-attacker player-id board)]
+          ;; Highlight closest target (green)
+          (when closest-target
+            (draw-target-highlight ctx closest-target true zoom-state))
           ;; Draw range line from tip
           (set! (.-strokeStyle ctx) "rgba(255,100,100,0.7)")
           (set-line-width ctx 3 zoom-state)
