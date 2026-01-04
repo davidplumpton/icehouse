@@ -173,6 +173,11 @@
    [:type [:enum "load-game"]]
    [:game-id uuid-string]])
 
+(def FinishMessage
+  "Client finish/end game message"
+  [:map
+   [:type [:enum "finish"]]])
+
 (def ClientMessage
   "Union of all client message types"
   [:or
@@ -183,6 +188,7 @@
    ReadyMessage
    PlacePieceMessage
    CapturePieceMessage
+   FinishMessage
    ListGamesMessage
    LoadGameMessage])
 

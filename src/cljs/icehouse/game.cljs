@@ -989,17 +989,18 @@
               :align-items "center"
               :gap "0.5rem"}}
      [:button.finish-btn
-      {:style {:padding "0.25rem 0.75rem"
-               :font-size "0.9rem"
+      {:style {:padding "0.5rem 1rem"
+               :font-size "1rem"
+               :font-weight "bold"
                :cursor (if i-finished? "default" "pointer")
-               :background (if i-finished? theme/green theme/button-inactive)
+               :background (if i-finished? theme/green "#4a4a5e")
                :color "#fff"
-               :border "none"
-               :border-radius "4px"
+               :border "2px solid #6a6a7e"
+               :border-radius "6px"
                :opacity (if i-finished? 0.8 1)}
        :disabled i-finished?
        :on-click #(when-not i-finished? (ws/finish!))}
-      (if i-finished? "Finished" "Finish")]
+      (if i-finished? "✓ Finished" "End Game")]
      (when (pos? finished-count)
        [:span.finish-status
         {:style {:font-size "0.8rem"
