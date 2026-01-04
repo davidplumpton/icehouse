@@ -84,18 +84,22 @@
   (when (and piece x y)
     (let [base-size (get piece-sizes (keyword size) default-piece-size)
           half (/ base-size 2)
-          angle (or angle 0)
+          ;; Standing pieces don't rotate - they're viewed from above and look the same at any angle
+          ;; Only pointing pieces use the angle for their attack direction
+          effective-angle (if (= (keyword orientation) :standing) 0 (or angle 0))
           local-verts (if (= (keyword orientation) :standing)
+                        ;; Standing: square (axis-aligned, no rotation)
                         [[(- half) (- half)]
                          [half (- half)]
                          [half half]
                          [(- half) half]]
+                        ;; Pointing: triangle
                         (let [half-width (* base-size tip-offset-ratio)]
                           [[half-width 0]
                            [(- half-width) (- half)]
                            [(- half-width) half]]))]
       (mapv (fn [[lx ly]]
-              (let [[rx ry] (rotate-point [lx ly] angle)]
+              (let [[rx ry] (rotate-point [lx ly] effective-angle)]
                 [(+ x rx) (+ y ry)]))
             local-verts))))
 

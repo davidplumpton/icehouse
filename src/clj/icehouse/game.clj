@@ -81,10 +81,12 @@
   (when (and piece x y)
     (let [base-size (get piece-sizes size default-piece-size)
           half (/ base-size 2)
-          angle (or angle 0)
+          ;; Standing pieces don't rotate - they're viewed from above and look the same at any angle
+          ;; Only pointing pieces use the angle for their attack direction
+          effective-angle (if (= orientation :standing) 0 (or angle 0))
           ;; Local vertices relative to center
           local-verts (if (= orientation :standing)
-                        ;; Standing: square
+                        ;; Standing: square (axis-aligned, no rotation)
                         [[(- half) (- half)]
                          [half (- half)]
                          [half half]
@@ -96,7 +98,7 @@
                            [(- half-width) half]]))]
       ;; Rotate and translate to world coordinates
       (mapv (fn [[lx ly]]
-              (let [[rx ry] (rotate-point [lx ly] angle)]
+              (let [[rx ry] (rotate-point [lx ly] effective-angle)]
                 [(+ x rx) (+ y ry)]))
             local-verts))))
 
