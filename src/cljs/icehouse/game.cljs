@@ -509,89 +509,107 @@
     (.stroke ctx)
     (.restore ctx)))
 
-(defn draw-with-preview [ctx game drag-state selected-piece player-colour hover-pos player-id zoom-state]
-  "Draw the board and optionally a preview of the piece being placed"
-  ;; Apply zoom transform if active
+(defn apply-zoom
+  "Apply zoom transformation to the context"
+  [ctx zoom-state]
   (when zoom-state
     (let [{:keys [center-x center-y scale]} zoom-state]
       (.save ctx)
       ;; Translate to zoom center, scale, translate back
       (.translate ctx center-x center-y)
       (.scale ctx scale scale)
-      (.translate ctx (- center-x) (- center-y))))
+      (.translate ctx (- center-x) (- center-y)))))
+
+(defn restore-zoom
+  "Restore context after zoom transformation"
+  [ctx zoom-state]
+  (when zoom-state
+    (.restore ctx)))
+
+(defn draw-attack-preview
+  "Draw attack range indicator and target highlights for an attacking piece being placed"
+  [ctx game x y angle size player-id zoom-state]
+  (let [base-size (get piece-sizes size default-piece-size)
+        tip-offset (* base-size tip-offset-ratio)
+        tip-x (+ x (* (js/Math.cos angle) tip-offset))
+        tip-y (+ y (* (js/Math.sin angle) tip-offset))
+        ;; Attack range extends piece height from tip (height = 2 * tip-offset-ratio * base-size)
+        piece-height (* 2 tip-offset-ratio base-size)
+        range-end-x (+ tip-x (* (js/Math.cos angle) piece-height))
+        range-end-y (+ tip-y (* (js/Math.sin angle) piece-height))
+        ;; Create preview attacker to find targets (use world coords)
+        preview-attacker {:x x :y y :size size :orientation :pointing :angle angle}
+        board (:board game)
+        ;; Only highlight the closest target (per Icehouse rules)
+        closest-target (find-closest-target preview-attacker player-id board)]
+    ;; Highlight closest target (green)
+    (when closest-target
+      (draw-target-highlight ctx closest-target true zoom-state))
+    ;; Draw range line from tip
+    (set! (.-strokeStyle ctx) "rgba(255,100,100,0.7)")
+    (set-line-width ctx 3 zoom-state)
+    (set! (.-lineCap ctx) "round")
+    (.beginPath ctx)
+    (.moveTo ctx tip-x tip-y)
+    (.lineTo ctx range-end-x range-end-y)
+    (.stroke ctx)
+    ;; Draw range end marker
+    (.beginPath ctx)
+    (.arc ctx range-end-x range-end-y 5 0 (* 2 js/Math.PI))
+    (.stroke ctx)))
+
+(defn draw-drag-preview
+  "Draw the preview of the piece being dragged/placed"
+  [ctx game drag-state selected-piece player-colour player-id zoom-state]
+  (let [{:keys [start-x start-y current-x current-y locked-angle]} drag-state
+        {:keys [size orientation captured?]} selected-piece
+        ;; For captured pieces, use the captured piece's original colour
+        preview-colour (if captured?
+                         (let [player-data (get-in game [:players (keyword player-id)])
+                               captured-pieces (or (:captured player-data) [])
+                               cap-piece (first (filter (utils/by-size size) captured-pieces))]
+                           (or (:colour cap-piece) player-colour))
+                         player-colour)
+        ;; When zoom is active, drag coords are in scaled space - convert to world coords for drawing
+        zoom-scale (if zoom-state (:scale zoom-state) 1)
+        draw-start-x (* start-x zoom-scale)
+        draw-start-y (* start-y zoom-scale)
+        draw-current-x (* current-x zoom-scale)
+        draw-current-y (* current-y zoom-scale)
+        ;; In shift mode (position adjustment), start equals current, so use locked-angle
+        ;; In normal mode, calculate angle from start to current
+        in-shift-mode? (and (= start-x current-x) (= start-y current-y))
+        angle (if in-shift-mode?
+                (or locked-angle 0)
+                (if (and current-x current-y)
+                  (calculate-angle start-x start-y current-x current-y)
+                  0))
+        is-attacking? (= orientation :pointing)]
+    ;; Draw a line showing the direction (only in normal mode)
+    (when (and current-x current-y (not in-shift-mode?))
+      (set! (.-strokeStyle ctx) "rgba(255,255,255,0.5)")
+      (set-line-width ctx 2 zoom-state)
+      (.beginPath ctx)
+      (.moveTo ctx draw-start-x draw-start-y)
+      (.lineTo ctx draw-current-x draw-current-y)
+      (.stroke ctx))
+    ;; Draw attack range indicator and target highlights for attacking pieces
+    (when (and is-attacking? current-x current-y)
+      (draw-attack-preview ctx game draw-start-x draw-start-y angle size player-id zoom-state))
+    ;; Draw preview piece with transparency
+    (.save ctx)
+    (set! (.-globalAlpha ctx) preview-alpha)
+    (draw-pyramid ctx draw-start-x draw-start-y size preview-colour orientation angle {:zoom-state zoom-state})
+    (.restore ctx)))
+
+(defn draw-with-preview [ctx game drag-state selected-piece player-colour hover-pos player-id zoom-state]
+  "Draw the board and optionally a preview of the piece being placed"
+  (apply-zoom ctx zoom-state)
   (draw-board ctx game hover-pos player-id {:zoom-state zoom-state})
   ;; Draw preview if dragging
   (when drag-state
-    (let [{:keys [start-x start-y current-x current-y locked-angle]} drag-state
-          {:keys [size orientation captured?]} selected-piece
-          ;; For captured pieces, use the captured piece's original colour
-          preview-colour (if captured?
-                           (let [player-data (get-in game [:players (keyword player-id)])
-                                 captured-pieces (or (:captured player-data) [])
-                                 cap-piece (first (filter (utils/by-size size) captured-pieces))]
-                             (or (:colour cap-piece) player-colour))
-                           player-colour)
-          base-size (get piece-sizes size default-piece-size)
-          ;; When zoom is active, drag coords are in scaled space - convert to world coords for drawing
-          zoom-scale (if zoom-state (:scale zoom-state) 1)
-          draw-start-x (* start-x zoom-scale)
-          draw-start-y (* start-y zoom-scale)
-          draw-current-x (* current-x zoom-scale)
-          draw-current-y (* current-y zoom-scale)
-          ;; In shift mode (position adjustment), start equals current, so use locked-angle
-          ;; In normal mode, calculate angle from start to current
-          in-shift-mode? (and (= start-x current-x) (= start-y current-y))
-          angle (if in-shift-mode?
-                  (or locked-angle 0)
-                  (if (and current-x current-y)
-                    (calculate-angle start-x start-y current-x current-y)
-                    0))
-          is-attacking? (= orientation :pointing)]
-      ;; Draw a line showing the direction (only in normal mode)
-      (when (and current-x current-y (not in-shift-mode?))
-        (set! (.-strokeStyle ctx) "rgba(255,255,255,0.5)")
-        (set-line-width ctx 2 zoom-state)
-        (.beginPath ctx)
-        (.moveTo ctx draw-start-x draw-start-y)
-        (.lineTo ctx draw-current-x draw-current-y)
-        (.stroke ctx))
-      ;; Draw attack range indicator and target highlights for attacking pieces
-      (when (and is-attacking? current-x current-y)
-        (let [tip-offset (* base-size tip-offset-ratio)
-              tip-x (+ draw-start-x (* (js/Math.cos angle) tip-offset))
-              tip-y (+ draw-start-y (* (js/Math.sin angle) tip-offset))
-              ;; Attack range extends piece height from tip (height = 2 * tip-offset-ratio * base-size)
-              piece-height (* 2 tip-offset-ratio base-size)
-              range-end-x (+ tip-x (* (js/Math.cos angle) piece-height))
-              range-end-y (+ tip-y (* (js/Math.sin angle) piece-height))
-              ;; Create preview attacker to find targets (use world coords)
-              preview-attacker {:x draw-start-x :y draw-start-y :size size :orientation :pointing :angle angle}
-              board (:board game)
-              ;; Only highlight the closest target (per Icehouse rules)
-              closest-target (find-closest-target preview-attacker player-id board)]
-          ;; Highlight closest target (green)
-          (when closest-target
-            (draw-target-highlight ctx closest-target true zoom-state))
-          ;; Draw range line from tip
-          (set! (.-strokeStyle ctx) "rgba(255,100,100,0.7)")
-          (set-line-width ctx 3 zoom-state)
-          (set! (.-lineCap ctx) "round")
-          (.beginPath ctx)
-          (.moveTo ctx tip-x tip-y)
-          (.lineTo ctx range-end-x range-end-y)
-          (.stroke ctx)
-          ;; Draw range end marker
-          (.beginPath ctx)
-          (.arc ctx range-end-x range-end-y 5 0 (* 2 js/Math.PI))
-          (.stroke ctx)))
-      ;; Draw preview piece with transparency
-       (.save ctx)
-       (set! (.-globalAlpha ctx) preview-alpha)
-       (draw-pyramid ctx draw-start-x draw-start-y size preview-colour orientation angle {:zoom-state zoom-state})
-       (.restore ctx)))
-  ;; Restore zoom transform if it was applied
-  (when zoom-state
-    (.restore ctx)))
+    (draw-drag-preview ctx game drag-state selected-piece player-colour player-id zoom-state))
+  (restore-zoom ctx zoom-state))
 
 (defn has-pieces-of-size? [size use-captured?]
   "Returns true if current player has pieces of the given size to place"
@@ -657,7 +675,7 @@
                                (:drag ui)
                                (:selected-piece ui)
                                (:colour player)
-                               hover
+                               (:hover-pos ui)
                                (:id player)
                                zoom-state))))
 
