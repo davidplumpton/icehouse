@@ -82,6 +82,13 @@
   [speed]
   (swap! state/replay-state assoc :speed speed))
 
+(defn go-to-move!
+  "Jump to a specific move index"
+  [move-idx]
+  (when-let [replay @state/replay-state]
+    (let [max-move (dec (count (get-in replay [:record :moves])))]
+      (swap! state/replay-state assoc :current-move (max -1 (min move-idx max-move))))))
+
 (defn close-replay!
   "Close the replay view"
   []
@@ -146,6 +153,18 @@
          [:div {:style {:margin-bottom "10px" :color "#aaa"}}
           "Move " (inc current-move) " / " total-moves
           " - " (utils/format-time current-time) " / " (utils/format-time (:duration-ms record))]
+
+         ;; Time slider
+         [:div {:style {:margin "15px auto" :width "80%" :max-width "600px"}}
+          [:input {:type "range"
+                   :min -1
+                   :max (dec total-moves)
+                   :value current-move
+                   :on-change #(go-to-move! (js/parseInt (.. % -target -value)))
+                   :style {:width "100%"
+                           :height "8px"
+                           :cursor "pointer"
+                           :accent-color theme/green}}]]
 
          ;; Control buttons
          [:div {:style {:display "flex" :justify-content "center" :gap "10px"}}
