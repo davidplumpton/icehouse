@@ -24,10 +24,12 @@
   (let [moves (take (inc move-idx) (:moves record))]
     (reduce
      (fn [board move]
-       (case (:type move)
-         :place-piece (conj board (:piece move))
-         :capture-piece (vec (remove (utils/by-id (:piece-id move)) board))
-         board))
+       ;; Handle both keyword and string types (keywords from EDN, strings from JSON)
+       (let [move-type (keyword (:type move))]
+         (case move-type
+           :place-piece (conj board (:piece move))
+           :capture-piece (vec (remove (utils/by-id (:piece-id move)) board))
+           board)))
      []
      moves)))
 
