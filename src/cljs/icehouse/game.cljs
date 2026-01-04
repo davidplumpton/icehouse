@@ -737,7 +737,7 @@
                               (calculate-angle start-x start-y current-x current-y)
                               (or locked-angle 0))]
                   (ws/place-piece! final-x final-y size orientation angle nil captured?)
-                  (swap! state/ui-state assoc :drag nil :zoom-active false))))
+                  (swap! state/ui-state assoc :drag nil))))
             :on-mouse-leave
             (fn [e]
               (swap! state/ui-state assoc :hover-pos nil :drag nil))}]))})))
