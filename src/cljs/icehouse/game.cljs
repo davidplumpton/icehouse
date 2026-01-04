@@ -271,7 +271,7 @@
 (defn find-piece-by-id
   "Find a piece by its ID"
   [board id]
-  (first (filter #(= (:id %) id) board)))
+  (first (filter (utils/by-id id) board)))
 
 (defn attackers-by-target
   "Returns a map of target-id -> list of attackers targeting that piece"
@@ -528,7 +528,7 @@
           preview-colour (if captured?
                            (let [player-data (get-in game [:players (keyword player-id)])
                                  captured-pieces (or (:captured player-data) [])
-                                 cap-piece (first (filter #(= (keyword (:size %)) size) captured-pieces))]
+                                 cap-piece (first (filter (utils/by-size size) captured-pieces))]
                              (or (:colour cap-piece) player-colour))
                            player-colour)
           base-size (get piece-sizes size default-piece-size)
@@ -601,7 +601,7 @@
     (if use-captured?
       ;; Check captured pieces
       (let [captured (or (:captured player-data) [])]
-        (some #(= (keyword (:size %)) size) captured))
+        (some (utils/by-size size) captured))
       ;; Check regular pieces
       (let [pieces (or (:pieces player-data) {})]
         (pos? (get pieces size 0))))))

@@ -442,17 +442,17 @@
 (defn count-captured-by-size
   "Count captured pieces of a given size"
   [captured size]
-  (count (filter #(= (:size %) size) captured)))
+  (count (filter (utils/by-size size) captured)))
 
 (defn get-first-captured-by-size
   "Get the first captured piece of a given size, or nil if none"
   [captured size]
-  (first (filter #(= (:size %) size) captured)))
+  (first (filter (utils/by-size size) captured)))
 
 (defn remove-first-captured
   "Remove the first captured piece of the given size from the list"
   [captured size]
-  (let [idx (first (keep-indexed #(when (= (:size %2) size) %1) captured))]
+  (let [idx (first (keep-indexed #(when ((utils/by-size size) %2) %1) captured))]
     (if idx
       (vec (concat (subvec captured 0 idx) (subvec captured (inc idx))))
       captured)))
@@ -519,7 +519,7 @@
   (reduce + (map piece-pips attackers)))
 
 (defn find-piece-by-id [board id]
-  (first (filter #(= (:id %) id) board)))
+  (first (filter (utils/by-id id) board)))
 
 (defn calculate-attack-stats
   "Calculate attacker statistics for all targets on the board.
@@ -581,14 +581,12 @@
 (defn pieces-placed-by-player
   "Count pieces placed by a player"
   [board player-id]
-  (count (filter #(= (utils/normalize-player-id (:player-id %))
-                     (utils/normalize-player-id player-id)) board)))
+  (count (filter (utils/by-player-id player-id) board)))
 
 (defn player-defenders
   "Get all standing (defender) pieces for a player"
   [board player-id]
-  (filter #(and (= (utils/normalize-player-id (:player-id %))
-                   (utils/normalize-player-id player-id))
+  (filter #(and ((utils/by-player-id player-id) %)
                 (= (:orientation %) :standing))
           board))
 

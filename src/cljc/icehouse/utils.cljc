@@ -22,6 +22,27 @@
        (keyword? player-id) player-id
        :else (keyword player-id))))
 
+;; =============================================================================
+;; Filter Helpers
+;; =============================================================================
+
+(defn by-field [field value]
+  (fn [item] (= (get item field) value)))
+
+(defn by-id [id]
+  (by-field :id id))
+
+(defn by-size [size]
+  (fn [item] (= (keyword (:size item)) (keyword size))))
+
+(defn by-player-id [player-id]
+  (let [normalized (normalize-player-id player-id)]
+    (fn [item] (= (normalize-player-id (:player-id item)) normalized))))
+
+;; =============================================================================
+;; Format Helpers
+;; =============================================================================
+
 (defn format-time
   "Format milliseconds as MM:SS"
   [ms]
