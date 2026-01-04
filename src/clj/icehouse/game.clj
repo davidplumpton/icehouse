@@ -674,11 +674,10 @@
      :icehouse-players (vec icehouse-players)
      :winner winner}))
 
-(defn handle-place-piece [clients channel msg]
-  (let [room-id (get-in @clients [channel :room-id])
-        player-id (player-id-from-channel channel)
-        game (get @games room-id)
-        player-colour (get-in game [:players player-id :colour])
+(defn construct-piece-for-placement
+  "Construct the piece map for placement, handling auto-targeting and colour assignment"
+  [game player-id msg]
+  (let [player-colour (get-in game [:players player-id :colour])
         using-captured? (boolean (:captured msg))
         piece-size (keyword (:size msg))
         ;; For captured pieces, use the original colour; for regular pieces, use player's colour
@@ -695,51 +694,69 @@
                     :size piece-size
                     :orientation (keyword (:orientation msg))
                     :angle (:angle msg)
-                    :target-id (:target-id msg)}
-        ;; Auto-assign target-id for attacking pieces if not provided
-        piece (if (and (= (:orientation base-piece) :pointing)
-                       (nil? (:target-id base-piece))
-                       game)
-                (if-let [target (find-closest-target base-piece (:board game))]
-                  (assoc base-piece :target-id (:id target))
-                  base-piece)
-                base-piece)
-        error (when game (validate-placement game player-id piece using-captured?))]
-    (if (and game (nil? error))
+                    :target-id (:target-id msg)}]
+    ;; Auto-assign target-id for attacking pieces if not provided
+    (if (and (= (:orientation base-piece) :pointing)
+             (nil? (:target-id base-piece))
+             game)
+      (if-let [target (find-closest-target base-piece (:board game))]
+        (assoc base-piece :target-id (:id target))
+        base-piece)
+      base-piece)))
+
+(defn apply-placement!
+  "Update game state with placed piece and decrement stash/captured counts"
+  [room-id player-id piece using-captured?]
+  (swap! games (fn [games-map]
+                 (let [game-update (-> games-map
+                                       (update-in [room-id :board] conj piece))]
+                   (if using-captured?
+                     (update-in game-update [room-id :players player-id :captured]
+                                remove-first-captured (:size piece))
+                     (update-in game-update [room-id :players player-id :pieces (:size piece)] dec))))))
+
+(defn handle-post-placement!
+  "Handle side effects after placement: recording, broadcasting, game over check"
+  [clients room-id player-id piece using-captured?]
+  ;; Record the move for replay
+  (record-move! room-id {:type :place-piece
+                         :player-id player-id
+                         :piece piece
+                         :using-captured? using-captured?})
+  (let [updated-game (get @games room-id)]
+    (utils/broadcast-room! clients room-id
+                           {:type msg/piece-placed
+                            :piece piece
+                            :game updated-game})
+    (when (game-over? updated-game)
+      (let [board (:board updated-game)
+            options (get updated-game :options {})
+            over-ice (calculate-over-ice board)
+            icehouse-players (calculate-icehouse-players board options)
+            end-reason (if (all-pieces-placed? updated-game)
+                         :all-pieces-placed
+                         :time-up)
+            record (build-game-record updated-game end-reason)]
+        ;; Save the game record
+        (storage/save-game-record! record)
+        (utils/broadcast-room! clients room-id
+                               {:type msg/game-over
+                                :game-id (:game-id updated-game)
+                                :scores (calculate-scores updated-game)
+                                :over-ice over-ice
+                                :icehouse-players (vec icehouse-players)})))))
+
+(defn handle-place-piece [clients channel msg]
+  (let [room-id (get-in @clients [channel :room-id])
+        player-id (player-id-from-channel channel)
+        game (get @games room-id)
+        using-captured? (boolean (:captured msg))
+        piece (when game (construct-piece-for-placement game player-id msg))
+        error (when piece (validate-placement game player-id piece using-captured?))]
+    (if (and piece (nil? error))
       (do
-        (swap! games update-in [room-id :board] conj piece)
-        ;; Decrement from captured or regular pieces
-        (if using-captured?
-          (swap! games update-in [room-id :players player-id :captured]
-                 remove-first-captured (:size piece))
-          (swap! games update-in [room-id :players player-id :pieces (:size piece)] dec))
-        ;; Record the move for replay
-        (record-move! room-id {:type :place-piece
-                               :player-id player-id
-                               :piece piece
-                               :using-captured? using-captured?})
-        (let [updated-game (get @games room-id)]
-          (utils/broadcast-room! clients room-id
-                                 {:type msg/piece-placed
-                                  :piece piece
-                                  :game updated-game})
-          (when (game-over? updated-game)
-            (let [board (:board updated-game)
-                  options (get updated-game :options {})
-                  over-ice (calculate-over-ice board)
-                  icehouse-players (calculate-icehouse-players board options)
-                  end-reason (if (all-pieces-placed? updated-game)
-                               :all-pieces-placed
-                               :time-up)
-                  record (build-game-record updated-game end-reason)]
-              ;; Save the game record
-              (storage/save-game-record! record)
-              (utils/broadcast-room! clients room-id
-                                     {:type msg/game-over
-                                      :game-id (:game-id updated-game)
-                                      :scores (calculate-scores updated-game)
-                                      :over-ice over-ice
-                                      :icehouse-players (vec icehouse-players)})))))
+        (apply-placement! room-id player-id piece using-captured?)
+        (handle-post-placement! clients room-id player-id piece using-captured?))
       (utils/send-msg! channel {:type msg/error :message (or error "Invalid game state")}))))
 
 (defn validate-capture
