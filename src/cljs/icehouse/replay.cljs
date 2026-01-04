@@ -7,6 +7,13 @@
             [icehouse.game :as game]))
 
 ;; =============================================================================
+;; Replay Constants
+;; =============================================================================
+
+(def replay-speeds [0.5 1 2 4])
+(def replay-tick-ms 500)
+
+;; =============================================================================
 ;; Board Reconstruction
 ;; =============================================================================
 
@@ -150,7 +157,7 @@
          ;; Speed controls
          [:div {:style {:margin-top "10px"}}
           [:span {:style {:color "#aaa" :margin-right "10px"}} "Speed:"]
-          (for [s [0.5 1 2 4]]
+          (for [s replay-speeds]
             ^{:key s}
             [:button.speed-btn {:on-click #(set-speed! s)
                                 :style {:background (if (= speed s) theme/green theme/button-inactive)
@@ -264,7 +271,7 @@
      {:component-did-mount
       (fn [_]
         (reset! timer-ref
-                (js/setInterval auto-play-tick! 500)))
+                (js/setInterval auto-play-tick! replay-tick-ms)))
 
       :component-will-unmount
       (fn [_]

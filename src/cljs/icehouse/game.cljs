@@ -44,6 +44,8 @@
 (def preview-alpha 0.6)            ;; Transparency for piece preview
 (def direction-line-alpha 0.5)     ;; Transparency for direction indicator line
 (def range-indicator-alpha 0.7)    ;; Transparency for attack range indicator
+(def zoom-scale 4)                 ;; Scale factor for zoom mode
+(def min-line-width 0.5)           ;; Minimum line width for visibility when zoomed
 
 ;; Game rules
 (def attack-unlock-threshold 2)    ;; Number of pieces before attacking is allowed
@@ -60,8 +62,8 @@
         (if zoom-state
           (let [{:keys [scale]} zoom-state
                 scaled-width (/ width scale)]
-            ;; Ensure minimum width of 0.5 for visibility when zoomed
-            (max 0.5 scaled-width))
+            ;; Ensure minimum width for visibility when zoomed
+            (max min-line-width scaled-width))
           width)))
 
 (defn calculate-angle
@@ -656,12 +658,12 @@
                 ;; When not dragging, zoom center should be on hover position
                 ;; Drag coordinates are stored in scaled space, so scale them back up for zoom center
                 zoom-center-x (if drag
-                                (* (:start-x drag) (if zoom? 4 1))
+                                (* (:start-x drag) (if zoom? zoom-scale 1))
                                 (if-let [hover (:hover-pos ui)]
                                   (:x hover)
                                   (/ canvas-width 2)))
                 zoom-center-y (if drag
-                                (* (:start-y drag) (if zoom? 4 1))
+                                (* (:start-y drag) (if zoom? zoom-scale 1))
                                 (if-let [hover (:hover-pos ui)]
                                   (:y hover)
                                   (/ canvas-height 2)))
@@ -669,7 +671,7 @@
                 zoom-state (when zoom?
                              {:center-x zoom-center-x
                               :center-y zoom-center-y
-                              :scale 4})]
+                              :scale zoom-scale})]
             (draw-with-preview ctx
                                @state/game-state
                                (:drag ui)
@@ -695,10 +697,10 @@
               (let [{:keys [x y]} (get-canvas-coords e)
                     {:keys [size captured?]} (:selected-piece @state/ui-state)
                     zoom-active (:zoom-active @state/ui-state)
-                    zoom-scale (if zoom-active 4 1)
+                    actual-zoom-scale (if zoom-active zoom-scale 1)
                     ;; Scale down position when zoomed to account for canvas scaling
-                    adjusted-x (if zoom-active (/ x zoom-scale) x)
-                    adjusted-y (if zoom-active (/ y zoom-scale) y)]
+                    adjusted-x (if zoom-active (/ x actual-zoom-scale) x)
+                    adjusted-y (if zoom-active (/ y actual-zoom-scale) y)]
                 ;; Only start drag if player has pieces of this size
                 (when (has-pieces-of-size? size captured?)
                   (swap! state/ui-state assoc :drag {:start-x adjusted-x :start-y adjusted-y
@@ -710,10 +712,10 @@
               (let [{:keys [x y]} (get-canvas-coords e)
                     shift-held (.-shiftKey e)
                     zoom-active (:zoom-active @state/ui-state)
-                    zoom-scale (if zoom-active 4 1)
+                    actual-zoom-scale (if zoom-active zoom-scale 1)
                     ;; Scale down movement when zoomed to account for canvas scaling
-                    adjusted-x (if zoom-active (/ x zoom-scale) x)
-                    adjusted-y (if zoom-active (/ y zoom-scale) y)]
+                    adjusted-x (if zoom-active (/ x actual-zoom-scale) x)
+                    adjusted-y (if zoom-active (/ y actual-zoom-scale) y)]
                 ;; Always update hover position for capture detection (use original unscaled coords)
                 (swap! state/ui-state assoc :hover-pos {:x x :y y})
                 ;; Update drag state if dragging
@@ -743,11 +745,11 @@
                       {:keys [size orientation captured?]} (:selected-piece @state/ui-state)
                       shift-held (.-shiftKey e)
                       zoom-active (:zoom-active @state/ui-state)
-                      zoom-scale (if zoom-active 4 1)
+                      actual-zoom-scale (if zoom-active zoom-scale 1)
                       ;; Scale coordinates back up if zoom was active (they were scaled down on mouse-down/move)
                       ;; Round coordinates to integers (schema expects :int)
-                      final-x (js/Math.round (* start-x zoom-scale))
-                      final-y (js/Math.round (* start-y zoom-scale))
+                      final-x (js/Math.round (* start-x actual-zoom-scale))
+                      final-y (js/Math.round (* start-y actual-zoom-scale))
                       ;; Use locked angle if available, otherwise calculate from position
                       ;; locked-angle is set during dragging and preserved through zoom transforms
                       ;; Only recalculate if there's actual distance between start and current
@@ -810,8 +812,7 @@
       "Escape" (swap! state/ui-state assoc :drag nil :show-help false :zoom-active false)
       "?" (swap! state/ui-state update :show-help not)
       ("z" "Z") (let [drag (:drag @state/ui-state)
-                      currently-zoomed (:zoom-active @state/ui-state)
-                      zoom-scale 4]
+                      currently-zoomed (:zoom-active @state/ui-state)]
                   (if drag
                     ;; Transform drag coordinates when toggling zoom mid-drag
                     (let [{:keys [start-x start-y current-x current-y last-x last-y locked-angle]} drag
@@ -855,7 +856,7 @@
          "[Captured]"])
       (when zoom?
         [:span.zoom-indicator {:style {:color "#00ff00" :margin-left "0.5rem"}}
-         "[ZOOM 4x]"])]
+         (str "[ZOOM " zoom-scale "x]")])]
      [:div.hotkey-hint
       (cond
         (and (not attack-allowed) has-captured)
@@ -1098,7 +1099,7 @@
         [:tr [:td {:style {:padding "0.5rem" :color theme/gold}} "C"]
          [:td {:style {:padding "0.5rem"}} "Capture piece / Toggle captured mode"]]
         [:tr [:td {:style {:padding "0.5rem" :color theme/gold}} "Z"]
-         [:td {:style {:padding "0.5rem"}} "Toggle 4x zoom for fine placement"]]
+         [:td {:style {:padding "0.5rem"}} (str "Toggle " zoom-scale "x zoom for fine placement")]]
         [:tr [:td {:style {:padding "0.5rem" :color theme/gold}} "Shift + Drag"]
          [:td {:style {:padding "0.5rem"}} "Adjust position without changing angle"]]
         [:tr [:td {:style {:padding "0.5rem" :color theme/gold}} "Escape"]

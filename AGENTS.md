@@ -40,4 +40,5 @@ bd sync               # Sync with git
 - Always `bd sync` before committing
 - Commit between finishing one beads issue and starting another
 - Use jj commit with a description, don't use jj new with a description
+- Add comments to newly created methods so their purpose is easy to understand later
 

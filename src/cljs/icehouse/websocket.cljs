@@ -7,6 +7,13 @@
 (defonce ws (atom nil))
 
 ;; =============================================================================
+;; Constants
+;; =============================================================================
+
+(def reconnect-timeout-ms 3000)
+(def error-message-timeout-ms 3000)
+
+;; =============================================================================
 ;; Validation Helpers
 ;; =============================================================================
 
@@ -105,8 +112,8 @@
         (do
           (js/console.log "Error from server:" (:message data))
           (reset! state/error-message (:message data))
-          ;; Auto-clear after 3 seconds
-          (js/setTimeout #(reset! state/error-message nil) 3000))
+          ;; Auto-clear after timeout
+          (js/setTimeout #(reset! state/error-message nil) error-message-timeout-ms))
 
         (js/console.log "Unknown message:" msg-type))))
     (catch js/Error e
@@ -131,7 +138,7 @@
           (fn [_]
             (js/console.log "WebSocket disconnected")
             (reset! state/ws-status :disconnected)
-            (js/setTimeout connect! 3000)))
+            (js/setTimeout connect! reconnect-timeout-ms)))
 
     (set! (.-onerror socket)
           (fn [e]
