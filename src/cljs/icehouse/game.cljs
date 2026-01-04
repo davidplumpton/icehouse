@@ -1051,8 +1051,8 @@
                 (when in-icehouse?
                   [:span {:style {:color theme/red :margin-left "0.5rem" :font-size "0.8em"}}
                    "(Icehouse!)"])]
-               [:td {:style {:text-align "right" :padding "0.5rem" :font-size "1.2em"}}
-                score]]))]]
+               [:td {:style {:text-align "right" :padding "0.5rem" :font-size "1.2em" :color "#333"}}
+                (str score)]]))]]
         [:div {:style {:display "flex" :flex-direction "column" :gap "0.5rem" :margin-top "1rem"}}
          [:button
           {:style {:padding "0.5rem 2rem"

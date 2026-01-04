@@ -124,13 +124,13 @@
       (is (= 3 (get scores "alice")))  ; 1 + 2 = 3
       (is (= 3 (get scores "bob")))))  ; 3
 
-  (testing "attacking pieces don't score"
+  (testing "successful attacking pieces score points"
     (let [game {:board [{:id "a1" :player-id "bob" :size :medium :orientation :pointing :target-id "d1"}
                         {:id "d1" :player-id "alice" :size :small :orientation :standing}]}
           scores (game/calculate-scores game)]
       ;; Medium (2 pips) > Small (1 pip), so defender is iced
       (is (= 0 (get scores "alice" 0)))  ; iced, no points
-      (is (= 0 (get scores "bob" 0)))))  ; attacker is pointing, doesn't score
+      (is (= 2 (get scores "bob")))))    ; successful attacker scores 2 pips
 
   (testing "weak attack doesn't ice defender"
     (let [game {:board [{:id "a1" :player-id "bob" :size :small :orientation :pointing :target-id "d1"}
