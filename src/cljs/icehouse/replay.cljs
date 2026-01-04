@@ -187,7 +187,11 @@
 
          ;; Game info
          [:div {:style {:margin-top "20px" :color "#888"}}
-          [:div "Winner: " (or (:winner record) "None")]
+          [:div "Winner: " (if-let [winner-id (:winner record)]
+                            (or (get-in record [:players winner-id :name])
+                                (get-in record [:players (keyword winner-id) :name])
+                                winner-id)
+                            "None")]
           [:div "End reason: " (name (or (:end-reason record) :unknown))]]
 
          ;; Close button
