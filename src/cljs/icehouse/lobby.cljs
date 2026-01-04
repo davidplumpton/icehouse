@@ -77,18 +77,6 @@
          [:span {:style {:color "#888" :font-size "0.85em" :margin-left "10px"}}
           "(random 2-5 min)"]]]])))
 
-(defn watch-replays-button []
-  [:button.watch-replays-btn
-   {:on-click #(ws/list-games!)
-    :style {:margin-top "20px"
-            :padding "10px 20px"
-            :background theme/green
-            :color "white"
-            :border "none"
-            :border-radius "4px"
-            :cursor "pointer"}}
-   "Watch Replays"])
-
 (defn lobby-view []
   [:div.lobby
    [:h1 "Icehouse"]
@@ -98,5 +86,4 @@
    [colour-picker]
    [player-list]
    [game-options-panel]
-   [ready-button]
-   [watch-replays-button]])
+   [ready-button]])

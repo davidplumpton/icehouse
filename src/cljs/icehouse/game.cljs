@@ -1052,19 +1052,40 @@
                    "(Icehouse!)"])]
                [:td {:style {:text-align "right" :padding "0.5rem" :font-size "1.2em"}}
                 score]]))]]
-        [:button
-         {:style {:padding "0.5rem 2rem"
-                  :font-size "1rem"
-                  :cursor "pointer"
-                  :background theme/green
-                  :color "#fff"
-                  :border "none"
-                  :border-radius "4px"}
-          :on-click #(do
-                       (reset! state/game-result nil)
-                       (reset! state/game-state nil)
-                       (reset! state/current-view :lobby))}
-         "Back to Lobby"]]])))
+        [:div {:style {:display "flex" :flex-direction "column" :gap "0.5rem" :margin-top "1rem"}}
+         [:button
+          {:style {:padding "0.5rem 2rem"
+                   :font-size "1rem"
+                   :cursor "pointer"
+                   :background theme/gold
+                   :color "#000"
+                   :border "none"
+                   :border-radius "4px"}
+           :on-click #(ws/load-game! (:game-id result))}
+          "Watch Replay"]
+         [:button
+          {:style {:padding "0.5rem 2rem"
+                   :font-size "1rem"
+                   :cursor "pointer"
+                   :background theme/green
+                   :color "#fff"
+                   :border "none"
+                   :border-radius "4px"}
+           :on-click #(do
+                        (reset! state/game-result nil)
+                        (reset! state/game-state nil)
+                        (reset! state/current-view :lobby))}
+          "Back to Lobby"]
+         [:button
+          {:style {:padding "0.5rem 1rem"
+                   :font-size "0.8rem"
+                   :cursor "pointer"
+                   :background "transparent"
+                   :color "#666"
+                   :border "none"
+                   :text-decoration "underline"}
+           :on-click #(ws/list-games!)}
+          "Watch All Replays"]]]])))
 
 (defn help-overlay []
   "Display help overlay with hotkey descriptions"
