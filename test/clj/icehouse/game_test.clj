@@ -854,3 +854,27 @@
           record (game/build-game-record game :all-pieces-placed)]
       (is (= "p1" (:winner record)))
       (is (= :all-pieces-placed (:end-reason record))))))
+
+(deftest refresh-all-targets-test
+  (testing "targets are updated when a closer defender is added"
+    (let [d1 {:id "d1" :player-id "p2" :x 200 :y 100 :size :small :orientation :standing :angle 0}
+          a1 {:id "a1" :player-id "p1" :x 100 :y 100 :size :small :orientation :pointing :angle 0} ;; Points right towards d1
+          board [d1 a1]
+          refreshed (game/refresh-all-targets board)
+          a1-refreshed (first (filter #(= (:id %) "a1") refreshed))]
+      (is (= "d1" (:target-id a1-refreshed)))
+
+      ;; Add a closer defender d2 at x=150
+      (let [d2 {:id "d2" :player-id "p2" :x 150 :y 100 :size :small :orientation :standing :angle 0}
+            board-with-d2 [d1 d2 a1]
+            refreshed-with-d2 (game/refresh-all-targets board-with-d2)
+            a1-refreshed-with-d2 (first (filter #(= (:id %) "a1") refreshed-with-d2))]
+        (is (= "d2" (:target-id a1-refreshed-with-d2))))))
+
+  (testing "targets are cleared when a target is removed"
+    (let [d1 {:id "d1" :player-id "p2" :x 200 :y 100 :size :small :orientation :standing :angle 0}
+          a1 {:id "a1" :player-id "p1" :x 100 :y 100 :size :small :orientation :pointing :angle 0 :target-id "d1"}
+          board [a1] ;; d1 is gone
+          refreshed (game/refresh-all-targets board)
+          a1-refreshed (first (filter #(= (:id %) "a1") refreshed))]
+      (is (nil? (:target-id a1-refreshed))))))

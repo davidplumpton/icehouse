@@ -396,6 +396,16 @@
            first
            :target))))
 
+(defn refresh-all-targets
+  "Recalculate target-id for all pointing pieces on the board"
+  [board]
+  (mapv (fn [piece]
+          (if (utils/pointing? piece)
+            (let [target (find-closest-target piece board)]
+              (assoc piece :target-id (:id target)))
+            piece))
+        board))
+
 (defn random-game-duration
   "Generate a random game duration between min and max"
   []
@@ -709,7 +719,8 @@
   [room-id player-id piece using-captured?]
   (swap! games (fn [games-map]
                  (let [game-update (-> games-map
-                                       (update-in [room-id :board] conj piece))]
+                                       (update-in [room-id :board] conj piece)
+                                       (update-in [room-id :board] refresh-all-targets))]
                    (if using-captured?
                      (update-in game-update [room-id :players player-id :captured]
                                 remove-first-captured (:size piece))
@@ -756,7 +767,9 @@
     (if (and piece (nil? error))
       (do
         (apply-placement! room-id player-id piece using-captured?)
-        (handle-post-placement! clients room-id player-id piece using-captured?))
+        (let [updated-game (get @games room-id)
+              final-piece (find-piece-by-id (:board updated-game) (:id piece))]
+          (handle-post-placement! clients room-id player-id final-piece using-captured?)))
       (utils/send-msg! channel {:type msg/error :message (or error "Invalid game state")}))))
 
 (defn validate-capture
@@ -800,9 +813,12 @@
             ;; Get the original owner's colour
             original-owner (:player-id piece)
             original-colour (get-in game [:players original-owner :colour])]
-        ;; Remove piece from board
+        ;; Remove piece from board and refresh targets
         (swap! games update-in [room-id :board]
-               (fn [board] (vec (remove (utils/by-id piece-id) board))))
+               (fn [board]
+                 (-> (remove (utils/by-id piece-id) board)
+                     vec
+                     refresh-all-targets)))
         ;; Add to capturing player's captured stash with original colour
         (swap! games update-in [room-id :players player-id :captured]
                conj {:size piece-size :colour original-colour})
