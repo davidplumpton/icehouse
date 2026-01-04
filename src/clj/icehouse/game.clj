@@ -521,41 +521,51 @@
 (defn find-piece-by-id [board id]
   (first (filter #(= (:id %) id) board)))
 
+(defn calculate-attack-stats
+  "Calculate attacker statistics for all targets on the board.
+   Returns map of target-id -> {:defender piece :attackers [...] :attacker-pips sum}"
+  [board]
+  (let [attacks (attackers-by-target board)]
+    (reduce-kv
+     (fn [stats target-id attackers]
+       (if-let [defender (find-piece-by-id board target-id)]
+         (assoc stats target-id {:defender defender
+                                 :attackers attackers
+                                 :attacker-pips (attack-strength attackers)})
+         stats))
+     {}
+     attacks)))
+
 (defn calculate-iced-pieces
   "Returns set of piece IDs that are successfully iced.
    Per Icehouse rules: a defender is iced when total attacker pips > defender pips"
   [board]
-  (let [attacks (attackers-by-target board)]
+  (let [stats (calculate-attack-stats board)]
     (reduce-kv
-     (fn [iced target-id attackers]
-       (let [defender (find-piece-by-id board target-id)
-             defender-pips (piece-pips defender)
-             attacker-pips (attack-strength attackers)]
-         (if (and defender (> attacker-pips defender-pips))
-           (conj iced target-id)
-           iced)))
+     (fn [iced target-id {:keys [defender attacker-pips]}]
+       (if (> attacker-pips (piece-pips defender))
+         (conj iced target-id)
+         iced))
      #{}
-     attacks)))
+     stats)))
 
 (defn calculate-over-ice
   "Returns a map of defender-id -> {:excess pips :attackers [...] :defender-owner player-id}
    for each over-iced defender. Excess = attacker-pips - (defender-pips + 1)"
   [board]
-  (let [attacks (attackers-by-target board)]
+  (let [stats (calculate-attack-stats board)]
     (reduce-kv
-     (fn [result target-id attackers]
-       (let [defender (find-piece-by-id board target-id)
-             defender-pips (piece-pips defender)
-             attacker-pips (attack-strength attackers)
+     (fn [result target-id {:keys [defender attackers attacker-pips]}]
+       (let [defender-pips (piece-pips defender)
              ;; Minimum to ice is defender-pips + 1, excess is anything beyond that
              excess (- attacker-pips (+ defender-pips 1))]
-         (if (and defender (> attacker-pips defender-pips) (pos? excess))
+         (if (and (> attacker-pips defender-pips) (pos? excess))
            (assoc result target-id {:excess excess
                                     :attackers attackers
                                     :defender-owner (utils/normalize-player-id (:player-id defender))})
            result)))
      {}
-     attacks)))
+     stats)))
 
 (defn capturable-attackers
   "Given over-ice info for a defender, returns attackers that could be captured.
