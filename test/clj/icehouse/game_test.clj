@@ -1,6 +1,7 @@
 (ns icehouse.game-test
   (:require [clojure.test :refer [deftest is testing]]
             [icehouse.game :as game]
+            [icehouse.geometry :as geo]
             [icehouse.utils :as utils]))
 
 (deftest initial-pieces-test
@@ -240,34 +241,34 @@
 
 (deftest rotate-point-test
   (testing "no rotation returns same point"
-    (let [[x y] (game/rotate-point [10 0] 0)]
+    (let [[x y] (geo/rotate-point [10 0] 0)]
       (is (< (Math/abs (- x 10)) 0.001))
       (is (< (Math/abs y) 0.001))))
 
   (testing "90 degree rotation"
-    (let [[x y] (game/rotate-point [10 0] (/ Math/PI 2))]
+    (let [[x y] (geo/rotate-point [10 0] (/ Math/PI 2))]
       (is (< (Math/abs x) 0.001))
       (is (< (Math/abs (- y 10)) 0.001))))
 
   (testing "180 degree rotation"
-    (let [[x y] (game/rotate-point [10 0] Math/PI)]
+    (let [[x y] (geo/rotate-point [10 0] Math/PI)]
       (is (< (Math/abs (- x -10)) 0.001))
       (is (< (Math/abs y) 0.001)))))
 
 (deftest piece-vertices-test
   (testing "standing piece returns 4 vertices (square)"
     (let [piece {:x 100 :y 100 :size :small :orientation :standing :angle 0}
-          verts (game/piece-vertices piece)]
+          verts (geo/piece-vertices piece)]
       (is (= 4 (count verts)))))
 
   (testing "pointing piece returns 3 vertices (triangle)"
     (let [piece {:x 100 :y 100 :size :small :orientation :pointing :angle 0}
-          verts (game/piece-vertices piece)]
+          verts (geo/piece-vertices piece)]
       (is (= 3 (count verts)))))
 
   (testing "standing piece vertices are centered correctly"
     (let [piece {:x 100 :y 100 :size :small :orientation :standing :angle 0}
-          verts (game/piece-vertices piece)
+          verts (geo/piece-vertices piece)
           ;; small = 40px, so half = 20
           ;; vertices should be at (80,80), (120,80), (120,120), (80,120)
           expected [[80 80] [120 80] [120 120] [80 120]]]
@@ -279,35 +280,35 @@
   (testing "overlapping pieces intersect"
     (let [piece1 {:x 100 :y 100 :size :small :orientation :standing :angle 0}
           piece2 {:x 110 :y 110 :size :small :orientation :standing :angle 0}]
-      (is (game/pieces-intersect? piece1 piece2))))
+      (is (geo/pieces-intersect? piece1 piece2))))
 
   (testing "same position pieces intersect"
     (let [piece1 {:x 100 :y 100 :size :medium :orientation :standing :angle 0}
           piece2 {:x 100 :y 100 :size :small :orientation :pointing :angle 0}]
-      (is (game/pieces-intersect? piece1 piece2))))
+      (is (geo/pieces-intersect? piece1 piece2))))
 
   (testing "non-overlapping pieces don't intersect"
     (let [piece1 {:x 100 :y 100 :size :small :orientation :standing :angle 0}
           piece2 {:x 200 :y 200 :size :small :orientation :standing :angle 0}]
-      (is (not (game/pieces-intersect? piece1 piece2)))))
+      (is (not (geo/pieces-intersect? piece1 piece2)))))
 
   (testing "pieces just touching edges don't intersect (gap between them)"
     ;; small = 40px, so two pieces 45px apart (center to center) should not overlap
     ;; 40/2 + 40/2 = 40px needed for edge-to-edge, so 45px apart means 5px gap
     (let [piece1 {:x 100 :y 100 :size :small :orientation :standing :angle 0}
           piece2 {:x 145 :y 100 :size :small :orientation :standing :angle 0}]
-      (is (not (game/pieces-intersect? piece1 piece2)))))
+      (is (not (geo/pieces-intersect? piece1 piece2)))))
 
   (testing "rotated pieces intersection"
     ;; Two pieces at same location but different rotations still intersect
     (let [piece1 {:x 100 :y 100 :size :small :orientation :standing :angle 0}
           piece2 {:x 100 :y 100 :size :small :orientation :standing :angle (/ Math/PI 4)}]
-      (is (game/pieces-intersect? piece1 piece2))))
+      (is (geo/pieces-intersect? piece1 piece2))))
 
   (testing "pointing pieces at distance don't intersect"
     (let [piece1 {:x 100 :y 100 :size :large :orientation :pointing :angle 0}
           piece2 {:x 300 :y 100 :size :large :orientation :pointing :angle Math/PI}]
-      (is (not (game/pieces-intersect? piece1 piece2))))))
+      (is (not (geo/pieces-intersect? piece1 piece2))))))
 
 (deftest intersects-any-piece-test
   (testing "empty board has no intersections"
@@ -414,12 +415,12 @@
     ;; Large attacker at (100, 100) pointing right (angle=0) at small defender at (200, 100)
     (let [attacker {:x 100 :y 100 :size :large :orientation :pointing :angle 0}
           defender {:x 200 :y 100 :size :small :orientation :standing :angle 0}]
-      (is (game/in-front-of? attacker defender) "Should hit defender directly ahead")))
+      (is (geo/in-front-of? attacker defender) "Should hit defender directly ahead")))
 
   (testing "ray misses target that is off-angle"
     (let [attacker {:x 100 :y 100 :size :large :orientation :pointing :angle 0}  ;; pointing right
           defender {:x 100 :y 200 :size :small :orientation :standing :angle 0}] ;; below
-      (is (not (game/in-front-of? attacker defender)) "Should miss defender below")))
+      (is (not (geo/in-front-of? attacker defender)) "Should miss defender below")))
 
   (testing "close-range attack - tip near target edge"
     ;; Large piece: tip-offset = 0.75 * 60 = 45px from center
@@ -428,13 +429,13 @@
     ;; Ray should hit the defender
     (let [attacker {:x 100 :y 100 :size :large :orientation :pointing :angle 0}
           defender {:x 180 :y 100 :size :small :orientation :standing :angle 0}]
-      (is (game/in-front-of? attacker defender) "Close-range attack should hit")))
+      (is (geo/in-front-of? attacker defender) "Close-range attack should hit")))
 
   (testing "very close attack - tip almost touching target"
     ;; Tip at x=145, defender left edge at x=150 (170-20)
     (let [attacker {:x 100 :y 100 :size :large :orientation :pointing :angle 0}
           defender {:x 170 :y 100 :size :small :orientation :standing :angle 0}]
-      (is (game/in-front-of? attacker defender) "Very close attack should hit")))
+      (is (geo/in-front-of? attacker defender) "Very close attack should hit")))
 
   (testing "diagonal attack"
     ;; Attacker pointing at 45 degrees toward defender
@@ -442,7 +443,7 @@
           attacker {:x 100 :y 100 :size :large :orientation :pointing :angle angle}
           ;; Defender at 45 degrees, ~100px away
           defender {:x 170 :y 170 :size :small :orientation :standing :angle 0}]
-      (is (game/in-front-of? attacker defender) "Diagonal attack should hit")))
+      (is (geo/in-front-of? attacker defender) "Diagonal attack should hit")))
 
   (testing "up-left attack (user bug scenario)"
     ;; User reported: large red attacking piece pointing up-left at small teal defender
@@ -456,8 +457,8 @@
           ;; Tip at approximately (400 - 32, 300 - 32) = (368, 268)
           ;; Place defender so center is within 60px of tip
           defender {:x 320 :y 220 :size :small :orientation :standing :angle 0}]
-      (is (game/in-front-of? attacker defender) "Up-left attack should hit defender")
-      (is (game/within-range? attacker defender) "Defender should be in range")))
+      (is (geo/in-front-of? attacker defender) "Up-left attack should hit defender")
+      (is (geo/within-range? attacker defender) "Defender should be in range")))
 
   (testing "up-left attack - close range"
     ;; Same scenario but with pieces closer together
@@ -467,8 +468,8 @@
           ;; Tip at (368, 268), place defender center at (340, 240)
           ;; Distance from tip to defender center ≈ sqrt((368-340)^2 + (268-240)^2) ≈ 40px
           defender {:x 340 :y 240 :size :small :orientation :standing :angle 0}]
-      (is (game/in-front-of? attacker defender) "Close up-left attack should hit")
-      (is (game/within-range? attacker defender) "Close defender should be in range"))))
+      (is (geo/in-front-of? attacker defender) "Close up-left attack should hit")
+      (is (geo/within-range? attacker defender) "Close defender should be in range"))))
 
 (deftest within-range-test
   (testing "target edge within range"
@@ -477,7 +478,7 @@
     ;; Target left edge at x=180 (200-20), distance to edge = 35px < 90px
     (let [attacker {:x 100 :y 100 :size :large :orientation :pointing :angle 0}
           defender {:x 200 :y 100 :size :small :orientation :standing :angle 0}]
-      (is (game/within-range? attacker defender) "Should be in range")))
+      (is (geo/within-range? attacker defender) "Should be in range")))
 
   (testing "target edge just outside range"
     ;; Tip at x=145, range = 90px, so max reach is x=235
@@ -485,7 +486,7 @@
     ;; Distance to edge = 240 - 145 = 95px > 90px (out of range)
     (let [attacker {:x 100 :y 100 :size :large :orientation :pointing :angle 0}
           defender {:x 260 :y 100 :size :small :orientation :standing :angle 0}]
-      (is (not (game/within-range? attacker defender)) "Should be out of range")))
+      (is (not (geo/within-range? attacker defender)) "Should be out of range")))
 
   (testing "small piece has shorter range"
     ;; Small attacker: tip-offset = 0.75 * 40 = 30px, range = 60px (height = 2 * 0.75 * 40)
@@ -494,14 +495,14 @@
     ;; Distance to edge = 200 - 130 = 70px > 60px (out of range)
     (let [attacker {:x 100 :y 100 :size :small :orientation :pointing :angle 0}
           defender {:x 220 :y 100 :size :small :orientation :standing :angle 0}]
-      (is (not (game/within-range? attacker defender)) "Small piece should be out of range")))
+      (is (not (geo/within-range? attacker defender)) "Small piece should be out of range")))
 
   (testing "target edge exactly at range still counts"
     ;; Large: tip-offset=45, range=90. Tip at x=145, max reach at x=235
     ;; Small defender (half=20) at x=255 has left edge at x=235 (exactly at range)
     (let [attacker {:x 100 :y 100 :size :large :orientation :pointing :angle 0}
           defender {:x 255 :y 100 :size :small :orientation :standing :angle 0}]
-      (is (game/within-range? attacker defender) "Edge at exact range should count"))))
+      (is (geo/within-range? attacker defender) "Edge at exact range should count"))))
 
 (deftest line-of-sight-test
   "Test that attacks fail when line of sight is blocked"
@@ -509,35 +510,35 @@
     (let [defender {:id "d1" :player-id "bob" :x 300 :y 100 :size :small :orientation :standing :angle 0}
           attacker {:id "a1" :player-id "alice" :x 100 :y 100 :size :large :orientation :pointing :angle 0}
           board [defender]]
-      (is (game/clear-line-of-sight? attacker defender board))))
+      (is (geo/clear-line-of-sight? attacker defender board))))
 
   (testing "piece in the way blocks line of sight"
     (let [defender {:id "d1" :player-id "bob" :x 300 :y 100 :size :small :orientation :standing :angle 0}
           blocker {:id "b1" :player-id "alice" :x 200 :y 100 :size :small :orientation :standing :angle 0}
           attacker {:id "a1" :player-id "alice" :x 100 :y 100 :size :large :orientation :pointing :angle 0}
           board [defender blocker]]
-      (is (not (game/clear-line-of-sight? attacker defender board)))))
+      (is (not (geo/clear-line-of-sight? attacker defender board)))))
 
   (testing "enemy piece in the way also blocks"
     (let [defender {:id "d1" :player-id "bob" :x 300 :y 100 :size :small :orientation :standing :angle 0}
           blocker {:id "b1" :player-id "bob" :x 200 :y 100 :size :small :orientation :standing :angle 0}
           attacker {:id "a1" :player-id "alice" :x 100 :y 100 :size :large :orientation :pointing :angle 0}
           board [defender blocker]]
-      (is (not (game/clear-line-of-sight? attacker defender board)))))
+      (is (not (geo/clear-line-of-sight? attacker defender board)))))
 
   (testing "piece to the side does not block"
     (let [defender {:id "d1" :player-id "bob" :x 300 :y 100 :size :small :orientation :standing :angle 0}
           bystander {:id "b1" :player-id "alice" :x 200 :y 200 :size :small :orientation :standing :angle 0}
           attacker {:id "a1" :player-id "alice" :x 100 :y 100 :size :large :orientation :pointing :angle 0}
           board [defender bystander]]
-      (is (game/clear-line-of-sight? attacker defender board))))
+      (is (geo/clear-line-of-sight? attacker defender board))))
 
   (testing "piece behind target does not block"
     (let [defender {:id "d1" :player-id "bob" :x 200 :y 100 :size :small :orientation :standing :angle 0}
           behind {:id "b1" :player-id "bob" :x 300 :y 100 :size :small :orientation :standing :angle 0}
           attacker {:id "a1" :player-id "alice" :x 100 :y 100 :size :large :orientation :pointing :angle 0}
           board [defender behind]]
-      (is (game/clear-line-of-sight? attacker defender board)))))
+      (is (geo/clear-line-of-sight? attacker defender board)))))
 
 (deftest blocked-attack-validation-test
   "Test that validate-placement returns correct error for blocked attacks"
@@ -740,21 +741,21 @@
 
 (deftest projections-overlap-strict-test
   (testing "overlapping projections return true"
-    (is (game/projections-overlap? [0 10] [5 15]))
-    (is (game/projections-overlap? [5 15] [0 10])))
+    (is (geo/projections-overlap? [0 10] [5 15]))
+    (is (geo/projections-overlap? [5 15] [0 10])))
 
   (testing "touching projections return false (strict inequality)"
     ;; [0,10] and [10,20] touch at exactly 10 but don't overlap
-    (is (not (game/projections-overlap? [0 10] [10 20])))
-    (is (not (game/projections-overlap? [10 20] [0 10]))))
+    (is (not (geo/projections-overlap? [0 10] [10 20])))
+    (is (not (geo/projections-overlap? [10 20] [0 10]))))
 
   (testing "separate projections return false"
-    (is (not (game/projections-overlap? [0 10] [15 25])))
-    (is (not (game/projections-overlap? [15 25] [0 10]))))
+    (is (not (geo/projections-overlap? [0 10] [15 25])))
+    (is (not (geo/projections-overlap? [15 25] [0 10]))))
 
   (testing "contained projection returns true"
-    (is (game/projections-overlap? [0 20] [5 15]))
-    (is (game/projections-overlap? [5 15] [0 20]))))
+    (is (geo/projections-overlap? [0 20] [5 15]))
+    (is (geo/projections-overlap? [5 15] [0 20]))))
 
 ;; Player piece tracking tests
 
@@ -788,14 +789,14 @@
 
 (deftest constants-test
   (testing "pips values are correct"
-    (is (= 1 (:small game/pips)))
-    (is (= 2 (:medium game/pips)))
-    (is (= 3 (:large game/pips))))
+    (is (= 1 (:small geo/pips)))
+    (is (= 2 (:medium geo/pips)))
+    (is (= 3 (:large geo/pips))))
 
   (testing "piece sizes maintain 3:2 ratio progression"
-    (is (= 40 (:small game/piece-sizes)))
-    (is (= 50 (:medium game/piece-sizes)))
-    (is (= 60 (:large game/piece-sizes))))
+    (is (= 40 (:small geo/piece-sizes)))
+    (is (= 50 (:medium geo/piece-sizes)))
+    (is (= 60 (:large geo/piece-sizes))))
 
   (testing "play area dimensions"
     (is (= 1000 game/play-area-width))

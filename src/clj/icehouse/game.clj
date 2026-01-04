@@ -3,6 +3,7 @@
              [icehouse.utils :as utils]
              [icehouse.storage :as storage]
              [icehouse.schema :as schema]
+             [icehouse.geometry :as geo]
              [malli.core :as m]))
 
 (defonce games (atom {}))
@@ -22,21 +23,9 @@
 ;; Game Constants
 ;; =============================================================================
 
-;; Points per piece size (pip values)
-(def pips {:small 1 :medium 2 :large 3})
-
-;; Piece sizes in pixels (must match frontend)
-;; Sized so small height = large base, medium is halfway between
-(def piece-sizes {:small 40 :medium 50 :large 60})
-(def default-piece-size 40)  ;; Fallback for unknown piece sizes
-
 ;; Play area dimensions (must match frontend canvas)
 (def play-area-width 1000)
 (def play-area-height 750)
-
-;; Geometry constants
-(def tip-offset-ratio 0.75)       ;; Triangle tip extends 0.75 * base-size from center
-(def parallel-threshold 0.0001)   ;; Threshold for detecting parallel lines in ray casting
 
 ;; Game rules constants
 (def icehouse-min-pieces 8)       ;; Minimum pieces to trigger icehouse rule
@@ -51,273 +40,31 @@
 ;; Helper Functions
 ;; =============================================================================
 
-(defn piece-pips
-  "Get pip value for a piece (1 for small, 2 for medium, 3 for large).
-   Returns 0 if piece is nil."
-  [piece]
-  (if piece
-    (get pips (:size piece) 0)
-    0))
-
 (defn player-id-from-channel
   "Extract player ID from a WebSocket channel"
   [channel]
   (str (hash channel)))
 
-;; Collision detection using Separating Axis Theorem (SAT)
-
-(defn rotate-point
-  "Rotate point [x y] around origin by angle (radians)"
-  [[x y] angle]
-  (let [cos-a (Math/cos angle)
-        sin-a (Math/sin angle)]
-    [(- (* x cos-a) (* y sin-a))
-     (+ (* x sin-a) (* y cos-a))]))
-
-(defn piece-vertices
-  "Get vertices of a piece in world coordinates.
-   Returns nil if piece is nil or missing required coordinates."
-  [{:keys [x y size orientation angle] :as piece}]
-  (when (and piece x y)
-    (let [base-size (get piece-sizes size default-piece-size)
-          half (/ base-size 2)
-          ;; Standing pieces don't rotate - they're viewed from above and look the same at any angle
-          ;; Only pointing pieces use the angle for their attack direction
-          effective-angle (if (utils/standing? piece) 0 (or angle 0))
-          ;; Local vertices relative to center
-          local-verts (if (utils/standing? piece)
-                        ;; Standing: square (axis-aligned, no rotation)
-                        [[(- half) (- half)]
-                         [half (- half)]
-                         [half half]
-                         [(- half) half]]
-                        ;; Pointing: triangle (3:2 length:base ratio to match frontend)
-                        (let [half-width (* base-size tip-offset-ratio)]
-                          [[half-width 0]
-                           [(- half-width) (- half)]
-                           [(- half-width) half]]))]
-      ;; Rotate and translate to world coordinates
-      (mapv (fn [[lx ly]]
-              (let [[rx ry] (rotate-point [lx ly] effective-angle)]
-                [(+ x rx) (+ y ry)]))
-            local-verts))))
-
-(defn edge-normal
-  "Get perpendicular normal vector for edge from v1 to v2"
-  [[x1 y1] [x2 y2]]
-  (let [dx (- x2 x1)
-        dy (- y2 y1)
-        len (Math/sqrt (+ (* dx dx) (* dy dy)))]
-    (if (zero? len)
-      [1 0]
-      [(/ (- dy) len) (/ dx len)])))
-
-(defn polygon-axes
-  "Get all edge normals for a polygon (for SAT)"
-  [vertices]
-  (let [n (count vertices)]
-    (mapv (fn [i]
-            (edge-normal (nth vertices i)
-                         (nth vertices (mod (inc i) n))))
-          (range n))))
-
-(defn project-polygon
-  "Project polygon vertices onto an axis, return [min max]"
-  [vertices [ax ay]]
-  (let [dots (map (fn [[x y]] (+ (* x ax) (* y ay))) vertices)]
-    [(apply min dots) (apply max dots)]))
-
-(defn projections-overlap?
-  "Check if two 1D projections [min1 max1] and [min2 max2] overlap.
-   Uses strict inequality so pieces that are merely touching are allowed."
-  [[min1 max1] [min2 max2]]
-  (and (< min1 max2) (< min2 max1)))
-
-(defn polygons-intersect?
-  "Check if two convex polygons intersect using SAT"
-  [verts1 verts2]
-  (let [axes (concat (polygon-axes verts1) (polygon-axes verts2))]
-    ;; Polygons intersect if projections overlap on ALL axes
-    (every? (fn [axis]
-              (projections-overlap?
-               (project-polygon verts1 axis)
-               (project-polygon verts2 axis)))
-            axes)))
-
-(defn pieces-intersect?
-  "Check if two pieces intersect"
-  [piece1 piece2]
-  (polygons-intersect?
-   (piece-vertices piece1)
-   (piece-vertices piece2)))
+;; =============================================================================
+;; Board Geometry (using shared geometry module)
+;; =============================================================================
 
 (defn intersects-any-piece?
   "Check if a piece intersects any piece on the board"
   [piece board]
-  (some #(pieces-intersect? piece %) board))
+  (some #(geo/pieces-intersect? piece %) board))
 
 (defn within-play-area?
   "Check if all vertices of a piece are within the play area bounds.
    Returns true if piece has no position (for backwards compatibility with tests)."
   [piece]
   (if (and (:x piece) (:y piece))
-    (let [vertices (piece-vertices piece)]
+    (let [vertices (geo/piece-vertices piece)]
       (every? (fn [[x y]]
                 (and (>= x 0) (<= x play-area-width)
                      (>= y 0) (<= y play-area-height)))
               vertices))
     true))
-
-;; Attacking piece validation
-
-(defn distance
-  "Calculate distance between two points"
-  [[x1 y1] [x2 y2]]
-  (Math/sqrt (+ (* (- x2 x1) (- x2 x1))
-                (* (- y2 y1) (- y2 y1)))))
-
-(defn piece-center
-  "Get the center point of a piece. Returns nil if piece is nil or missing coordinates."
-  [piece]
-  (when (and piece (:x piece) (:y piece))
-    [(:x piece) (:y piece)]))
-
-(defn attack-direction
-  "Get the unit direction vector for an attacking piece"
-  [piece]
-  (let [angle (or (:angle piece) 0)]
-    [(Math/cos angle) (Math/sin angle)]))
-
-(defn attacker-tip
-  "Get the tip position of a pointing piece (where the attack ray originates).
-   Returns nil if piece is nil or missing required coordinates."
-  [piece]
-  (when (and piece (:x piece) (:y piece))
-    (let [base-size (get piece-sizes (:size piece) default-piece-size)
-          tip-offset (* base-size tip-offset-ratio)
-          angle (or (:angle piece) 0)
-          [dx dy] [(Math/cos angle) (Math/sin angle)]]
-      [(+ (:x piece) (* dx tip-offset))
-       (+ (:y piece) (* dy tip-offset))])))
-
-(defn ray-segment-intersection-distance
-  "Get the distance (parameter t) at which a ray from origin in direction dir
-   intersects line segment [p1 p2]. Returns nil if no intersection."
-  [[ox oy] [dx dy] [[p1x p1y] [p2x p2y]]]
-  (let [sx (- p2x p1x)
-        sy (- p2y p1y)
-        denom (- (* dx sy) (* dy sx))]
-    (when (>= (Math/abs denom) parallel-threshold)
-      (let [ox-p1x (- p1x ox)
-            oy-p1y (- p1y oy)
-            t (/ (- (* ox-p1x sy) (* oy-p1y sx)) denom)
-            u (/ (- (* ox-p1x dy) (* oy-p1y dx)) denom)]
-        (when (and (>= t 0) (>= u 0) (<= u 1))
-          t)))))
-
-(defn ray-segment-intersection?
-  "Check if a ray from origin in direction dir intersects line segment [p1 p2]."
-  [origin direction segment]
-  (some? (ray-segment-intersection-distance origin direction segment)))
-
-(defn ray-polygon-intersection-distance
-  "Get the minimum distance at which a ray hits any edge of a polygon.
-   Returns nil if no intersection."
-  [origin direction vertices]
-  (let [n (count vertices)
-        edges (map (fn [i] [(nth vertices i) (nth vertices (mod (inc i) n))])
-                   (range n))
-        distances (keep #(ray-segment-intersection-distance origin direction %) edges)]
-    (when (seq distances)
-      (apply min distances))))
-
-(defn ray-intersects-polygon?
-  "Check if a ray from origin in direction dir intersects any edge of polygon"
-  [origin direction vertices]
-  (let [n (count vertices)
-        edges (map (fn [i] [(nth vertices i) (nth vertices (mod (inc i) n))])
-                   (range n))]
-    (some #(ray-segment-intersection? origin direction %) edges)))
-
-(defn in-front-of?
-  "Check if attacker's pointing direction ray intersects the target piece"
-  [attacker target]
-  (let [tip (attacker-tip attacker)
-        dir (attack-direction attacker)
-        target-verts (piece-vertices target)]
-    (ray-intersects-polygon? tip dir target-verts)))
-
-(defn clear-line-of-sight?
-  "Check if there are no pieces blocking the line between attacker and target.
-   The target must be the first piece hit by the attack ray."
-  [attacker target board]
-  (let [tip (attacker-tip attacker)
-        dir (attack-direction attacker)
-        target-verts (piece-vertices target)
-        target-dist (ray-polygon-intersection-distance tip dir target-verts)
-        ;; Get all pieces except attacker and target
-        other-pieces (remove #(or (= (:id %) (:id attacker))
-                                  (= (:id %) (:id target)))
-                             board)]
-    ;; If we can't hit the target, line of sight is blocked (shouldn't happen if in-front-of? passed)
-    (if (nil? target-dist)
-      false
-      ;; Check if any other piece is hit before the target
-      (not-any? (fn [piece]
-                  (let [piece-verts (piece-vertices piece)
-                        piece-dist (ray-polygon-intersection-distance tip dir piece-verts)]
-                    ;; If a piece is hit before the target, line of sight is blocked
-                    (and piece-dist (< piece-dist target-dist))))
-                other-pieces))))
-
-(defn attack-range
-  "Get the attack range for a piece (its height/length, not base width).
-   Returns 0 if piece is nil."
-  [piece]
-  (if piece
-    (let [base-size (get piece-sizes (:size piece) default-piece-size)]
-      ;; Height = 2 * tip-offset-ratio * base-size (tip extends 0.75 * base from center in each direction)
-      (* 2 tip-offset-ratio base-size))
-    0))
-
-(defn point-to-segment-distance
-  "Calculate minimum distance from point p to line segment [a b]"
-  [[px py] [[ax ay] [bx by]]]
-  (let [;; Vector from a to b
-        abx (- bx ax)
-        aby (- by ay)
-        ;; Vector from a to p
-        apx (- px ax)
-        apy (- py ay)
-        ;; Project ap onto ab, clamped to [0,1]
-        ab-len-sq (+ (* abx abx) (* aby aby))
-        t (if (zero? ab-len-sq)
-            0
-            (max 0 (min 1 (/ (+ (* apx abx) (* apy aby)) ab-len-sq))))
-        ;; Closest point on segment
-        cx (+ ax (* t abx))
-        cy (+ ay (* t aby))]
-    (Math/sqrt (+ (* (- px cx) (- px cx))
-                  (* (- py cy) (- py cy))))))
-
-(defn point-to-polygon-distance
-  "Calculate minimum distance from point to polygon (nearest edge)"
-  [point vertices]
-  (let [n (count vertices)
-        edges (map (fn [i] [(nth vertices i) (nth vertices (mod (inc i) n))])
-                   (range n))]
-    (apply min (map #(point-to-segment-distance point %) edges))))
-
-(defn within-range?
-  "Check if target is within attack range of attacker.
-   Per Icehouse rules, range is measured from the attacker's tip to the nearest
-   point on the target piece."
-  [attacker target]
-  (let [tip (attacker-tip attacker)
-        target-verts (piece-vertices target)
-        dist (point-to-polygon-distance tip target-verts)
-        range (attack-range attacker)]
-    (<= dist range)))
 
 (defn potential-target?
   "Check if target could be attacked based on trajectory only (ignoring range).
@@ -325,15 +72,13 @@
    Uses colour-based validation so captured pieces attack based on their original colour.
    Falls back to player-id comparison if colours aren't set."
   [attacker target]
-  (let [;; Use colour comparison if both pieces have colours, otherwise fall back to player-id
-        is-opponent (if (and (:colour attacker) (:colour target))
+  (let [is-opponent (if (and (:colour attacker) (:colour target))
                       (not= (:colour target) (:colour attacker))
                       (not= (utils/normalize-player-id (:player-id target))
                             (utils/normalize-player-id (:player-id attacker))))
-        is-standing (utils/standing? target)]
+        is-standing (geo/standing? target)]
     (if (and is-opponent is-standing)
-      ;; Only check in-front-of? for standing opponent pieces
-      (in-front-of? attacker target)
+      (geo/in-front-of? attacker target)
       false)))
 
 (defn valid-target?
@@ -342,8 +87,8 @@
    Also checks that no other pieces are blocking the line of sight."
   [attacker target board]
   (and (potential-target? attacker target)
-       (within-range? attacker target)
-       (clear-line-of-sight? attacker target board)))
+       (geo/within-range? attacker target)
+       (geo/clear-line-of-sight? attacker target board)))
 
 (defn find-potential-targets
   "Find all targets in the attack trajectory (ignoring range)"
@@ -369,7 +114,7 @@
   "Find all targets that are in trajectory and range (ignoring line of sight)"
   [attacker board]
   (filter #(and (potential-target? attacker %)
-                (within-range? attacker %))
+                (geo/within-range? attacker %))
           board))
 
 (defn has-target-in-range?
@@ -382,7 +127,7 @@
   [piece board]
   (let [in-range (find-targets-in-range piece board)]
     (and (seq in-range)
-         (not-any? #(clear-line-of-sight? piece % board) in-range))))
+         (not-any? #(geo/clear-line-of-sight? piece % board) in-range))))
 
 (defn find-closest-target
   "Find the closest valid target for an attacking piece"
@@ -391,7 +136,7 @@
     (when (seq targets)
       (->> targets
            (map (fn [t] {:target t
-                         :dist (distance (piece-center piece) (piece-center t))}))
+                         :dist (geo/distance (geo/piece-center piece) (geo/piece-center t))}))
            (sort-by :dist)
            first
            :target))))
@@ -400,7 +145,7 @@
   "Recalculate target-id for all pointing pieces on the board"
   [board]
   (mapv (fn [piece]
-          (if (utils/pointing? piece)
+          (if (geo/pointing? piece)
             (let [target (find-closest-target piece board)]
               (assoc piece :target-id (:id target)))
             piece))
@@ -461,7 +206,7 @@
                      (utils/count-captured-by-size (:captured player) size)
                      (get-in player [:pieces size] 0))
          board (:board game)
-         is-attacking? (utils/pointing? piece)
+         is-attacking? (geo/pointing? piece)
          ;; Ensure piece has player-id and colour for validation
          ;; For captured pieces, get the original colour; otherwise use player's colour
          piece-colour (if using-captured?
@@ -500,7 +245,7 @@
 (defn attackers-by-target
   "Returns a map of target-id -> list of attackers targeting that piece"
   [board]
-  (let [pointing-pieces (filter #(and (utils/pointing? %)
+  (let [pointing-pieces (filter #(and (geo/pointing? %)
                                       (:target-id %))
                                 board)]
     (group-by :target-id pointing-pieces)))
@@ -508,7 +253,7 @@
 (defn attack-strength
   "Sum of pip values of all attackers targeting a piece"
   [attackers]
-  (reduce + (map piece-pips attackers)))
+  (reduce + (map geo/piece-pips attackers)))
 
 (defn find-piece-by-id [board id]
   (first (filter (utils/by-id id) board)))
@@ -535,7 +280,7 @@
   (let [stats (calculate-attack-stats board)]
     (reduce-kv
      (fn [iced target-id {:keys [defender attacker-pips]}]
-       (if (> attacker-pips (piece-pips defender))
+       (if (> attacker-pips (geo/piece-pips defender))
          (conj iced target-id)
          iced))
      #{}
@@ -548,7 +293,7 @@
   (let [stats (calculate-attack-stats board)]
     (reduce-kv
      (fn [result target-id {:keys [defender attackers attacker-pips]}]
-       (let [defender-pips (piece-pips defender)
+       (let [defender-pips (geo/piece-pips defender)
              ;; Minimum to ice is defender-pips + 1, excess is anything beyond that
              excess (- attacker-pips (+ defender-pips 1))]
          (if (and (> attacker-pips defender-pips) (pos? excess))
@@ -566,7 +311,7 @@
   (let [{:keys [excess attackers]} over-ice-info]
     ;; Sort by pip value ascending so smaller pieces can be captured first
     (->> attackers
-         (map (fn [a] {:attacker a :pips (piece-pips a)}))
+         (map (fn [a] {:attacker a :pips (geo/piece-pips a)}))
          (filter #(<= (:pips %) excess))
          (sort-by :pips))))
 
@@ -579,7 +324,7 @@
   "Get all standing (defender) pieces for a player"
   [board player-id]
   (filter #(and ((utils/by-player-id player-id) %)
-                (utils/standing? %))
+                (geo/standing? %))
           board))
 
 (defn in-icehouse?
@@ -642,12 +387,12 @@
            (cond
              ;; Successful attacking pieces score points
              (contains? successful-attacks (:id piece))
-             (update scores player-id (fnil + 0) (piece-pips piece))
+             (update scores player-id (fnil + 0) (geo/piece-pips piece))
 
              ;; Standing pieces that aren't iced score points
-             (and (utils/standing? piece)
+             (and (geo/standing? piece)
                   (not (contains? iced (:id piece))))
-             (update scores player-id (fnil + 0) (piece-pips piece))
+             (update scores player-id (fnil + 0) (geo/piece-pips piece))
 
              ;; Other pieces (failed attacks, iced defenders) don't score
              :else
@@ -719,7 +464,7 @@
                     :angle (:angle msg)
                     :target-id (:target-id msg)}]
     ;; Auto-assign target-id for attacking pieces if not provided
-    (if (and (utils/pointing? base-piece)
+    (if (and (geo/pointing? base-piece)
              (nil? (:target-id base-piece))
              game)
       (if-let [target (find-closest-target base-piece (:board game))]
@@ -796,7 +541,7 @@
       (nil? piece)
       "Piece not found"
 
-      (not (utils/pointing? piece))
+      (not (geo/pointing? piece))
       "Can only capture attacking pieces"
 
       (not (:target-id piece))
@@ -809,7 +554,7 @@
             (utils/normalize-player-id player-id))
       "You can only capture attackers targeting your own pieces"
 
-      (> (piece-pips piece) (:excess (get over-ice (:target-id piece))))
+      (> (geo/piece-pips piece) (:excess (get over-ice (:target-id piece))))
       "Attacker's pip value exceeds remaining excess"
 
       :else nil)))

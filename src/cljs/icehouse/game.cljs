@@ -3,10 +3,11 @@
             [icehouse.state :as state]
             [icehouse.theme :as theme]
             [icehouse.utils :as utils]
+            [icehouse.geometry :as geo]
             [icehouse.websocket :as ws]))
 
 ;; =============================================================================
-;; Game Constants (should match backend)
+;; Game Constants
 ;; =============================================================================
 
 ;; Canvas/play area dimensions
@@ -14,42 +15,20 @@
 (def canvas-height 750)
 (def grid-size 50)
 
-;; Piece sizes for canvas rendering (base width in pixels)
-;; Sized so small height = large base, medium is halfway between
-(def piece-sizes {:small 40 :medium 50 :large 60})
-(def default-piece-size 40)  ;; Fallback for unknown piece sizes
-
 ;; Piece sizes for stash SVG rendering [width height]
-;; 3:2 height:base ratio, small height = large base
 (def stash-sizes {:small [24 36] :medium [30 45] :large [36 54]})
 
 ;; Default piece counts per player
 (def default-pieces {:small 5 :medium 5 :large 5})
 
-;; Points per piece size (pip values)
-(def pips {:small 1 :medium 2 :large 3})
-
-(defn piece-pips
-  "Get pip value for a piece (1 for small, 2 for medium, 3 for large).
-   Returns 0 if piece is nil."
-  [piece]
-  (if piece
-    (get pips (keyword (:size piece)) 0)
-    0))
-
-;; Geometry constants
-(def tip-offset-ratio 0.75)        ;; Triangle tip extends 0.75 * base-size from center
-
 ;; Rendering constants
-(def preview-alpha 0.6)            ;; Transparency for piece preview
-(def direction-line-alpha 0.5)     ;; Transparency for direction indicator line
-(def range-indicator-alpha 0.7)    ;; Transparency for attack range indicator
-(def zoom-scale 4)                 ;; Scale factor for zoom mode
-(def min-line-width 0.5)           ;; Minimum line width for visibility when zoomed
+(def preview-alpha 0.6)
+(def zoom-scale 4)
+(def min-line-width 0.5)
 
 ;; Game rules
-(def attack-unlock-threshold 2)    ;; Number of pieces before attacking is allowed
-(def timer-urgent-threshold-ms 30000) ;; Timer turns red in last 30 seconds
+(def attack-unlock-threshold 2)
+(def timer-urgent-threshold-ms 30000)
 
 ;; =============================================================================
 ;; Utility Functions
@@ -62,193 +41,33 @@
         (if zoom-state
           (let [{:keys [scale]} zoom-state
                 scaled-width (/ width scale)]
-            ;; Ensure minimum width for visibility when zoomed
             (max min-line-width scaled-width))
           width)))
-
-(defn calculate-angle
-  "Calculate angle in radians from point (x1,y1) to (x2,y2)"
-  [x1 y1 x2 y2]
-  (js/Math.atan2 (- y2 y1) (- x2 x1)))
-
-(defn rotate-point
-  "Rotate point [x y] around origin by angle (radians)"
-  [[x y] angle]
-  (let [cos-a (js/Math.cos angle)
-        sin-a (js/Math.sin angle)]
-    [(- (* x cos-a) (* y sin-a))
-     (+ (* x sin-a) (* y cos-a))]))
-
-(defn piece-vertices
-  "Get vertices of a piece in world coordinates.
-   Returns nil if piece is nil or missing required coordinates."
-  [{:keys [x y size orientation angle] :as piece}]
-  (when (and piece x y)
-    (let [base-size (get piece-sizes (keyword size) default-piece-size)
-          half (/ base-size 2)
-          ;; Standing pieces don't rotate - they're viewed from above and look the same at any angle
-          ;; Only pointing pieces use the angle for their attack direction
-          effective-angle (if (utils/standing? piece) 0 (or angle 0))
-          local-verts (if (utils/standing? piece)
-                        ;; Standing: square (axis-aligned, no rotation)
-                        [[(- half) (- half)]
-                         [half (- half)]
-                         [half half]
-                         [(- half) half]]
-                        ;; Pointing: triangle
-                        (let [half-width (* base-size tip-offset-ratio)]
-                          [[half-width 0]
-                           [(- half-width) (- half)]
-                           [(- half-width) half]]))]
-      (mapv (fn [[lx ly]]
-              (let [[rx ry] (rotate-point [lx ly] effective-angle)]
-                [(+ x rx) (+ y ry)]))
-            local-verts))))
-
-(defn point-in-polygon?
-  "Check if point [px py] is inside polygon (ray casting algorithm)"
-  [[px py] vertices]
-  (let [n (count vertices)]
-    (loop [i 0
-           inside false]
-      (if (>= i n)
-        inside
-        (let [j (mod (dec (+ i n)) n)
-              [xi yi] (nth vertices i)
-              [xj yj] (nth vertices j)
-              intersect (and (not= (> yi py) (> yj py))
-                             (< px (+ (/ (* (- xj xi) (- py yi))
-                                         (- yj yi))
-                                      xi)))]
-          (recur (inc i) (if intersect (not inside) inside)))))))
 
 ;; =============================================================================
 ;; Attack Target Detection (for preview highlighting)
 ;; =============================================================================
-
-(def parallel-threshold 0.0001)
-
-(defn attacker-tip
-  "Get the tip position of a pointing piece.
-   Returns nil if piece is nil or missing required coordinates."
-  [{:keys [x y size angle] :as piece}]
-  (when (and piece x y)
-    (let [base-size (get piece-sizes (keyword size) default-piece-size)
-          tip-offset (* base-size tip-offset-ratio)
-          angle (or angle 0)]
-      [(+ x (* (js/Math.cos angle) tip-offset))
-       (+ y (* (js/Math.sin angle) tip-offset))])))
-
-(defn attack-direction
-  "Get the unit direction vector for an attack"
-  [{:keys [angle]}]
-  (let [angle (or angle 0)]
-    [(js/Math.cos angle) (js/Math.sin angle)]))
-
-(defn ray-segment-intersection?
-  "Check if ray from origin in direction intersects line segment [a b]"
-  [[ox oy] [dx dy] [[ax ay] [bx by]]]
-  (let [v1x (- ox ax)
-        v1y (- oy ay)
-        v2x (- bx ax)
-        v2y (- by ay)
-        v3x (- dy)
-        v3y dx
-        dot (+ (* v2x v3x) (* v2y v3y))]
-    (when (> (js/Math.abs dot) parallel-threshold)
-      (let [t1 (/ (- (* v2x v1y) (* v2y v1x)) dot)
-            t2 (/ (+ (* v1x v3x) (* v1y v3y)) dot)]
-        (and (>= t1 0) (>= t2 0) (<= t2 1))))))
-
-(defn ray-intersects-polygon?
-  "Check if ray intersects any edge of polygon"
-  [origin direction vertices]
-  (let [n (count vertices)
-        edges (map (fn [i] [(nth vertices i) (nth vertices (mod (inc i) n))])
-                   (range n))]
-    (some #(ray-segment-intersection? origin direction %) edges)))
-
-(defn in-front-of?
-  "Check if attacker's attack ray intersects the target piece"
-  [attacker target]
-  (let [tip (attacker-tip attacker)
-        dir (attack-direction attacker)
-        target-verts (piece-vertices target)]
-    (ray-intersects-polygon? tip dir target-verts)))
-
-(defn point-to-segment-distance
-  "Calculate minimum distance from point p to line segment [a b]"
-  [[px py] [[ax ay] [bx by]]]
-  (let [abx (- bx ax)
-        aby (- by ay)
-        apx (- px ax)
-        apy (- py ay)
-        ab-len-sq (+ (* abx abx) (* aby aby))
-        t (if (zero? ab-len-sq)
-            0
-            (max 0 (min 1 (/ (+ (* apx abx) (* apy aby)) ab-len-sq))))
-        cx (+ ax (* t abx))
-        cy (+ ay (* t aby))]
-    (js/Math.sqrt (+ (* (- px cx) (- px cx))
-                     (* (- py cy) (- py cy))))))
-
-(defn point-to-polygon-distance
-  "Calculate minimum distance from point to polygon (nearest edge)"
-  [point vertices]
-  (let [n (count vertices)
-        edges (map (fn [i] [(nth vertices i) (nth vertices (mod (inc i) n))])
-                   (range n))]
-    (apply min (map #(point-to-segment-distance point %) edges))))
-
-(defn attack-range
-  "Get attack range for a piece (its height/length, not base width).
-   Returns 0 if piece is nil."
-  [piece]
-  (if piece
-    (let [base-size (get piece-sizes (keyword (:size piece)) default-piece-size)]
-      ;; Height = 2 * tip-offset-ratio * base-size
-      (* 2 tip-offset-ratio base-size))
-    0))
-
-(defn within-range?
-  "Check if target is within attack range of attacker"
-  [attacker target]
-  (let [tip (attacker-tip attacker)
-        target-verts (piece-vertices target)
-        dist (point-to-polygon-distance tip target-verts)
-        rng (attack-range attacker)]
-    (<= dist rng)))
 
 (defn potential-target?
   "Check if target could be attacked (in trajectory, ignoring range)"
   [attacker target attacker-player-id]
   (and (not= (utils/normalize-player-id (:player-id target))
              (utils/normalize-player-id attacker-player-id))
-       (utils/standing? target)
-       (in-front-of? attacker target)))
+       (geo/standing? target)
+       (geo/in-front-of? attacker target)))
 
 (defn valid-target?
   "Check if target is a valid attack target (in trajectory AND in range)"
   [attacker target attacker-player-id]
   (and (potential-target? attacker target attacker-player-id)
-       (within-range? attacker target)))
+       (geo/within-range? attacker target)))
 
 (defn find-targets-for-attack
   "Find all potential targets and categorize them as valid (in range) or invalid (out of range)"
   [attacker player-id board]
   (let [potential (filter #(potential-target? attacker % player-id) board)]
-    {:valid (filter #(within-range? attacker %) potential)
-     :invalid (remove #(within-range? attacker %) potential)}))
-
-(defn distance
-  "Calculate distance between two points"
-  [[x1 y1] [x2 y2]]
-  (js/Math.sqrt (+ (* (- x2 x1) (- x2 x1)) (* (- y2 y1) (- y2 y1)))))
-
-(defn piece-center
-  "Get the center point of a piece"
-  [piece]
-  [(:x piece) (:y piece)])
+    {:valid (filter #(geo/within-range? attacker %) potential)
+     :invalid (remove #(geo/within-range? attacker %) potential)}))
 
 (defn find-closest-target
   "Find the closest valid target for an attacking piece"
@@ -257,7 +76,7 @@
     (when (seq valid)
       (->> valid
            (map (fn [t] {:target t
-                         :dist (distance (piece-center attacker) (piece-center t))}))
+                         :dist (geo/distance (geo/piece-center attacker) (geo/piece-center t))}))
            (sort-by :dist)
            first
            :target))))
@@ -266,9 +85,9 @@
   "Find the piece at the given x,y position, or nil if none"
   [x y board]
   (first (filter (fn [piece]
-                   (let [verts (piece-vertices piece)]
-                     (point-in-polygon? [x y] verts)))
-                 (reverse board))))  ;; Check most recently placed first
+                   (let [verts (geo/piece-vertices piece)]
+                     (geo/point-in-polygon? [x y] verts)))
+                 (reverse board))))
 
 (defn find-piece-by-id
   "Find a piece by its ID"
@@ -278,7 +97,7 @@
 (defn attackers-by-target
   "Returns a map of target-id -> list of attackers targeting that piece"
   [board]
-  (let [pointing-pieces (filter #(and (utils/pointing? %)
+  (let [pointing-pieces (filter #(and (geo/pointing? %)
                                       (:target-id %))
                                 board)]
     (group-by :target-id pointing-pieces)))
@@ -286,7 +105,7 @@
 (defn attack-strength
   "Sum of pip values of all attackers"
   [attackers]
-  (reduce + (map piece-pips attackers)))
+  (reduce + (map geo/piece-pips attackers)))
 
 (defn calculate-iced-pieces
   "Returns set of piece IDs that are successfully iced.
@@ -296,7 +115,7 @@
     (reduce-kv
      (fn [iced target-id attackers]
        (let [defender (find-piece-by-id board target-id)
-             defender-pips (piece-pips defender)
+             defender-pips (geo/piece-pips defender)
              attacker-pips (attack-strength attackers)]
          (if (and defender (> attacker-pips defender-pips))
            (conj iced target-id)
@@ -329,7 +148,7 @@
     (reduce-kv
      (fn [result target-id attackers]
        (let [defender (find-piece-by-id board target-id)
-             defender-pips (piece-pips defender)
+             defender-pips (geo/piece-pips defender)
              attacker-pips (attack-strength attackers)
              excess (- attacker-pips (+ defender-pips 1))]
          (if (and defender (> attacker-pips defender-pips) (pos? excess))
@@ -345,13 +164,13 @@
    Returns true if piece is an attacker in an over-iced situation where
    the current player owns the defender and the attacker's pips <= excess."
   [piece player-id board]
-  (when (and piece (utils/pointing? piece))
+  (when (and piece (geo/pointing? piece))
     (let [over-ice (calculate-over-ice board)
           target-id (:target-id piece)]
       (when-let [info (get over-ice target-id)]
         (and (= (utils/normalize-player-id (:defender-owner info))
                 (utils/normalize-player-id player-id))
-             (<= (piece-pips piece) (:excess info)))))))
+             (<= (geo/piece-pips piece) (:excess info)))))))
 
 (defn get-hovered-piece
   "Get the piece currently under the mouse cursor, if any"
@@ -381,7 +200,7 @@
 (defn draw-pyramid [ctx x y size colour orientation angle & [{:keys [iced? zoom-state]}]]
   (let [size-kw (keyword size)
         orient-kw (keyword orientation)
-        base-size (get piece-sizes size-kw default-piece-size)
+        base-size (get geo/piece-sizes size-kw geo/default-piece-size)
         half-size (/ base-size 2)
         rotation (or angle 0)
         final-colour (if iced? (lighten-color colour) colour)]
@@ -409,7 +228,7 @@
         (.lineTo ctx (- half-size) half-size)
         (.stroke ctx))
       ;; Pointing/attacking: side view triangle pointing right (3:2 length:base ratio like stash)
-      (let [half-width (* base-size tip-offset-ratio)]
+      (let [half-width (* base-size geo/tip-offset-ratio)]
         (.beginPath ctx)
         (.moveTo ctx half-width 0)                    ; tip pointing right
         (.lineTo ctx (- half-width) (- half-size))    ; top-left corner
@@ -423,7 +242,7 @@
 (defn draw-capture-highlight
   "Draw a highlight around a capturable piece"
   [ctx piece zoom-state]
-  (let [verts (piece-vertices piece)]
+  (let [verts (geo/piece-vertices piece)]
     (.save ctx)
     (set! (.-strokeStyle ctx) theme/gold)
     (set-line-width ctx 4 zoom-state)
@@ -495,7 +314,7 @@
 (defn draw-target-highlight
   "Draw a highlight around a target piece - green for valid, red for out of range"
   [ctx piece valid? zoom-state]
-  (let [verts (piece-vertices piece)
+  (let [verts (geo/piece-vertices piece)
         color (if valid? "rgba(0,255,0,0.5)" "rgba(255,0,0,0.5)")]
     (.save ctx)
     (set! (.-strokeStyle ctx) color)
@@ -531,12 +350,12 @@
 (defn draw-attack-preview
   "Draw attack range indicator and target highlights for an attacking piece being placed"
   [ctx game x y angle size player-id zoom-state]
-  (let [base-size (get piece-sizes size default-piece-size)
-        tip-offset (* base-size tip-offset-ratio)
+  (let [base-size (get geo/piece-sizes size geo/default-piece-size)
+        tip-offset (* base-size geo/tip-offset-ratio)
         tip-x (+ x (* (js/Math.cos angle) tip-offset))
         tip-y (+ y (* (js/Math.sin angle) tip-offset))
-        ;; Attack range extends piece height from tip (height = 2 * tip-offset-ratio * base-size)
-        piece-height (* 2 tip-offset-ratio base-size)
+        ;; Attack range extends piece height from tip (height = 2 * geo/tip-offset-ratio * base-size)
+        piece-height (* 2 geo/tip-offset-ratio base-size)
         range-end-x (+ tip-x (* (js/Math.cos angle) piece-height))
         range-end-y (+ tip-y (* (js/Math.sin angle) piece-height))
         ;; Create preview attacker to find targets (use world coords)
@@ -584,9 +403,9 @@
         angle (if in-shift-mode?
                 (or locked-angle 0)
                 (if (and current-x current-y)
-                  (calculate-angle start-x start-y current-x current-y)
+                  (geo/calculate-angle start-x start-y current-x current-y)
                   0))
-        is-attacking? (utils/pointing? selected-piece)]
+        is-attacking? (geo/pointing? selected-piece)]
     ;; Draw a line showing the direction (only in normal mode)
     (when (and current-x current-y (not in-shift-mode?))
       (set! (.-strokeStyle ctx) "rgba(255,255,255,0.5)")
@@ -733,7 +552,7 @@
                                     :current-y (+ start-y dy)
                                     :last-x adjusted-x :last-y adjusted-y))
                       ;; Normal: update current position for angle calculation, lock that angle
-                      (let [new-angle (calculate-angle start-x start-y adjusted-x adjusted-y)]
+                      (let [new-angle (geo/calculate-angle start-x start-y adjusted-x adjusted-y)]
                         (swap! state/ui-state update :drag assoc
                                :current-x adjusted-x :current-y adjusted-y
                                :last-x adjusted-x :last-y adjusted-y
@@ -755,7 +574,7 @@
                       ;; Only recalculate if there's actual distance between start and current
                       has-movement (or (not= start-x current-x) (not= start-y current-y))
                       angle (if (and has-movement (not shift-held))
-                              (calculate-angle start-x start-y current-x current-y)
+                              (geo/calculate-angle start-x start-y current-x current-y)
                               (or locked-angle 0))]
                   (ws/place-piece! final-x final-y size orientation angle nil captured?)
                   (swap! state/ui-state assoc :drag nil))))
@@ -850,7 +669,7 @@
        (when-not has-size? " [NONE]")]
       [:span.separator " | "]
       [:span.current-mode
-       (if (utils/standing? (:selected-piece ui)) "Defend (D)" "Attack (A)")]
+       (if (geo/standing? (:selected-piece ui)) "Defend (D)" "Attack (A)")]
       (when captured?
         [:span.captured-indicator {:style {:color theme/gold :margin-left "0.5rem"}}
          "[Captured]"])
