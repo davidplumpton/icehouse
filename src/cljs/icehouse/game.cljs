@@ -729,10 +729,13 @@
                       ;; Round coordinates to integers (schema expects :int)
                       final-x (js/Math.round (* start-x zoom-scale))
                       final-y (js/Math.round (* start-y zoom-scale))
-                      ;; Use locked angle when shift is held, otherwise calculate from position
-                      angle (if shift-held
-                              locked-angle
-                              (calculate-angle start-x start-y current-x current-y))]
+                      ;; Use locked angle if available, otherwise calculate from position
+                      ;; locked-angle is set during dragging and preserved through zoom transforms
+                      ;; Only recalculate if there's actual distance between start and current
+                      has-movement (or (not= start-x current-x) (not= start-y current-y))
+                      angle (if (and has-movement (not shift-held))
+                              (calculate-angle start-x start-y current-x current-y)
+                              (or locked-angle 0))]
                   (ws/place-piece! final-x final-y size orientation angle nil captured?)
                   (swap! state/ui-state assoc :drag nil :zoom-active false))))
             :on-mouse-leave
