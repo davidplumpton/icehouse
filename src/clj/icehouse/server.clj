@@ -1,4 +1,5 @@
 (ns icehouse.server
+  (:gen-class)
   (:require [org.httpkit.server :as http]
             [ring.middleware.defaults :refer [wrap-defaults site-defaults]]
             [ring.middleware.resource :refer [wrap-resource]]

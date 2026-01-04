@@ -95,3 +95,4 @@ Thumbs.db
 .beads/*.json[0-9]
 .beads/*.jsonl[0-9]
 
+target/
