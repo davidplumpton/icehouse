@@ -785,7 +785,7 @@
             original-colour (get-in game [:players original-owner :colour])]
         ;; Remove piece from board
         (swap! games update-in [room-id :board]
-               (fn [board] (vec (remove #(= (:id %) piece-id) board))))
+               (fn [board] (vec (remove (utils/by-id piece-id) board))))
         ;; Add to capturing player's captured stash with original colour
         (swap! games update-in [room-id :players player-id :captured]
                conj {:size piece-size :colour original-colour})

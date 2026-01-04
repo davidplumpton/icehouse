@@ -19,7 +19,7 @@
      (fn [board move]
        (case (:type move)
          :place-piece (conj board (:piece move))
-         :capture-piece (vec (remove #(= (:id %) (:piece-id move)) board))
+         :capture-piece (vec (remove (utils/by-id (:piece-id move)) board))
          board))
      []
      moves)))

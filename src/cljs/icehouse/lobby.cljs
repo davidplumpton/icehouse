@@ -2,6 +2,7 @@
   (:require [reagent.core :as r]
             [icehouse.state :as state]
             [icehouse.theme :as theme]
+            [icehouse.utils :as utils]
             [icehouse.websocket :as ws]))
 
 (defn colour-picker []
@@ -42,7 +43,7 @@
 (defn ready-button []
   (let [my-id (:id @state/current-player)
         me (->> @state/players
-                (filter #(= (:id %) my-id))
+                (filter (utils/by-id my-id))
                 first)]
     [:button.ready-btn
      {:on-click #(ws/toggle-ready!)
