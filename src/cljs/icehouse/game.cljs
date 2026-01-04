@@ -220,7 +220,8 @@
 (defn potential-target?
   "Check if target could be attacked (in trajectory, ignoring range)"
   [attacker target attacker-player-id]
-  (and (not= (:player-id target) attacker-player-id)
+  (and (not= (utils/normalize-player-id (:player-id target))
+             (utils/normalize-player-id attacker-player-id))
        (= (keyword (:orientation target)) :standing)
        (in-front-of? attacker target)))
 
@@ -346,8 +347,8 @@
     (let [over-ice (calculate-over-ice board)
           target-id (:target-id piece)]
       (when-let [info (get over-ice target-id)]
-        ;; defender-owner is a string from JSON, player-id is a keyword
-        (and (= (keyword (:defender-owner info)) player-id)
+        (and (= (utils/normalize-player-id (:defender-owner info))
+                (utils/normalize-player-id player-id))
              (<= (piece-pips piece) (:excess info)))))))
 
 (defn get-hovered-piece
@@ -595,7 +596,7 @@
 (defn has-pieces-of-size? [size use-captured?]
   "Returns true if current player has pieces of the given size to place"
   (let [game @state/game-state
-        player-id (keyword (:id @state/current-player))
+        player-id (utils/normalize-player-id (:id @state/current-player))
         player-data (get-in game [:players player-id])]
     (if use-captured?
       ;; Check captured pieces
@@ -608,7 +609,7 @@
 (defn available-captured-sizes []
   "Returns a vector of distinct sizes of captured pieces in order they appear"
   (let [game @state/game-state
-        player-id (keyword (:id @state/current-player))
+        player-id (utils/normalize-player-id (:id @state/current-player))
         player-data (get-in game [:players player-id])
         captured (or (:captured player-data) [])]
     (vec (distinct (map #(keyword (:size %)) captured)))))
@@ -751,7 +752,7 @@
 (defn has-captured-pieces? []
   "Returns true if current player has any captured pieces"
   (let [game @state/game-state
-        player-id (keyword (:id @state/current-player))
+        player-id (utils/normalize-player-id (:id @state/current-player))
         player-data (get-in game [:players player-id])
         captured (or (:captured player-data) [])]
     (pos? (count captured))))
@@ -761,7 +762,7 @@
   []
   (when-let [hovered (get-hovered-piece)]
     (when-let [game @state/game-state]
-      (let [player-id (keyword (:id @state/current-player))
+      (let [player-id (utils/normalize-player-id (:id @state/current-player))
             board (:board game)]
         (when (capturable-piece? hovered player-id board)
           (ws/capture-piece! (:id hovered)))))))

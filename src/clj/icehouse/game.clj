@@ -328,7 +328,8 @@
   (let [;; Use colour comparison if both pieces have colours, otherwise fall back to player-id
         is-opponent (if (and (:colour attacker) (:colour target))
                       (not= (:colour target) (:colour attacker))
-                      (not= (:player-id target) (:player-id attacker)))
+                      (not= (utils/normalize-player-id (:player-id target))
+                            (utils/normalize-player-id (:player-id attacker))))
         is-standing (= (:orientation target) :standing)]
     (if (and is-opponent is-standing)
       ;; Only check in-front-of? for standing opponent pieces
@@ -551,7 +552,7 @@
          (if (and defender (> attacker-pips defender-pips) (pos? excess))
            (assoc result target-id {:excess excess
                                     :attackers attackers
-                                    :defender-owner (:player-id defender)})
+                                    :defender-owner (utils/normalize-player-id (:player-id defender))})
            result)))
      {}
      attacks)))
@@ -570,12 +571,14 @@
 (defn pieces-placed-by-player
   "Count pieces placed by a player"
   [board player-id]
-  (count (filter #(= (:player-id %) player-id) board)))
+  (count (filter #(= (utils/normalize-player-id (:player-id %))
+                     (utils/normalize-player-id player-id)) board)))
 
 (defn player-defenders
   "Get all standing (defender) pieces for a player"
   [board player-id]
-  (filter #(and (= (:player-id %) player-id)
+  (filter #(and (= (utils/normalize-player-id (:player-id %))
+                   (utils/normalize-player-id player-id))
                 (= (:orientation %) :standing))
           board))
 
@@ -598,7 +601,7 @@
    (if (false? (get options :icehouse-rule))
      #{}  ;; Icehouse rule disabled
      (let [iced (calculate-iced-pieces board)
-           player-ids (distinct (map :player-id board))]
+           player-ids (distinct (map #(utils/normalize-player-id (:player-id %)) board))]
        (set (filter #(in-icehouse? board iced %) player-ids))))))
 
 (defn calculate-scores [game]
@@ -608,7 +611,7 @@
         icehouse-players (calculate-icehouse-players board options)]
     (reduce
      (fn [scores piece]
-       (let [player-id (:player-id piece)]
+       (let [player-id (utils/normalize-player-id (:player-id piece))]
          ;; Players in the Icehouse get zero (handled by not adding points)
          (if (contains? icehouse-players player-id)
            (assoc scores player-id 0)
@@ -751,7 +754,8 @@
       (nil? (get over-ice (:target-id piece)))
       "Target is not over-iced"
 
-      (not= (:defender-owner (get over-ice (:target-id piece))) player-id)
+      (not= (utils/normalize-player-id (:defender-owner (get over-ice (:target-id piece))))
+            (utils/normalize-player-id player-id))
       "You can only capture attackers targeting your own pieces"
 
       (> (piece-pips piece) (:excess (get over-ice (:target-id piece))))
