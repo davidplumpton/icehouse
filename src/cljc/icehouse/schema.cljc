@@ -5,9 +5,9 @@
 ;; Primitive Schemas
 ;; =============================================================================
 
-(def uuid-string
-  "UUID as a string"
-  [:re #"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"])
+(def id-string
+  "Unique identifier as a string"
+  :string)
 
 (def colour
   "Hex colour string (e.g., #ff6b6b)"
@@ -28,15 +28,15 @@
 (def Piece
   "A pyramid piece on the board"
   [:map
-   [:id uuid-string]
-   [:player-id uuid-string]
+   [:id id-string]
+   [:player-id id-string]
    [:colour colour]
    [:x :int]
    [:y :int]
    [:size piece-size]
    [:orientation orientation]
    [:angle [:or :double :int]]
-   [:target-id {:optional true} [:or uuid-string :nil]]])
+   [:target-id {:optional true} [:or id-string :nil]]])
 
 (def CapturedPiece
   "A captured piece (in a player's captured list)"
@@ -65,7 +65,7 @@
 
 (def PlayerMap
   "Map of player-id to Player"
-  [:map-of uuid-string Player])
+  [:map-of id-string Player])
 
 ;; =============================================================================
 ;; Game Options Schemas
@@ -88,7 +88,7 @@
   "A recorded move with metadata"
   [:map
    [:type [:enum :place-piece :capture-piece]]
-   [:player-id uuid-string]
+   [:player-id id-string]
    [:timestamp :int]
    [:elapsed-ms :int]
    [:data [:map]]])  ;; Flexible data based on move type
@@ -100,7 +100,7 @@
 (def GameState
   "Complete game state"
   [:map
-   [:game-id uuid-string]
+   [:game-id id-string]
    [:room-id :string]
    [:players PlayerMap]
    [:board [:vector Piece]]
@@ -153,14 +153,14 @@
    [:size [:enum "small" "medium" "large"]]
    [:orientation [:enum "standing" "pointing"]]
    [:angle [:or :double :int]]
-   [:target-id {:optional true} [:or uuid-string :nil]]
+   [:target-id {:optional true} [:or id-string :nil]]
    [:captured :boolean]])
 
 (def CapturePieceMessage
   "Client capture piece message"
   [:map
    [:type [:enum "capture-piece"]]
-   [:piece-id uuid-string]])
+   [:piece-id id-string]])
 
 (def ListGamesMessage
   "Client list games message"
@@ -171,7 +171,7 @@
   "Client load game message"
   [:map
    [:type [:enum "load-game"]]
-   [:game-id uuid-string]])
+   [:game-id id-string]])
 
 (def FinishMessage
   "Client finish/end game message"
@@ -198,7 +198,7 @@
   "Server joined message"
   [:map
    [:type [:enum "joined"]]
-   [:player-id uuid-string]
+   [:player-id id-string]
    [:room-id :string]
    [:name :string]
    [:colour colour]])
@@ -241,22 +241,22 @@
   "Server player finished message"
   [:map
    [:type [:enum "player-finished"]]
-   [:player-id uuid-string]
+   [:player-id id-string]
    [:game GameState]])
 
 (def GameOverMessage
   "Server game over message"
   [:map
    [:type [:enum "game-over"]]
-   [:scores [:map-of uuid-string :int]]
-   [:icehouse-players [:vector uuid-string]]
-   [:over-ice [:map-of uuid-string :any]]])
+   [:scores [:map-of id-string :int]]
+   [:icehouse-players [:vector id-string]]
+   [:over-ice [:map-of id-string :any]]])
 
 (def GameListMessage
   "Server game list message"
   [:map
    [:type [:enum "game-list"]]
-   [:games [:vector uuid-string]]])
+   [:games [:vector id-string]]])
 
 (def GameRecordMessage
   "Server game record message"

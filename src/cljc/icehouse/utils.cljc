@@ -109,13 +109,13 @@
 
 #?(:clj
    (defn send-msg!
-     "Send a JSON message to a single channel"
+     "Send a JSON message to a single channel. Validates message against schema."
      [channel msg]
-     ;; Validation is optional - log failures but still send the message
-     ;; This allows the app to function even if schemas don't match reality
-     (when-not (validate-outgoing-message msg)
-       (println "Warning: Message validation failed:" msg))
-     (http/send! channel (json/generate-string msg))))
+     (if (validate-outgoing-message msg)
+       (http/send! channel (json/generate-string msg))
+       (do
+         (println "ERROR: Refusing to send invalid outgoing message:" msg)
+         nil))))
 
 #?(:clj
    (defn broadcast-room!
