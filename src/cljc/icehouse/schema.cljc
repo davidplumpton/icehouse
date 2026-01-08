@@ -300,19 +300,19 @@
 (def DragState
   "State for dragging a piece during placement"
   [:map
-   [:start-x :int]
-   [:start-y :int]
-   [:current-x :int]
-   [:current-y :int]
-   [:last-x {:optional true} [:or :int :nil]]
-   [:last-y {:optional true} [:or :int :nil]]
-   [:locked-angle {:optional true} [:or :double :nil]]])
+   [:start-x [:or :double :int]]
+   [:start-y [:or :double :int]]
+   [:current-x [:or :double :int]]
+   [:current-y [:or :double :int]]
+   [:last-x {:optional true} [:or :double :int :nil]]
+   [:last-y {:optional true} [:or :double :int :nil]]
+   [:locked-angle {:optional true} [:or :double :int :nil]]])
 
 (def HoverPos
   "Current mouse position on canvas"
   [:map
-   [:x :int]
-   [:y :int]])
+   [:x [:or :double :int]]
+   [:y [:or :double :int]]])
 
 (def UIState
   "Frontend UI interaction state"

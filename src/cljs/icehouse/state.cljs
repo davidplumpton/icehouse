@@ -1,5 +1,7 @@
 (ns icehouse.state
-  (:require [reagent.core :as r]))
+  (:require [reagent.core :as r]
+            [icehouse.schema :as schema]
+            [malli.core :as m]))
 
 ;; =============================================================================
 ;; Player Identity
@@ -38,6 +40,14 @@
 ;; Main game state from server
 (defonce game-state (r/atom nil))
 
+;; Validate game state from server
+(defonce _game-state-validator
+  (add-watch game-state :validator
+             (fn [_ _ _ new-state]
+               (when (and new-state (not (m/validate schema/GameState new-state)))
+                 (.error js/console "Invalid game state from server:"
+                         (clj->js (m/explain schema/GameState new-state)))))))
+
 ;; Game result when game ends
 ;; {:scores {"player-id" score} :icehouse-players ["id"] :over-ice {...}}
 (defonce game-result (r/atom nil))
@@ -65,6 +75,14 @@
                            :zoom-active false
                            :show-help false}))
 
+;; Validate UI state changes
+(defonce _ui-state-validator
+  (add-watch ui-state :validator
+             (fn [_ _ _ new-state]
+               (when-not (m/validate schema/UIState new-state)
+                 (.error js/console "Invalid UI state update:"
+                         (clj->js (m/explain schema/UIState new-state)))))))
+
 ;; =============================================================================
 ;; Replay State
 ;; =============================================================================
@@ -72,6 +90,14 @@
 ;; Replay state
 ;; {:record {...} :current-move 0 :playing? false :speed 1}
 (defonce replay-state (r/atom nil))
+
+;; Validate replay state changes
+(defonce _replay-state-validator
+  (add-watch replay-state :validator
+             (fn [_ _ _ new-state]
+               (when (and new-state (not (m/validate schema/ReplayState new-state)))
+                 (.error js/console "Invalid replay state update:"
+                         (clj->js (m/explain schema/ReplayState new-state)))))))
 
 ;; List of available saved game IDs
 (defonce game-list (r/atom nil))
