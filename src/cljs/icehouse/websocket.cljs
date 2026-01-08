@@ -24,7 +24,7 @@
     data
     (do
       (js/console.error "Invalid incoming message:" data)
-      (js/console.error "Validation errors:" (m/explain schema/ServerMessage data))
+      (js/console.error "Validation errors:" (clj->js (m/explain schema/ServerMessage data)))
       nil)))
 
 (defn validate-outgoing-message
@@ -34,7 +34,7 @@
     data
     (do
       (js/console.error "Invalid outgoing message:" data)
-      (js/console.error "Validation errors:" (m/explain schema/ClientMessage data))
+      (js/console.error "Validation errors:" (clj->js (m/explain schema/ClientMessage data)))
       nil)))
 
 (defn get-ws-url []
