@@ -259,11 +259,28 @@
    [:type [:enum "game-list"]]
    [:games [:vector id-string]]])
 
+(def GameRecord
+  "A persistent record of a completed game"
+  [:map
+   [:version :int]
+   [:game-id id-string]
+   [:room-id :string]
+   [:players [:map-of id-string [:map [:name :string] [:colour colour]]]]
+   [:started-at :int]
+   [:ended-at :int]
+   [:duration-ms :int]
+   [:end-reason [:enum :all-pieces-placed :time-up :all-players-finished]]
+   [:moves [:vector Move]]
+   [:final-board [:vector Piece]]
+   [:final-scores [:map-of id-string :int]]
+   [:icehouse-players [:vector id-string]]
+   [:winner {:optional true} [:or id-string :nil]]])
+
 (def GameRecordMessage
   "Server game record message"
   [:map
    [:type [:enum "game-record"]]
-   [:record [:or GameState :nil]]])
+   [:record [:or GameRecord :nil]]])
 
 (def ErrorMessage
   "Server error message"

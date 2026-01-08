@@ -1,7 +1,9 @@
 (ns icehouse.storage
   (:require [clojure.edn :as edn]
             [clojure.java.io :as io]
-            [clojure.string :as str]))
+            [clojure.string :as str]
+            [icehouse.schema :as schema]
+            [malli.core :as m]))
 
 (def ^:private edn-extension ".edn")
 
@@ -29,19 +31,28 @@
     (str games-dir "/" game-id edn-extension)))
 
 (defn save-game-record!
-  "Save a game record to disk as EDN. Returns the file path, or nil if game-id is invalid."
+  "Save a game record to disk as EDN. Returns the file path, or nil if invalid."
   [record]
-  (when-let [path (game-record-path (:game-id record))]
-    (ensure-games-dir!)
-    (spit path (pr-str record))
-    path))
+  (if-not (m/validate schema/GameRecord record)
+    (do
+      (println "ERROR: Refusing to save invalid game record:" (m/explain schema/GameRecord record))
+      nil)
+    (when-let [path (game-record-path (:game-id record))]
+      (ensure-games-dir!)
+      (spit path (pr-str record))
+      path)))
 
 (defn load-game-record
-  "Load a game record from disk by game-id. Returns nil if not found or game-id is invalid."
+  "Load a game record from disk by game-id. Returns nil if not found or invalid."
   [game-id]
   (when-let [path (game-record-path game-id)]
     (when (.exists (io/file path))
-      (edn/read-string {:readers {}} (slurp path)))))
+      (let [record (edn/read-string {:readers {}} (slurp path))]
+        (if (m/validate schema/GameRecord record)
+          record
+          (do
+            (println "ERROR: Loaded invalid game record from" path ":" (m/explain schema/GameRecord record))
+            nil))))))
 
 (defn- extract-game-id
   "Extract game-id from an EDN filename"
