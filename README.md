@@ -50,8 +50,27 @@ Once both are running, open http://localhost:3000 in your browser.
 
 ## Running Tests
 
+### Backend (Clojure)
+Run the backend test suite:
 ```bash
+make test
+# or
 clojure -M:test
+```
+
+### Frontend (ClojureScript)
+The frontend tests run in the browser.
+
+1. Start the test watcher:
+   ```bash
+   npx shadow-cljs watch test
+   ```
+2. Open **http://localhost:8022** in your browser.
+3. Check the browser console for detailed test output.
+
+You can also watch both the app and tests simultaneously:
+```bash
+npx shadow-cljs watch app test
 ```
 
 ## Project Structure
