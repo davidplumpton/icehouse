@@ -38,7 +38,12 @@
 
 (deftest capturable-piece-test
   (testing "capturable-piece? correctly identifies attackers that can be captured"
-    (let [board [{:id "d1" :player-id "p2" :size :small :orientation :standing :x 200 :y 100}
-                 {:id "a1" :player-id "p1" :size :large :orientation :pointing :angle 0 :target-id "d1" :x 100 :y 100}]
-          piece (second board)]
-      (is (game/capturable-piece? piece "p2" board) "Owner of iced defender should be able to capture attacker"))))
+    (let [board [{:id "d1" :player-id "p2" :size :small :orientation :standing :x 200 :y 100} ;; 1 pip
+                 {:id "a1" :player-id "p1" :size :medium :orientation :pointing :angle 0 :target-id "d1" :x 100 :y 100} ;; 2 pips
+                 {:id "a2" :player-id "p1" :size :small :orientation :pointing :angle 0 :target-id "d1" :x 100 :y 120}]] ;; 1 pip
+      ;; Total attack: 3 pips. Needed to ice Small (1 pip): 2 pips. Excess: 1 pip.
+      ;; Attacker a2 (Small, 1 pip) should be capturable. Attacker a1 (Medium, 2 pips) should NOT.
+      (let [a1 (first (filter #(= (:id %) "a1") board))
+            a2 (first (filter #(= (:id %) "a2") board))]
+        (is (game/capturable-piece? a2 "p2" board) "Owner of iced defender should be able to capture Small attacker (1 pip <= 1 excess)")
+        (is (not (game/capturable-piece? a1 "p2" board)) "Should NOT be able to capture Medium attacker (2 pips > 1 excess)")))))
