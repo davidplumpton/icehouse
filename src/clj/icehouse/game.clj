@@ -163,6 +163,7 @@
   ([room-id players]
    (create-game room-id players {}))
   ([room-id players options]
+   {:post [(m/validate schema/GameState %)]}
    (let [now (System/currentTimeMillis)
          timer-enabled (get options :timer-enabled true)
          timer-duration (get options :timer-duration :random)
@@ -277,6 +278,7 @@
   "Returns set of piece IDs that are successfully iced.
    Per Icehouse rules: a defender is iced when total attacker pips > defender pips"
   [board]
+  {:post [(m/validate schema/PieceIDSet %)]}
   (let [stats (calculate-attack-stats board)]
     (reduce-kv
      (fn [iced target-id {:keys [defender attacker-pips]}]
@@ -363,11 +365,13 @@
      #{}
      stats)))
 
-(defn calculate-scores [game]
+(defn calculate-scores
   "Calculate final scores for all players.
    Players score points for:
    - Un-iced standing (defending) pieces
    - Attacking pieces that successfully ice a defender"
+  [game]
+  {:post [(m/validate schema/Scores %)]}
   (let [board (:board game)
         options (get game :options {})
         iced (calculate-iced-pieces board)
@@ -419,6 +423,7 @@
 (defn build-game-record
   "Build a complete game record from current game state for persistence"
   [game end-reason]
+  {:post [(m/validate schema/GameRecord %)]}
   (let [now (System/currentTimeMillis)
         options (get game :options {})
         scores (calculate-scores game)
@@ -445,6 +450,7 @@
 (defn construct-piece-for-placement
   "Construct the piece map for placement, handling auto-targeting and colour assignment"
   [game player-id msg]
+  {:post [(m/validate schema/Piece %)]}
   (let [player-colour (get-in game [:players player-id :colour])
         using-captured? (boolean (:captured msg))
         piece-size (keyword (:size msg))

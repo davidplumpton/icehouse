@@ -1,7 +1,9 @@
 (ns icehouse.lobby
   (:require [icehouse.game :as game]
             [icehouse.messages :as msg]
-            [icehouse.utils :as utils]))
+            [icehouse.utils :as utils]
+            [icehouse.schema :as schema]
+            [malli.core :as m]))
 
 ;; Game options stored per room
 (defonce room-options (atom {}))
@@ -12,6 +14,7 @@
    :timer-duration :random}) ;; :random (2-5 min), or specific ms value
 
 (defn get-room-options [room-id]
+  {:post [(m/validate schema/GameOptions %)]}
   (get @room-options room-id default-options))
 
 (def default-names
@@ -54,6 +57,7 @@
     (first (remove taken colours))))
 
 (defn get-room-players [clients room-id]
+  {:post [(m/validate schema/PlayerList %)]}
   (->> @clients
        (filter (fn [[_ c]] (= (:room-id c) room-id)))
        (map (fn [[ch c]] {:id (game/player-id-from-channel ch)

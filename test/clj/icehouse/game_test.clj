@@ -820,12 +820,12 @@
   (testing "build-game-record creates a complete record"
     (let [game {:game-id "test-game-id"
                 :room-id "room-1"
-                :players {"p1" {:name "Alice" :colour "#ff0000" :pieces {:small 2 :medium 3 :large 4}}
-                          "p2" {:name "Bob" :colour "#0000ff" :pieces {:small 3 :medium 3 :large 3}}}
-                :board [{:id "piece-1" :player-id "p1" :orientation :standing :size :large}
-                        {:id "piece-2" :player-id "p2" :orientation :standing :size :medium}]
-                :moves [{:type :place-piece :player-id "p1" :elapsed-ms 1000}
-                        {:type :place-piece :player-id "p2" :elapsed-ms 2000}]
+                :players {"p1" {:name "Alice" :colour "#ff0000" :pieces {:small 2 :medium 3 :large 4} :captured []}
+                          "p2" {:name "Bob" :colour "#0000ff" :pieces {:small 3 :medium 3 :large 3} :captured []}}
+                :board [{:id "piece-1" :player-id "p1" :colour "#ff0000" :x 100 :y 100 :angle 0 :orientation :standing :size :large}
+                        {:id "piece-2" :player-id "p2" :colour "#0000ff" :x 200 :y 200 :angle 0 :orientation :standing :size :medium}]
+                :moves [{:type :place-piece :player-id "p1" :timestamp 1000000 :elapsed-ms 1000}
+                        {:type :place-piece :player-id "p2" :timestamp 1001000 :elapsed-ms 2000}]
                 :started-at 1000000
                 :ends-at 1300000}
           record (game/build-game-record game :time-up)]
@@ -846,10 +846,10 @@
   (testing "build-game-record determines winner from scores"
     (let [game {:game-id "test-game"
                 :room-id "room-1"
-                :players {"p1" {:name "Alice" :colour "#ff0000"}
-                          "p2" {:name "Bob" :colour "#0000ff"}}
-                :board [{:id "1" :player-id "p1" :orientation :standing :size :large}  ; 3 pts
-                        {:id "2" :player-id "p2" :orientation :standing :size :small}] ; 1 pt
+                :players {"p1" {:name "Alice" :colour "#ff0000" :pieces {:small 5 :medium 5 :large 5} :captured []}
+                          "p2" {:name "Bob" :colour "#0000ff" :pieces {:small 5 :medium 5 :large 5} :captured []}}
+                :board [{:id "1" :player-id "p1" :colour "#ff0000" :x 100 :y 100 :angle 0 :orientation :standing :size :large}  ; 3 pts
+                        {:id "2" :player-id "p2" :colour "#0000ff" :x 200 :y 200 :angle 0 :orientation :standing :size :small}] ; 1 pt
                 :moves []
                 :started-at 1000000
                 :ends-at 1300000}

@@ -64,9 +64,12 @@
 (defn list-game-records
   "List all saved game record IDs, sorted by filename"
   []
+  {:post [(m/validate [:sequential schema/id-string] %)]}
   (ensure-games-dir!)
-  (when-let [files (.listFiles (io/file games-dir))]
+  (if-let [files (.listFiles (io/file games-dir))]
     (->> files
          (filter #(.isFile ^java.io.File %))
          (keep extract-game-id)
-         (sort))))
+         (sort)
+         vec)
+    []))

@@ -21,6 +21,10 @@
   "Piece orientation on board"
   [:enum :standing "standing" :pointing "pointing"])
 
+(def PieceIDSet
+  "Set of piece IDs"
+  [:set id-string])
+
 ;; =============================================================================
 ;; Piece Schemas
 ;; =============================================================================
@@ -67,6 +71,18 @@
   "Map of player-id to Player"
   [:map-of id-string Player])
 
+(def PlayerSummary
+  "Minimal player info for lobby display"
+  [:map
+   [:id id-string]
+   [:name :string]
+   [:colour colour]
+   [:ready {:optional true} :boolean]])
+
+(def PlayerList
+  "List of players in a room"
+  [:sequential PlayerSummary])
+
 ;; =============================================================================
 ;; Game Options Schemas
 ;; =============================================================================
@@ -79,6 +95,14 @@
    [:timer-duration {:optional true} [:or
                                       [:enum :random "random"]
                                       [:int {:min 1000}]]]])
+
+;; =============================================================================
+;; Score Schemas
+;; =============================================================================
+
+(def Scores
+  "Map of player-id to numeric score"
+  [:map-of id-string :int])
 
 ;; =============================================================================
 ;; Move Schemas
@@ -207,11 +231,7 @@
   "Server players message"
   [:map
    [:type [:enum "players"]]
-   [:players [:sequential [:map
-                           [:id [:or :string :int]]
-                           [:name :string]
-                           [:colour :string]
-                           [:ready {:optional true} :boolean]]]]])
+   [:players PlayerList]])
 
 (def OptionsMessage
   "Server options message"
@@ -248,7 +268,7 @@
   "Server game over message"
   [:map
    [:type [:enum "game-over"]]
-   [:scores [:map-of id-string :int]]
+   [:scores Scores]
    [:icehouse-players [:vector id-string]]
    [:over-ice [:map-of id-string :any]]])
 
@@ -268,13 +288,12 @@
    [:started-at :int]
    [:ended-at :int]
    [:duration-ms :int]
-   [:end-reason [:enum :all-pieces-placed :time-up :all-players-finished]]
-   [:moves [:vector Move]]
-   [:final-board [:vector Piece]]
-   [:final-scores [:map-of id-string :int]]
-   [:icehouse-players [:vector id-string]]
-   [:winner {:optional true} [:or id-string :nil]]])
-
+        [:end-reason [:enum :all-pieces-placed :time-up :all-players-finished]]
+        [:moves [:vector Move]]
+        [:final-board [:vector Piece]]
+        [:final-scores Scores]
+        [:icehouse-players [:vector id-string]]
+        [:winner {:optional true} [:or id-string :nil]]])
 (def GameRecordMessage
   "Server game record message"
   [:map
