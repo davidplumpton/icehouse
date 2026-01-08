@@ -19,6 +19,27 @@ A real-time multiplayer implementation of Classic Icehouse for 3-4 players. Play
 - Java 11+ (for Clojure backend)
 - Node.js 16+ (for ClojureScript tooling)
 - Clojure CLI tools (`brew install clojure/tools/clojure` on macOS)
+- [Jujutsu (jj)](https://martinvonz.github.io/jj/) for version control
+- [Beads (bd)](https://github.com/mads-hartmann/beads) for issue tracking
+
+## Development Workflow
+
+### Issue Tracking
+This project uses **Beads (bd)** for issue tracking.
+```bash
+bd onboard            # Get started
+bd ready              # Find available work
+bd update <id> --status in_progress  # Claim work
+bd close <id>         # Complete work
+bd sync               # Sync issues with git
+```
+
+### Version Control
+This project uses **Jujutsu (jj)**. Prefer `jj` commands over standard `git`.
+```bash
+jj commit -m "description"  # Record changes
+jj status                   # Check current state
+```
 
 ## Installation
 
