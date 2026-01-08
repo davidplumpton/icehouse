@@ -15,11 +15,11 @@
 
 (def piece-size
   "Pyramid size classification"
-  [:enum :small :medium :large])
+  [:enum :small "small" :medium "medium" :large "large"])
 
 (def orientation
   "Piece orientation on board"
-  [:enum :standing :pointing])
+  [:enum :standing "standing" :pointing "pointing"])
 
 ;; =============================================================================
 ;; Piece Schemas
@@ -77,7 +77,7 @@
    [:icehouse-rule {:optional true} :boolean]
    [:timer-enabled {:optional true} :boolean]
    [:timer-duration {:optional true} [:or
-                                      [:enum :random]
+                                      [:enum :random "random"]
                                       [:int {:min 1000}]]]])
 
 ;; =============================================================================
@@ -87,7 +87,7 @@
 (def Move
   "A recorded move with metadata"
   [:map {:closed false}
-   [:type [:enum :place-piece :capture-piece]]
+   [:type [:enum :place-piece "place-piece" :capture-piece "capture-piece"]]
    [:player-id id-string]
    [:timestamp :int]
    [:elapsed-ms :int]])
