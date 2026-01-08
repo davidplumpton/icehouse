@@ -1,4 +1,4 @@
-{:source-paths ["src/cljs" "src/cljc"]
+{:source-paths ["src/cljs" "src/cljc" "test/cljs"]
 
  :dependencies [[reagent "1.2.0"]
                  [cljs-ajax "0.8.4"]
@@ -10,4 +10,11 @@
         :asset-path "/js"
         :modules {:main {:init-fn icehouse.core/init}}
         :devtools {:http-root "resources/public"
-                   :http-port 8280}}}}
+                   :http-port 8280}}
+
+  :test {:target :browser
+         :output-dir "resources/public/js/test"
+         :asset-path "/js/test"
+         :modules {:test {:init-fn icehouse.runner/init}}
+         :devtools {:http-root "resources/public"
+                    :http-port 8022}}}}
