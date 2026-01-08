@@ -6,8 +6,8 @@
 ;; =============================================================================
 
 (def id-string
-  "Unique identifier as a string"
-  :string)
+  "Unique identifier as a string (or keyword in CLJS map keys)"
+  [:or :string :keyword])
 
 (def colour
   "Hex colour string (e.g., #ff6b6b)"
