@@ -1,5 +1,5 @@
 (ns icehouse.schema-test
-  (:require [clojure.test :refer [deftest is]]
+  (:require [clojure.test :refer [deftest is testing]]
             [icehouse.schema :as schema]))
 
 ;; Test basic schemas
@@ -83,19 +83,30 @@
     (is (schema/validate-or-nil schema/UIState ui-state))))
 
 (deftest test-client-message-validation
-  (let [join-msg {:type "join"}
-        set-name-msg {:type "set-name" :name "Alice"}
-        place-piece-msg {:type "place-piece"
-                         :x 500
-                         :y 375
-                         :size "small"
-                         :orientation "standing"
-                         :angle 0
-                         :target-id nil
-                         :captured false}]
-    (is (schema/validate-or-nil schema/ClientMessage join-msg))
-    (is (schema/validate-or-nil schema/ClientMessage set-name-msg))
-    (is (schema/validate-or-nil schema/ClientMessage place-piece-msg))))
+  (testing "valid messages"
+    (let [join-msg {:type "join"}
+          set-name-msg {:type "set-name" :name "Alice"}
+          place-piece-msg {:type "place-piece"
+                           :x 500
+                           :y 375
+                           :size "small"
+                           :orientation "standing"
+                           :angle 0
+                           :target-id nil
+                           :captured false}]
+      (is (schema/validate-or-nil schema/ClientMessage join-msg))
+      (is (schema/validate-or-nil schema/ClientMessage set-name-msg))
+      (is (schema/validate-or-nil schema/ClientMessage place-piece-msg))))
+
+  (testing "invalid place-piece message"
+    (let [invalid-msg {:type "place-piece"
+                       :x 500
+                       :y 375
+                       :size "gigantic"  ;; Invalid size
+                       :orientation "standing"
+                       :angle 0
+                       :captured false}]
+      (is (nil? (schema/validate-or-nil schema/ClientMessage invalid-msg))))))
 
 (deftest test-server-message-validation
   (let [joined-msg {:type "joined"

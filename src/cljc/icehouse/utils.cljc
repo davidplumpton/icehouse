@@ -86,6 +86,17 @@
          (when (< seconds 10) "0") seconds)))
 
 #?(:clj
+   (defn validate-incoming-message
+     "Validate incoming client message against schema"
+     [message]
+     (if (m/validate schema/ClientMessage message)
+       message
+       (do
+         (println "Invalid client message:" message)
+         (println "Validation errors:" (m/explain schema/ClientMessage message))
+         nil))))
+
+#?(:clj
    (defn validate-outgoing-message
      "Validate outgoing server message against schema"
      [msg]

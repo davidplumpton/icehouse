@@ -10,25 +10,17 @@
 
 (defonce clients (atom {}))
 
-(defn validate-incoming-message
-  "Validate incoming client message against schema"
-  [message]
-  (if (m/validate schema/ClientMessage message)
-    message
-    (do
-      (println "Invalid client message:" message)
-      (println "Validation errors:" (m/explain schema/ClientMessage message))
-      nil)))
-
 (defn handle-message [channel data]
   (try
     (let [message (json/parse-string data true)
-          validated-message (validate-incoming-message message)
+          validated-message (utils/validate-incoming-message message)
           msg-type (:type message)]
       (if-not validated-message
-        (do
+        (let [explanation (schema/explain schema/ClientMessage message)]
           (println "Invalid message, discarding:" message)
-          (utils/send-msg! channel {:type msg/error :message "Invalid message format"}))
+          (utils/send-msg! channel {:type msg/error 
+                                    :message (str "Invalid message format: " 
+                                                 (pr-str explanation))}))
         (if-not msg-type
           (do
             (println "Received message without type:" message)

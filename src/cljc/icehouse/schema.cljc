@@ -7,11 +7,11 @@
 
 (def uuid-string
   "UUID as a string"
-  :string)
+  [:re #"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"])
 
 (def colour
   "Hex colour string (e.g., #ff6b6b)"
-  :string)
+  [:re #"^#[0-9a-fA-F]{6}$"])
 
 (def piece-size
   "Pyramid size classification"
@@ -150,10 +150,10 @@
    [:type [:enum "place-piece"]]
    [:x :int]
    [:y :int]
-   [:size :string]  ;; Frontend sends as string via (name size)
-   [:orientation :string]  ;; Frontend sends as string via (name orientation)
+   [:size [:enum "small" "medium" "large"]]
+   [:orientation [:enum "standing" "pointing"]]
    [:angle [:or :double :int]]
-   [:target-id [:or uuid-string :nil]]
+   [:target-id {:optional true} [:or uuid-string :nil]]
    [:captured :boolean]])
 
 (def CapturePieceMessage
