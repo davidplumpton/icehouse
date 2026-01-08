@@ -107,7 +107,7 @@
    [:options GameOptions]
    [:started-at :int]
    [:ends-at [:or :int :nil]]
-   [:finished {:optional true} [:set id-string]]])
+   [:finished {:optional true} [:sequential id-string]]])
 
 ;; =============================================================================
 ;; WebSocket Message Schemas
