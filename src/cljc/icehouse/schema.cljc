@@ -86,12 +86,11 @@
 
 (def Move
   "A recorded move with metadata"
-  [:map
+  [:map {:closed false}
    [:type [:enum :place-piece :capture-piece]]
    [:player-id id-string]
    [:timestamp :int]
-   [:elapsed-ms :int]
-   [:data [:map]]])  ;; Flexible data based on move type
+   [:elapsed-ms :int]])
 
 ;; =============================================================================
 ;; Game State Schemas
@@ -208,11 +207,11 @@
   "Server players message"
   [:map
    [:type [:enum "players"]]
-   [:players [:vector [:map
-                        [:id [:or :string :int]]
-                        [:name :string]
-                        [:colour :string]
-                        [:ready {:optional true} :boolean]]]]])
+   [:players [:sequential [:map
+                           [:id [:or :string :int]]
+                           [:name :string]
+                           [:colour :string]
+                           [:ready {:optional true} :boolean]]]]])
 
 (def OptionsMessage
   "Server options message"
