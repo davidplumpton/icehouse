@@ -476,13 +476,21 @@
   "Update game state with placed piece and decrement stash/captured counts"
   [room-id player-id piece using-captured?]
   (swap! games (fn [games-map]
-                 (let [game-update (-> games-map
-                                       (update-in [room-id :board] conj piece)
-                                       (update-in [room-id :board] refresh-all-targets))]
-                   (if using-captured?
-                     (update-in game-update [room-id :players player-id :captured]
-                                utils/remove-first-captured (:size piece))
-                     (update-in game-update [room-id :players player-id :pieces (:size piece)] dec))))))
+                 (if-let [game (get games-map room-id)]
+                   (let [new-game (-> game
+                                      (update :board conj piece)
+                                      (update :board refresh-all-targets)
+                                      (as-> g
+                                        (if using-captured?
+                                          (update-in g [:players player-id :captured]
+                                                     utils/remove-first-captured (:size piece))
+                                          (update-in g [:players player-id :pieces (:size piece)] dec))))]
+                     (if-let [error (validate-game-state new-game)]
+                       (do
+                         (println "ERROR: Invalid game state after placement:" error)
+                         games-map)
+                       (assoc games-map room-id new-game)))
+                   games-map))))
 
 (defn handle-post-placement!
   "Handle side effects after placement: recording, broadcasting, game over check"
@@ -571,15 +579,22 @@
             ;; Get the original owner's colour
             original-owner (:player-id piece)
             original-colour (get-in game [:players original-owner :colour])]
-        ;; Remove piece from board and refresh targets
-        (swap! games update-in [room-id :board]
-               (fn [board]
-                 (-> (remove (utils/by-id piece-id) board)
-                     vec
-                     refresh-all-targets)))
-        ;; Add to capturing player's captured stash with original colour
-        (swap! games update-in [room-id :players player-id :captured]
-               conj {:size piece-size :colour original-colour})
+        ;; Update game state atomically and validate
+        (swap! games (fn [games-map]
+                       (if-let [g (get games-map room-id)]
+                         (let [new-g (-> g
+                                         (update :board (fn [board]
+                                                          (-> (remove (utils/by-id piece-id) board)
+                                                              vec
+                                                              refresh-all-targets)))
+                                         (update-in [:players player-id :captured]
+                                                    conj {:size piece-size :colour original-colour}))]
+                           (if-let [err (validate-game-state new-g)]
+                             (do
+                               (println "ERROR: Invalid game state after capture:" err)
+                               games-map)
+                             (assoc games-map room-id new-g)))
+                         games-map)))
         ;; Record the capture move for replay
         (record-move! room-id {:type :capture-piece
                                :player-id player-id
@@ -626,8 +641,14 @@
         player-id (player-id-from-channel channel)
         game (get @games room-id)]
     (when game
-      ;; Add player to finished set
-      (swap! games update-in [room-id :finished] (fnil conj #{}) player-id)
+      ;; Add player to finished set and validate
+      (swap! games (fn [games-map]
+                     (if-let [g (get games-map room-id)]
+                       (let [new-g (update g :finished (fnil conj #{}) player-id)]
+                         (if-let [err (validate-game-state new-g)]
+                           (do (println "ERROR: Invalid game state after finish:" err) games-map)
+                           (assoc games-map room-id new-g)))
+                       games-map)))
       (let [updated-game (get @games room-id)]
         ;; Broadcast that this player finished
         (utils/broadcast-room! clients room-id
@@ -643,7 +664,10 @@
   ([room-id players]
    (start-game! room-id players {}))
   ([room-id players options]
-   (swap! games assoc room-id (create-game room-id players options))))
+   (let [new-game (create-game room-id players options)]
+     (if-let [error (validate-game-state new-game)]
+       (println "ERROR: Failed to start game due to invalid initial state:" error)
+       (swap! games assoc room-id new-game)))))
 
 ;; =============================================================================
 ;; Replay Handlers

@@ -107,7 +107,8 @@
    [:moves [:vector Move]]
    [:options GameOptions]
    [:started-at :int]
-   [:ends-at [:or :int :nil]]])
+   [:ends-at [:or :int :nil]]
+   [:finished {:optional true} [:set id-string]]])
 
 ;; =============================================================================
 ;; WebSocket Message Schemas
