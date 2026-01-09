@@ -681,11 +681,11 @@
                         ;; or if it's a normal drag in position-adjust mode.
                         follow-cursor? (if current-from-stash? true position-adjust?)]
                     
-                    (when (or anchoring? (not= from-stash? current-from-stash?))
-                      (js/console.log "Drag State:" (clj->js {:from-stash? from-stash? 
-                                                              :anchoring? anchoring? 
-                                                              :follow-cursor? follow-cursor? 
-                                                              :shift? shift-held})))
+                    (when from-stash?
+                      (js/console.log "Stash Drag Check:" (clj->js {:shift? shift-held 
+                                                                    :move-mode move-mode 
+                                                                    :initial-move-mode initial-move-mode
+                                                                    :anchoring? anchoring?})))
                     
                     (if follow-cursor?
                       ;; Position-adjust mode: move position by delta, keep locked angle
@@ -1197,14 +1197,15 @@
     (r/create-class
      {:component-did-mount
       (fn [this]
-        (.addEventListener js/document "keydown" handle-keydown)
+        (js/console.log "Game View Mounted - Attaching Keydown Listener")
+        (.addEventListener js/window "keydown" handle-keydown)
         ;; Start timer update interval
         (reset! timer-interval
                 (js/setInterval #(reset! state/current-time (js/Date.now)) 1000)))
 
       :component-will-unmount
       (fn [this]
-        (.removeEventListener js/document "keydown" handle-keydown)
+        (.removeEventListener js/window "keydown" handle-keydown)
         ;; Clear timer interval
         (when @timer-interval
           (js/clearInterval @timer-interval)))
