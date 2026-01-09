@@ -609,7 +609,7 @@
             (fn [e]
               (let [{:keys [x y]} (get-canvas-coords e)
                     shift-held (.-shiftKey e)
-                    {:keys [zoom-active move-mode]} @state/ui-state
+                    {:keys [zoom-active move-mode last-placement-time]} @state/ui-state
                     actual-zoom-scale (if zoom-active zoom-scale 1)
                     ;; Scale down movement when zoomed to account for canvas scaling
                     adjusted-x (if zoom-active (/ x actual-zoom-scale) x)
@@ -618,6 +618,19 @@
                     position-adjust? (or shift-held move-mode)]
                 ;; Always update hover position for capture detection (use original unscaled coords)
                 (swap! state/ui-state assoc :hover-pos {:x x :y y})
+                ;; Check for pending stash drag (mouse was already on canvas when stash clicked)
+                (when-let [pending @stash-drag-pending]
+                  (let [{:keys [size captured?]} pending
+                        throttle-sec (get-in @state/game-state [:options :placement-throttle] 1)
+                        throttle-ms (* throttle-sec 1000)
+                        now (js/Date.now)
+                        can-place? (>= (- now last-placement-time) throttle-ms)]
+                    (when (and can-place? (has-pieces-of-size? size captured?))
+                      (swap! state/ui-state assoc :drag {:start-x adjusted-x :start-y adjusted-y
+                                                         :current-x adjusted-x :current-y adjusted-y
+                                                         :last-x adjusted-x :last-y adjusted-y
+                                                         :locked-angle 0}))
+                    (reset! stash-drag-pending nil)))
                 ;; Update drag state if dragging
                 (when-let [drag (:drag @state/ui-state)]
                   (let [{:keys [start-x start-y last-x last-y]} drag
