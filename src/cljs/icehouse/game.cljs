@@ -30,6 +30,10 @@
 (def attack-unlock-threshold 2)
 (def timer-urgent-threshold-ms 30000)
 
+;; Local state for stash drag (not in schema-validated ui-state)
+;; Tracks when user starts dragging from their stash before entering canvas
+(defonce stash-drag-pending (r/atom nil))
+
 ;; =============================================================================
 ;; Utility Functions
 ;; =============================================================================
@@ -489,16 +493,25 @@
     (vec (distinct (map #(keyword (:size %)) captured)))))
 
 (defn game-canvas []
-  (let [canvas-ref (r/atom nil)]
+  (let [canvas-ref (r/atom nil)
+        ;; Handler to clear stash-drag-pending on mouseup anywhere
+        global-mouseup-handler (fn [_e]
+                                 (reset! stash-drag-pending nil))]
     (r/create-class
      {:component-did-mount
       (fn [this]
+        ;; Add global mouseup listener to clear stash-drag-pending
+        (.addEventListener js/document "mouseup" global-mouseup-handler)
         (when-let [canvas @canvas-ref]
           (let [ctx (.getContext canvas "2d")
                 ui @state/ui-state
                 player @state/current-player]
             (draw-with-preview ctx @state/game-state nil (:selected-piece ui)
                                (:colour player) (:hover-pos ui) (:id player) nil))))
+
+      :component-will-unmount
+      (fn [this]
+        (.removeEventListener js/document "mouseup" global-mouseup-handler))
 
       :component-did-update
       (fn [this]
@@ -539,7 +552,8 @@
       (fn []
         ;; Deref state atoms so Reagent re-renders when they change
         (let [_ @state/game-state
-              _ @state/ui-state]
+              _ @state/ui-state
+              _ @stash-drag-pending]
           [:canvas
            {:ref #(reset! canvas-ref %)
             :width canvas-width
@@ -555,12 +569,32 @@
                     ;; Scale down position when zoomed to account for canvas scaling
                     adjusted-x (if zoom-active (/ x actual-zoom-scale) x)
                     adjusted-y (if zoom-active (/ y actual-zoom-scale) y)]
+                ;; Clear any pending stash drag since we're clicking directly on canvas
+                (reset! stash-drag-pending nil)
                 ;; Only start drag if player has pieces of this size
                 (when (has-pieces-of-size? size captured?)
                   (swap! state/ui-state assoc :drag {:start-x adjusted-x :start-y adjusted-y
                                                      :current-x adjusted-x :current-y adjusted-y
                                                      :last-x adjusted-x :last-y adjusted-y
                                                      :locked-angle 0}))))
+            :on-mouse-enter
+            (fn [e]
+              ;; If user dragged from stash and entered canvas, start the drag
+              (when-let [pending @stash-drag-pending]
+                (let [{:keys [x y]} (get-canvas-coords e)
+                      {:keys [size captured?]} pending
+                      zoom-active (:zoom-active @state/ui-state)
+                      actual-zoom-scale (if zoom-active zoom-scale 1)
+                      adjusted-x (if zoom-active (/ x actual-zoom-scale) x)
+                      adjusted-y (if zoom-active (/ y actual-zoom-scale) y)]
+                  ;; Only start if player has pieces
+                  (when (has-pieces-of-size? size captured?)
+                    (swap! state/ui-state assoc :drag {:start-x adjusted-x :start-y adjusted-y
+                                                       :current-x adjusted-x :current-y adjusted-y
+                                                       :last-x adjusted-x :last-y adjusted-y
+                                                       :locked-angle 0}))
+                  ;; Clear pending regardless (drag started or not)
+                  (reset! stash-drag-pending nil))))
             :on-mouse-move
             (fn [e]
               (let [{:keys [x y]} (get-canvas-coords e)
@@ -734,11 +768,18 @@
                 :stroke (if captured? theme/gold "#000")
                 :stroke-width (if captured? "2" "1")}]]))
 
-(defn piece-size-row [size label pieces colour & [{:keys [captured? selected?]}]]
-  [:div.piece-row {:style (when selected?
-                            {:background "rgba(255, 255, 255, 0.15)"
-                             :border-radius "4px"
-                             :box-shadow "0 0 8px rgba(255, 255, 255, 0.3)"})}
+(defn piece-size-row [size label pieces colour & [{:keys [captured? selected? on-start-drag]}]]
+  [:div.piece-row {:style (merge (when selected?
+                                   {:background "rgba(255, 255, 255, 0.15)"
+                                    :border-radius "4px"
+                                    :box-shadow "0 0 8px rgba(255, 255, 255, 0.3)"})
+                                 (when on-start-drag
+                                   {:cursor "grab"}))
+                   :on-mouse-down (when on-start-drag
+                                    (fn [e]
+                                      (.preventDefault e)
+                                      ;; Ensure captured? is boolean, not nil
+                                      (on-start-drag size (boolean captured?))))}
    [:span.size-label label]
    (for [i (range (get pieces size 0))]
      ^{:key (str (name size) "-" i)}
@@ -758,18 +799,29 @@
         captured-by-size (when is-me (group-by #(keyword (:size %)) captured))
         ;; Compute hotkey mapping for captured pieces (4, 5, 6 based on order captured)
         available-sizes (when is-me (vec (distinct (map #(keyword (:size %)) captured))))
-        size-to-hotkey (when is-me (into {} (map-indexed (fn [idx sz] [sz (+ 4 idx)]) available-sizes)))]
+        size-to-hotkey (when is-me (into {} (map-indexed (fn [idx sz] [sz (+ 4 idx)]) available-sizes)))
+        ;; Handler for starting a drag from stash
+        start-stash-drag (when is-me
+                           (fn [piece-size is-captured?]
+                             ;; Select the piece and set stash-drag-pending
+                             (swap! state/ui-state update :selected-piece assoc
+                                    :size piece-size
+                                    :captured? is-captured?)
+                             (reset! stash-drag-pending {:size piece-size :captured? is-captured?})))]
     [:div.player-stash {:class (when is-me "is-me")}
      [:div.stash-header {:style {:color colour}}
       player-name
       (when is-me " (you)")]
      [:div.stash-pieces
       [piece-size-row :large "L" pieces colour
-       {:selected? (and is-me (not captured?) (= size :large))}]
+       {:selected? (and is-me (not captured?) (= size :large))
+        :on-start-drag start-stash-drag}]
       [piece-size-row :medium "M" pieces colour
-       {:selected? (and is-me (not captured?) (= size :medium))}]
+       {:selected? (and is-me (not captured?) (= size :medium))
+        :on-start-drag start-stash-drag}]
       [piece-size-row :small "S" pieces colour
-       {:selected? (and is-me (not captured?) (= size :small))}]]
+       {:selected? (and is-me (not captured?) (= size :small))
+        :on-start-drag start-stash-drag}]]
      (when has-captured?
        [:div.captured-pieces
         [:div.captured-header {:style {:color theme/gold :font-size "0.8em" :margin-top "0.5rem"}}
@@ -784,7 +836,13 @@
                                             (when (and is-me captured? (= size sz))
                                               {:background "rgba(255, 215, 0, 0.2)"
                                                :border-radius "4px"
-                                               :box-shadow "0 0 8px rgba(255, 215, 0, 0.4)"}))}
+                                               :box-shadow "0 0 8px rgba(255, 215, 0, 0.4)"})
+                                            (when is-me
+                                              {:cursor "grab"}))
+                              :on-mouse-down (when is-me
+                                               (fn [e]
+                                                 (.preventDefault e)
+                                                 (start-stash-drag sz true)))}
            (when hotkey
              [:span.captured-hotkey {:style {:color theme/gold :font-weight "bold" :min-width "1em"}}
               (str hotkey)])
