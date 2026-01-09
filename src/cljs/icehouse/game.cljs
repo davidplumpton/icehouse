@@ -767,12 +767,15 @@
                     (swap! state/ui-state update-in [:selected-piece :captured?] not)))
       "Escape" (swap! state/ui-state assoc :drag nil :show-help false :zoom-active false :move-mode false)
       "?" (swap! state/ui-state update :show-help not)
-      ("m" "M") (do
-                  (swap! state/ui-state update :move-mode not)
-                  ;; Anchor stash drag if active
-                  (let [drag (:drag @state/ui-state)]
-                    (when (:from-stash? drag)
-                      (swap! state/ui-state update :drag assoc :from-stash? false))))
+      ("m" "M") (let [drag (:drag @state/ui-state)]
+                  (if (and drag (:from-stash? drag))
+                    ;; If dragging from stash, switch to Rotation (Normal mode).
+                    ;; Anchor the drag and ensure move-mode is OFF.
+                    (do
+                      (swap! state/ui-state update :drag assoc :from-stash? false)
+                      (swap! state/ui-state assoc :move-mode false))
+                    ;; Otherwise, toggle move mode as usual
+                    (swap! state/ui-state update :move-mode not)))
       "Shift" (let [drag (:drag @state/ui-state)]
                 (when (:from-stash? drag)
                   (swap! state/ui-state update :drag assoc :from-stash? false)))
