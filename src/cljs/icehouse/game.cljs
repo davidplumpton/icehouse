@@ -669,16 +669,18 @@
                         ;; If dragging from stash, any explicit adjustment (Shift or M toggle)
                         ;; anchors the piece at its current position, turning it into a normal drag.
                         anchoring? (and from-stash? (or shift-held move-mode-toggled))
-                        _ (when anchoring?
-                            (swap! state/ui-state update :drag assoc :from-stash? false))
+                        ;; Create next-drag with updated from-stash? flag if anchoring
+                        next-drag (if anchoring? (assoc drag :from-stash? false) drag)
+                        ;; Use the flag from next-drag for logic
+                        current-from-stash? (:from-stash? next-drag)
+                        
                         ;; A piece follows the cursor if it's still in the initial stash-drag phase,
                         ;; or if it's a normal drag in position-adjust mode.
-                        active-from-stash? (and from-stash? (not anchoring?))
-                        follow-cursor? (if active-from-stash? true position-adjust?)]
+                        follow-cursor? (if current-from-stash? true position-adjust?)]
                     (if follow-cursor?
                       ;; Position-adjust mode: move position by delta, keep locked angle
                       (swap! state/ui-state assoc :drag
-                             (assoc drag
+                             (assoc next-drag
                                     :start-x (+ start-x dx)
                                     :start-y (+ start-y dy)
                                     :current-x (+ start-x dx)
@@ -686,10 +688,11 @@
                                     :last-x adjusted-x :last-y adjusted-y))
                       ;; Normal: update current position for angle calculation, lock that angle
                       (let [new-angle (geo/calculate-angle start-x start-y adjusted-x adjusted-y)]
-                        (swap! state/ui-state update :drag assoc
-                               :current-x adjusted-x :current-y adjusted-y
-                               :last-x adjusted-x :last-y adjusted-y
-                               :locked-angle new-angle)))))))
+                        (swap! state/ui-state assoc :drag 
+                               (assoc next-drag
+                                      :current-x adjusted-x :current-y adjusted-y
+                                      :last-x adjusted-x :last-y adjusted-y
+                                      :locked-angle new-angle)))))))
             :on-mouse-up
             (fn [e]
               (when-let [drag (:drag @state/ui-state)]
