@@ -957,13 +957,18 @@
       (when (> show-until now)
         (let [seconds (/ remaining-ms 1000)]
           [:div.throttle-warning
-           {:style {:background theme/orange
+           {:style {:position "fixed"
+                    :top "4rem"
+                    :left "50%"
+                    :transform "translateX(-50%)"
+                    :background theme/orange
                     :color "#000"
                     :padding "0.5rem 1rem"
                     :border-radius "4px"
-                    :margin-bottom "0.5rem"
                     :font-weight "bold"
-                    :text-align "center"}}
+                    :text-align "center"
+                    :z-index 100
+                    :box-shadow "0 2px 8px rgba(0,0,0,0.3)"}}
            (str "Wait " (.toFixed seconds 1) "s before placing")])))))
 
 (defn game-timer []
