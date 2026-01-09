@@ -963,7 +963,7 @@
                :border-radius "6px"
                :opacity (if i-finished? 0.8 1)}
        :disabled i-finished?
-       :on-click #(when-not i-finished? (ws/finish!))}
+       :on-click #(ws/finish!)}
       (if i-finished? "✓ Finished" "End Game")]
      (when (pos? finished-count)
        [:span.finish-status

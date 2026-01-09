@@ -619,7 +619,7 @@
   "Check if all players have pressed finish"
   [game]
   (let [player-ids (set (keys (:players game)))
-        finished (or (:finished game) #{})]
+        finished (set (or (:finished game) []))]
     (and (seq player-ids)
          (= player-ids finished))))
 
@@ -647,10 +647,14 @@
         player-id (player-id-from-channel channel)
         game (get @games room-id)]
     (when game
-      ;; Add player to finished set and validate
+      ;; Add player to finished vector and validate (only if not already finished)
       (swap! games (fn [games-map]
                      (if-let [g (get games-map room-id)]
-                       (let [new-g (update g :finished (fnil conj #{}) player-id)]
+                       (let [current-finished (or (:finished g) [])
+                             already-finished? (some #{player-id} current-finished)
+                             new-g (if already-finished?
+                                     g
+                                     (update g :finished (fnil conj []) player-id))]
                          (if-let [err (validate-game-state new-g)]
                            (do (println "ERROR: Invalid game state after finish:" err) games-map)
                            (assoc games-map room-id new-g)))
