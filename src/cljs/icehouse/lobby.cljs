@@ -85,7 +85,20 @@
                   :style {:margin-right "10px"}}]
          [:span "Game Timer"]
          [:span {:style {:color "#888" :font-size "0.85em" :margin-left "10px"}}
-          "(random 2-5 min)"]]]])))
+          "(random 2-5 min)"]]]
+       [:div.option {:style {:margin "10px 0"}}
+        [:label {:style {:display "flex" :align-items "center"}}
+         [:span {:style {:margin-right "10px"}} "Placement Throttle"]
+         [:input {:type "number"
+                  :min 0
+                  :max 10
+                  :step 0.1
+                  :value (or (:placement-throttle options) 1)
+                  :on-change #(ws/set-option! :placement-throttle (js/parseFloat (.. % -target -value)))
+                  :style {:width "60px" :margin-right "5px"}}]
+         [:span "sec"]
+         [:span {:style {:color "#888" :font-size "0.85em" :margin-left "10px"}}
+          "(cooldown between placements)"]]]])))
 
 (defn lobby-view []
   [:div.lobby

@@ -9,9 +9,10 @@
 (defonce room-options (atom {}))
 
 (def default-options
-  {:icehouse-rule true      ;; Whether icehouse rule is enforced
-   :timer-enabled true      ;; Whether game has a time limit
-   :timer-duration :random}) ;; :random (2-5 min), or specific ms value
+  {:icehouse-rule true        ;; Whether icehouse rule is enforced
+   :timer-enabled true        ;; Whether game has a time limit
+   :timer-duration :random    ;; :random (2-5 min), or specific ms value
+   :placement-throttle 1.0})  ;; Seconds to wait between placements
 
 (defn get-room-options [room-id]
   {:post [(m/validate schema/GameOptions %)]}

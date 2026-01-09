@@ -70,12 +70,14 @@
 ;; - :zoom-active - whether 4x zoom mode is active for fine placement
 ;; - :show-help - whether help overlay is visible
 ;; - :move-mode - toggle for position-adjust mode (like holding shift but persistent)
+;; - :last-placement-time - timestamp of last piece placement for throttling
 (defonce ui-state (r/atom {:selected-piece {:size :small :orientation :standing :captured? false}
                            :drag nil
                            :hover-pos nil
                            :zoom-active false
                            :show-help false
-                           :move-mode false}))
+                           :move-mode false
+                           :last-placement-time 0}))
 
 ;; Validate UI state changes
 (defonce _ui-state-validator

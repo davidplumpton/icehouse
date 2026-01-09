@@ -94,7 +94,8 @@
    [:timer-enabled {:optional true} :boolean]
    [:timer-duration {:optional true} [:or
                                       [:enum :random "random"]
-                                      [:int {:min 1000}]]]])
+                                      [:int {:min 1000}]]]
+   [:placement-throttle {:optional true} [:or :double :int]]])
 
 ;; =============================================================================
 ;; Score Schemas
@@ -358,7 +359,8 @@
    [:hover-pos [:or HoverPos :nil]]
    [:zoom-active :boolean]
    [:show-help :boolean]
-   [:move-mode :boolean]])
+   [:move-mode :boolean]
+   [:last-placement-time [:or :int :double]]])
 
 ;; =============================================================================
 ;; Replay State Schemas

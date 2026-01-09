@@ -632,24 +632,32 @@
             (fn [e]
               (when-let [drag (:drag @state/ui-state)]
                 (let [{:keys [start-x start-y current-x current-y locked-angle]} drag
-                      {:keys [selected-piece zoom-active move-mode]} @state/ui-state
+                      {:keys [selected-piece zoom-active move-mode last-placement-time]} @state/ui-state
                       {:keys [size orientation captured?]} selected-piece
-                      shift-held (.-shiftKey e)
-                      position-adjust? (or shift-held move-mode)
-                      actual-zoom-scale (if zoom-active zoom-scale 1)
-                      ;; Scale coordinates back up if zoom was active (they were scaled down on mouse-down/move)
-                      ;; Round coordinates to integers (schema expects :int)
-                      final-x (js/Math.round (* start-x actual-zoom-scale))
-                      final-y (js/Math.round (* start-y actual-zoom-scale))
-                      ;; Use locked angle if available, otherwise calculate from position
-                      ;; locked-angle is set during dragging and preserved through zoom transforms
-                      ;; Only recalculate if there's actual distance between start and current
-                      has-movement (or (not= start-x current-x) (not= start-y current-y))
-                      angle (if (and has-movement (not position-adjust?))
-                              (geo/calculate-angle start-x start-y current-x current-y)
-                              (or locked-angle 0))]
-                  (ws/place-piece! final-x final-y size orientation angle nil captured?)
-                  (swap! state/ui-state assoc :drag nil))))
+                      ;; Check placement throttle
+                      throttle-sec (get-in @state/game-state [:options :placement-throttle] 1)
+                      throttle-ms (* throttle-sec 1000)
+                      now (js/Date.now)
+                      can-place? (>= (- now last-placement-time) throttle-ms)]
+                  (if can-place?
+                    (let [shift-held (.-shiftKey e)
+                          position-adjust? (or shift-held move-mode)
+                          actual-zoom-scale (if zoom-active zoom-scale 1)
+                          ;; Scale coordinates back up if zoom was active (they were scaled down on mouse-down/move)
+                          ;; Round coordinates to integers (schema expects :int)
+                          final-x (js/Math.round (* start-x actual-zoom-scale))
+                          final-y (js/Math.round (* start-y actual-zoom-scale))
+                          ;; Use locked angle if available, otherwise calculate from position
+                          ;; locked-angle is set during dragging and preserved through zoom transforms
+                          ;; Only recalculate if there's actual distance between start and current
+                          has-movement (or (not= start-x current-x) (not= start-y current-y))
+                          angle (if (and has-movement (not position-adjust?))
+                                  (geo/calculate-angle start-x start-y current-x current-y)
+                                  (or locked-angle 0))]
+                      (ws/place-piece! final-x final-y size orientation angle nil captured?)
+                      (swap! state/ui-state assoc :drag nil :last-placement-time now))
+                    ;; Throttled - just cancel the drag without placing
+                    (swap! state/ui-state assoc :drag nil)))))
             :on-mouse-leave
             (fn [e]
               (swap! state/ui-state assoc :hover-pos nil :drag nil))}]))})))
