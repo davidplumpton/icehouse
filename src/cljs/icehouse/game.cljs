@@ -767,7 +767,15 @@
                     (swap! state/ui-state update-in [:selected-piece :captured?] not)))
       "Escape" (swap! state/ui-state assoc :drag nil :show-help false :zoom-active false :move-mode false)
       "?" (swap! state/ui-state update :show-help not)
-      ("m" "M") (swap! state/ui-state update :move-mode not)
+      ("m" "M") (do
+                  (swap! state/ui-state update :move-mode not)
+                  ;; Anchor stash drag if active
+                  (let [drag (:drag @state/ui-state)]
+                    (when (:from-stash? drag)
+                      (swap! state/ui-state update :drag assoc :from-stash? false))))
+      "Shift" (let [drag (:drag @state/ui-state)]
+                (when (:from-stash? drag)
+                  (swap! state/ui-state update :drag assoc :from-stash? false)))
       ("z" "Z") (let [drag (:drag @state/ui-state)
                       currently-zoomed (:zoom-active @state/ui-state)]
                   (if drag
