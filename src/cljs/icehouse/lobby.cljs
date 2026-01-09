@@ -6,20 +6,30 @@
             [icehouse.websocket :as ws]))
 
 (defn colour-picker []
-  [:div.colour-picker
-   [:label "Choose your colour:"]
-   [:div.colours
-    (doall
-     (for [colour state/colours]
-       ^{:key colour}
-       [:div.colour-option
-        {:style {:background-color colour
-                 :border (if (= colour (:colour @state/current-player))
-                           "3px solid white"
-                           "3px solid transparent")}
-         :on-click #(do
-                      (swap! state/current-player assoc :colour colour)
-                      (ws/set-colour! colour))}]))]])
+  (let [players @state/players
+        current-player @state/current-player
+        taken-colours (->> players
+                           (remove #(= (:id %) (:id current-player)))
+                           (map :colour)
+                           set)]
+    [:div.colour-picker
+     [:label "Choose your colour:"]
+     [:div.colours
+      (doall
+       (for [colour state/colours]
+         (let [taken? (contains? taken-colours colour)
+               selected? (= colour (:colour current-player))]
+           ^{:key colour}
+           [:div.colour-option
+            {:style {:background-color colour
+                     :border (if selected?
+                               "3px solid white"
+                               "3px solid transparent")
+                     :opacity (if (and taken? (not selected?)) 0.3 1)
+                     :cursor (if taken? "default" "pointer")}
+             :on-click #(when-not taken?
+                          (swap! state/current-player assoc :colour colour)
+                          (ws/set-colour! colour))}])))]]))
 
 (defn name-input []
   [:div.name-input

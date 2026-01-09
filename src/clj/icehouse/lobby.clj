@@ -21,44 +21,44 @@
   ["Alice" "Bob" "Charles" "Dave" "Eve" "Frank" "Grace" "Henry"])
 
 (def colours
-  ["#ff6b6b"   ; red
-   "#4ecdc4"   ; teal
-   "#ffe66d"   ; yellow
-   "#95e1d3"   ; mint
-   "#f38181"   ; coral
-   "#aa96da"   ; lavender
-   "#fcbad3"   ; pink
-   "#a8d8ea"]) ; sky blue
+  ["#e53935"   ; red (Rainbow)
+   "#fdd835"   ; yellow (Rainbow)
+   "#43a047"   ; green (Rainbow)
+   "#1e88e5"   ; blue (Rainbow)
+   "#7b1fa2"   ; purple (Xeno)
+   "#00acc1"   ; cyan (Xeno)
+   "#fb8c00"   ; orange (Xeno)
+   "#212121"]) ; black (Rainbow)
 
-(defn get-taken-names [clients room-id]
+(defn get-taken-names [clients-map room-id]
   "Returns set of names already taken in the room"
-  (->> @clients
+  (->> clients-map
        (filter (fn [[_ c]] (= (:room-id c) room-id)))
        (map (fn [[_ c]] (:name c)))
        (remove nil?)
        set))
 
-(defn get-taken-colours [clients room-id]
+(defn get-taken-colours [clients-map room-id]
   "Returns set of colours already taken in the room"
-  (->> @clients
+  (->> clients-map
        (filter (fn [[_ c]] (= (:room-id c) room-id)))
        (map (fn [[_ c]] (:colour c)))
        (remove nil?)
        set))
 
-(defn next-available-name [clients room-id]
+(defn next-available-name [clients-map room-id]
   "Returns the first available default name for the room"
-  (let [taken (get-taken-names clients room-id)]
+  (let [taken (get-taken-names clients-map room-id)]
     (first (remove taken default-names))))
 
-(defn next-available-colour [clients room-id]
+(defn next-available-colour [clients-map room-id]
   "Returns the first available colour for the room"
-  (let [taken (get-taken-colours clients room-id)]
+  (let [taken (get-taken-colours clients-map room-id)]
     (first (remove taken colours))))
 
-(defn get-room-players [clients room-id]
+(defn get-room-players [clients-map room-id]
   {:post [(m/validate schema/PlayerList %)]}
-  (->> @clients
+  (->> clients-map
        (filter (fn [[_ c]] (= (:room-id c) room-id)))
        (map (fn [[ch c]] {:id (game/player-id-from-channel ch)
                           :name (:name c)
@@ -66,7 +66,7 @@
                           :ready (:ready c)}))))
 
 (defn broadcast-players! [clients room-id]
-  (let [players (get-room-players clients room-id)]
+  (let [players (get-room-players @clients room-id)]
     (utils/broadcast-room! clients room-id
                            {:type msg/players
                             :players players})))
@@ -85,17 +85,19 @@
 
 (defn handle-join [clients channel msg]
   (let [room-id (or (:room-id msg) "default")
-        default-name (next-available-name clients room-id)
-        default-colour (next-available-colour clients room-id)]
-    (swap! clients update channel merge
-           {:room-id room-id
-            :name default-name
-            :colour default-colour})
+        _ (swap! clients (fn [m]
+                           (let [default-name (next-available-name m room-id)
+                                 default-colour (next-available-colour m room-id)]
+                             (update m channel merge
+                                     {:room-id room-id
+                                      :name default-name
+                                      :colour default-colour}))))
+        new-client (get @clients channel)]
     (utils/send-msg! channel {:type msg/joined
                               :room-id room-id
                               :player-id (game/player-id-from-channel channel)
-                              :name default-name
-                              :colour default-colour})
+                              :name (:name new-client)
+                              :colour (:colour new-client)})
     (broadcast-players! clients room-id)
     ;; Send current game options to the new player
     (utils/send-msg! channel {:type msg/options
@@ -107,9 +109,14 @@
     (broadcast-players! clients room-id)))
 
 (defn handle-set-colour [clients channel msg]
-  (let [room-id (get-in @clients [channel :room-id])]
-    (swap! clients assoc-in [channel :colour] (:colour msg))
-    (broadcast-players! clients room-id)))
+  (let [room-id (get-in @clients [channel :room-id])
+        new-colour (:colour msg)
+        taken (get-taken-colours @clients room-id)]
+    (if (contains? taken new-colour)
+      (utils/send-msg! channel {:type msg/error :message "That colour is already taken"})
+      (do
+        (swap! clients assoc-in [channel :colour] new-colour)
+        (broadcast-players! clients room-id)))))
 
 (defn handle-ready [clients channel]
   (let [room-id (get-in @clients [channel :room-id])]
