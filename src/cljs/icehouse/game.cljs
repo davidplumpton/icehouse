@@ -604,7 +604,7 @@
               (when (and @stash-drag-pending (pos? (.-buttons e)))
                 (let [{:keys [x y]} (get-canvas-coords e)
                       {:keys [size captured?]} @stash-drag-pending
-                      {:keys [zoom-active last-placement-time]} @state/ui-state
+                      {:keys [zoom-active move-mode last-placement-time]} @state/ui-state
                       ;; Check placement throttle
                       throttle-sec (get-in @state/game-state [:options :placement-throttle] 2)
                       throttle-ms (* throttle-sec 1000)
@@ -620,7 +620,8 @@
                                                        :current-x adjusted-x :current-y adjusted-y
                                                        :last-x adjusted-x :last-y adjusted-y
                                                        :locked-angle 0
-                                                       :from-stash? true})
+                                                       :from-stash? true
+                                                       :initial-move-mode move-mode})
                     ;; Show warning if throttled (and they have pieces)
                     (when (and (not can-place?) (has-pieces-of-size? size captured?))
                       (show-throttle-warning! (- throttle-ms time-since-last))))
@@ -653,18 +654,27 @@
                                                          :current-x adjusted-x :current-y adjusted-y
                                                          :last-x adjusted-x :last-y adjusted-y
                                                          :locked-angle 0
-                                                         :from-stash? true})
+                                                         :from-stash? true
+                                                         :initial-move-mode move-mode})
                       ;; Show warning if throttled (and they have pieces)
                       (when (and (not can-place?) (has-pieces-of-size? size captured?))
                         (show-throttle-warning! (- throttle-ms time-since-last))))
                     (reset! stash-drag-pending nil)))
                 ;; Update drag state if dragging
                 (when-let [drag (:drag @state/ui-state)]
-                  (let [{:keys [start-x start-y last-x last-y from-stash?]} drag
+                  (let [{:keys [start-x start-y last-x last-y from-stash? initial-move-mode]} drag
                         dx (- adjusted-x last-x)
                         dy (- adjusted-y last-y)
-                        ;; Stash drags and position-adjust mode: piece follows cursor
-                        follow-cursor? (or position-adjust? from-stash?)]
+                        move-mode-toggled (not= move-mode initial-move-mode)
+                        ;; If dragging from stash, any explicit adjustment (Shift or M toggle)
+                        ;; anchors the piece at its current position, turning it into a normal drag.
+                        anchoring? (and from-stash? (or shift-held move-mode-toggled))
+                        _ (when anchoring?
+                            (swap! state/ui-state update :drag assoc :from-stash? false))
+                        ;; A piece follows the cursor if it's still in the initial stash-drag phase,
+                        ;; or if it's a normal drag in position-adjust mode.
+                        active-from-stash? (and from-stash? (not anchoring?))
+                        follow-cursor? (if active-from-stash? true position-adjust?)]
                     (if follow-cursor?
                       ;; Position-adjust mode: move position by delta, keep locked angle
                       (swap! state/ui-state assoc :drag
