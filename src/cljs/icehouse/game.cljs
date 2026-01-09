@@ -599,11 +599,13 @@
             (fn [e]
               (let [{:keys [x y]} (get-canvas-coords e)
                     shift-held (.-shiftKey e)
-                    zoom-active (:zoom-active @state/ui-state)
+                    {:keys [zoom-active move-mode]} @state/ui-state
                     actual-zoom-scale (if zoom-active zoom-scale 1)
                     ;; Scale down movement when zoomed to account for canvas scaling
                     adjusted-x (if zoom-active (/ x actual-zoom-scale) x)
-                    adjusted-y (if zoom-active (/ y actual-zoom-scale) y)]
+                    adjusted-y (if zoom-active (/ y actual-zoom-scale) y)
+                    ;; Position-adjust mode: shift OR move-mode toggle
+                    position-adjust? (or shift-held move-mode)]
                 ;; Always update hover position for capture detection (use original unscaled coords)
                 (swap! state/ui-state assoc :hover-pos {:x x :y y})
                 ;; Update drag state if dragging
@@ -611,8 +613,8 @@
                   (let [{:keys [start-x start-y last-x last-y]} drag
                         dx (- adjusted-x last-x)
                         dy (- adjusted-y last-y)]
-                    (if shift-held
-                      ;; Shift held: move position by delta, keep locked angle
+                    (if position-adjust?
+                      ;; Position-adjust mode: move position by delta, keep locked angle
                       (swap! state/ui-state assoc :drag
                              (assoc drag
                                     :start-x (+ start-x dx)
@@ -630,9 +632,10 @@
             (fn [e]
               (when-let [drag (:drag @state/ui-state)]
                 (let [{:keys [start-x start-y current-x current-y locked-angle]} drag
-                      {:keys [size orientation captured?]} (:selected-piece @state/ui-state)
+                      {:keys [selected-piece zoom-active move-mode]} @state/ui-state
+                      {:keys [size orientation captured?]} selected-piece
                       shift-held (.-shiftKey e)
-                      zoom-active (:zoom-active @state/ui-state)
+                      position-adjust? (or shift-held move-mode)
                       actual-zoom-scale (if zoom-active zoom-scale 1)
                       ;; Scale coordinates back up if zoom was active (they were scaled down on mouse-down/move)
                       ;; Round coordinates to integers (schema expects :int)
@@ -642,7 +645,7 @@
                       ;; locked-angle is set during dragging and preserved through zoom transforms
                       ;; Only recalculate if there's actual distance between start and current
                       has-movement (or (not= start-x current-x) (not= start-y current-y))
-                      angle (if (and has-movement (not shift-held))
+                      angle (if (and has-movement (not position-adjust?))
                               (geo/calculate-angle start-x start-y current-x current-y)
                               (or locked-angle 0))]
                   (ws/place-piece! final-x final-y size orientation angle nil captured?)
@@ -697,8 +700,9 @@
                   ;; Otherwise, toggle captured piece selection
                   (when (has-captured-pieces?)
                     (swap! state/ui-state update-in [:selected-piece :captured?] not)))
-      "Escape" (swap! state/ui-state assoc :drag nil :show-help false :zoom-active false)
+      "Escape" (swap! state/ui-state assoc :drag nil :show-help false :zoom-active false :move-mode false)
       "?" (swap! state/ui-state update :show-help not)
+      ("m" "M") (swap! state/ui-state update :move-mode not)
       ("z" "Z") (let [drag (:drag @state/ui-state)
                       currently-zoomed (:zoom-active @state/ui-state)]
                   (if drag
@@ -728,6 +732,7 @@
         attack-allowed (can-attack?)
         has-captured (has-captured-pieces?)
         zoom? (:zoom-active ui)
+        move-mode? (:move-mode ui)
         has-size? (has-pieces-of-size? size captured?)]
     [:div.piece-selector
      [:div.hotkey-display
@@ -744,20 +749,23 @@
          "[Captured]"])
       (when zoom?
         [:span.zoom-indicator {:style {:color "#00ff00" :margin-left "0.5rem"}}
-         (str "[ZOOM " zoom-scale "x]")])]
+         (str "[ZOOM " zoom-scale "x]")])
+      (when move-mode?
+        [:span.move-mode-indicator {:style {:color "#ff9800" :margin-left "0.5rem"}}
+         "[MOVE]"])]
      [:div.hotkey-hint
       (cond
         (and (not attack-allowed) has-captured)
-        "1/2/3 stash, 4/5/6 captured, D defend, Z zoom, Shift+drag | ? help"
+        "1/2/3 stash, 4/5/6 captured, D defend, Z zoom, M move | ? help"
 
         (not attack-allowed)
-        "1/2/3 size, D defend, Z zoom, Shift+drag | ? help (attack unlocks after 2 moves)"
+        "1/2/3 size, D defend, Z zoom, M move | ? help (attack unlocks after 2 moves)"
 
         has-captured
-        "1/2/3 stash, 4/5/6 captured, A/D mode, Z zoom, Shift+drag | ? help"
+        "1/2/3 stash, 4/5/6 captured, A/D mode, Z zoom, M move | ? help"
 
         :else
-        "1/2/3 size, A/D mode, Z zoom, Shift+drag | ? help")]]))
+        "1/2/3 size, A/D mode, Z zoom, M move | ? help")]]))
 
 (defn draw-stash-pyramid [size colour & [{:keys [captured?]}]]
   "Returns SVG element for a pyramid in the stash"
@@ -1042,8 +1050,10 @@
          [:td {:style {:padding "0.5rem"}} "Capture piece / Toggle captured mode"]]
         [:tr [:td {:style {:padding "0.5rem" :color theme/gold}} "Z"]
          [:td {:style {:padding "0.5rem"}} (str "Toggle " zoom-scale "x zoom for fine placement")]]
-        [:tr [:td {:style {:padding "0.5rem" :color theme/gold}} "Shift + Drag"]
-         [:td {:style {:padding "0.5rem"}} "Adjust position without changing angle"]]
+        [:tr [:td {:style {:padding "0.5rem" :color theme/gold}} "M"]
+         [:td {:style {:padding "0.5rem"}} "Toggle move mode (adjust position, keep angle)"]]
+        [:tr [:td {:style {:padding "0.5rem" :color theme/gold}} "Shift"]
+         [:td {:style {:padding "0.5rem"}} "Hold while dragging for move mode"]]
         [:tr [:td {:style {:padding "0.5rem" :color theme/gold}} "Escape"]
          [:td {:style {:padding "0.5rem"}} "Cancel placement / Close help"]]
         [:tr [:td {:style {:padding "0.5rem" :color theme/gold}} "?"]

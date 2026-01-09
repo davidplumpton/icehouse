@@ -69,11 +69,13 @@
 ;; - :hover-pos - current mouse position on canvas {:x :y} or nil
 ;; - :zoom-active - whether 4x zoom mode is active for fine placement
 ;; - :show-help - whether help overlay is visible
+;; - :move-mode - toggle for position-adjust mode (like holding shift but persistent)
 (defonce ui-state (r/atom {:selected-piece {:size :small :orientation :standing :captured? false}
                            :drag nil
                            :hover-pos nil
                            :zoom-active false
-                           :show-help false}))
+                           :show-help false
+                           :move-mode false}))
 
 ;; Validate UI state changes
 (defonce _ui-state-validator

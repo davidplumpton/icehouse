@@ -357,7 +357,8 @@
    [:drag [:or DragState :nil]]
    [:hover-pos [:or HoverPos :nil]]
    [:zoom-active :boolean]
-   [:show-help :boolean]])
+   [:show-help :boolean]
+   [:move-mode :boolean]])
 
 ;; =============================================================================
 ;; Replay State Schemas
