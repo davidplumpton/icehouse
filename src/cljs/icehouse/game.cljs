@@ -330,6 +330,31 @@
     (.stroke ctx)
     (.restore ctx)))
 
+(defn find-overlapping-pieces
+  "Find all board pieces that overlap with a preview piece"
+  [preview-piece board]
+  (filter #(geo/pieces-intersect? preview-piece %) board))
+
+(defn draw-overlap-highlight
+  "Draw a red highlight around a piece to indicate overlap/conflict"
+  [ctx piece zoom-state]
+  (let [verts (geo/piece-vertices piece)]
+    (.save ctx)
+    (set! (.-strokeStyle ctx) "rgba(255,50,50,0.8)")
+    (set! (.-fillStyle ctx) "rgba(255,50,50,0.3)")
+    (set-line-width ctx 3 zoom-state)
+    (set! (.-lineCap ctx) "round")
+    (set! (.-lineJoin ctx) "round")
+    (.beginPath ctx)
+    (let [[fx fy] (first verts)]
+      (.moveTo ctx fx fy))
+    (doseq [[x y] (rest verts)]
+      (.lineTo ctx x y))
+    (.closePath ctx)
+    (.fill ctx)
+    (.stroke ctx)
+    (.restore ctx)))
+
 (defn apply-zoom
   "Apply zoom transformation to the context"
   [ctx zoom-state]
@@ -405,7 +430,12 @@
                 (if (and current-x current-y)
                   (geo/calculate-angle start-x start-y current-x current-y)
                   0))
-        is-attacking? (geo/pointing? selected-piece)]
+        is-attacking? (geo/pointing? selected-piece)
+        ;; Create preview piece for collision detection (uses world coords, not draw coords)
+        preview-piece {:x draw-start-x :y draw-start-y :size size :orientation orientation :angle angle}
+        board (:board game)
+        overlapping (find-overlapping-pieces preview-piece board)
+        has-overlap? (seq overlapping)]
     ;; Draw a line showing the direction (only in normal mode)
     (when (and current-x current-y (not in-shift-mode?))
       (set! (.-strokeStyle ctx) "rgba(255,255,255,0.5)")
@@ -417,10 +447,15 @@
     ;; Draw attack range indicator and target highlights for attacking pieces
     (when (and is-attacking? current-x current-y)
       (draw-attack-preview ctx game draw-start-x draw-start-y angle size player-id zoom-state))
-    ;; Draw preview piece with transparency
+    ;; Highlight overlapping board pieces
+    (doseq [piece overlapping]
+      (draw-overlap-highlight ctx piece zoom-state))
+    ;; Draw preview piece with transparency (red tint if overlapping)
     (.save ctx)
     (set! (.-globalAlpha ctx) preview-alpha)
-    (draw-pyramid ctx draw-start-x draw-start-y size preview-colour orientation angle {:zoom-state zoom-state})
+    (if has-overlap?
+      (draw-pyramid ctx draw-start-x draw-start-y size "#ff3333" orientation angle {:zoom-state zoom-state})
+      (draw-pyramid ctx draw-start-x draw-start-y size preview-colour orientation angle {:zoom-state zoom-state}))
     (.restore ctx)))
 
 (defn draw-with-preview [ctx game drag-state selected-piece player-colour hover-pos player-id zoom-state]
