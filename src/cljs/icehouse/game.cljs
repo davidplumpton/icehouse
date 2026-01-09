@@ -585,9 +585,10 @@
             :on-mouse-enter
             (fn [e]
               ;; If user dragged from stash and entered canvas, start the drag
-              (when-let [pending @stash-drag-pending]
+              ;; Only if mouse button is held (buttons > 0)
+              (when (and @stash-drag-pending (pos? (.-buttons e)))
                 (let [{:keys [x y]} (get-canvas-coords e)
-                      {:keys [size captured?]} pending
+                      {:keys [size captured?]} @stash-drag-pending
                       {:keys [zoom-active last-placement-time]} @state/ui-state
                       ;; Check placement throttle
                       throttle-sec (get-in @state/game-state [:options :placement-throttle] 1)
@@ -602,7 +603,8 @@
                     (swap! state/ui-state assoc :drag {:start-x adjusted-x :start-y adjusted-y
                                                        :current-x adjusted-x :current-y adjusted-y
                                                        :last-x adjusted-x :last-y adjusted-y
-                                                       :locked-angle 0}))
+                                                       :locked-angle 0
+                                                       :from-stash? true}))
                   ;; Clear pending regardless (drag started or not)
                   (reset! stash-drag-pending nil))))
             :on-mouse-move
@@ -619,8 +621,9 @@
                 ;; Always update hover position for capture detection (use original unscaled coords)
                 (swap! state/ui-state assoc :hover-pos {:x x :y y})
                 ;; Check for pending stash drag (mouse was already on canvas when stash clicked)
-                (when-let [pending @stash-drag-pending]
-                  (let [{:keys [size captured?]} pending
+                ;; Only if mouse button is held (buttons > 0)
+                (when (and @stash-drag-pending (pos? (.-buttons e)))
+                  (let [{:keys [size captured?]} @stash-drag-pending
                         throttle-sec (get-in @state/game-state [:options :placement-throttle] 1)
                         throttle-ms (* throttle-sec 1000)
                         now (js/Date.now)
@@ -629,14 +632,17 @@
                       (swap! state/ui-state assoc :drag {:start-x adjusted-x :start-y adjusted-y
                                                          :current-x adjusted-x :current-y adjusted-y
                                                          :last-x adjusted-x :last-y adjusted-y
-                                                         :locked-angle 0}))
+                                                         :locked-angle 0
+                                                         :from-stash? true}))
                     (reset! stash-drag-pending nil)))
                 ;; Update drag state if dragging
                 (when-let [drag (:drag @state/ui-state)]
-                  (let [{:keys [start-x start-y last-x last-y]} drag
+                  (let [{:keys [start-x start-y last-x last-y from-stash?]} drag
                         dx (- adjusted-x last-x)
-                        dy (- adjusted-y last-y)]
-                    (if position-adjust?
+                        dy (- adjusted-y last-y)
+                        ;; Stash drags and position-adjust mode: piece follows cursor
+                        follow-cursor? (or position-adjust? from-stash?)]
+                    (if follow-cursor?
                       ;; Position-adjust mode: move position by delta, keep locked angle
                       (swap! state/ui-state assoc :drag
                              (assoc drag
