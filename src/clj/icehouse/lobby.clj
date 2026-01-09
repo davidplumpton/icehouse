@@ -123,7 +123,7 @@
     (swap! clients update-in [channel :ready] not)
     (broadcast-players! clients room-id)
     (when (all-ready? clients room-id)
-      (let [players (get-room-players clients room-id)
+      (let [players (get-room-players @clients room-id)
             options (get-room-options room-id)]
         (game/start-game! room-id players options)
         (utils/broadcast-room! clients room-id {:type msg/game-start
