@@ -777,31 +777,40 @@
         :else
         "1/2/3 size, A/D mode, Z zoom, M move | ? help")]]))
 
-(defn draw-stash-pyramid [size colour & [{:keys [captured?]}]]
-  "Returns SVG element for a pyramid in the stash"
+(defn draw-stash-pyramid [size colour & [{:keys [captured? count]}]]
+  "Returns SVG element for a pyramid in the stash, optionally with count inside"
   (let [[width height] (get stash-sizes size [24 36])]
     [:svg {:width width :height height :style {:display "inline-block" :margin "1px"}}
      [:polygon {:points (str (/ width 2) ",0 0," height " " width "," height)
                 :fill colour
                 :stroke (if captured? theme/gold "#000")
-                :stroke-width (if captured? "2" "1")}]]))
+                :stroke-width (if captured? "2" "1")}]
+     (when count
+       [:text {:x (/ width 2)
+               :y (* height 0.7)
+               :text-anchor "middle"
+               :dominant-baseline "middle"
+               :font-size (case size :large "18" :medium "14" :small "12")
+               :font-weight "bold"
+               :fill "#000"}
+        count])]))
 
 (defn piece-size-row [size label pieces colour & [{:keys [captured? selected? on-start-drag]}]]
-  [:div.piece-row {:style (merge (when selected?
-                                   {:background "rgba(255, 255, 255, 0.15)"
-                                    :border-radius "4px"
-                                    :box-shadow "0 0 8px rgba(255, 255, 255, 0.3)"})
-                                 (when on-start-drag
-                                   {:cursor "grab"}))
-                   :on-mouse-down (when on-start-drag
-                                    (fn [e]
-                                      (.preventDefault e)
-                                      ;; Ensure captured? is boolean, not nil
-                                      (on-start-drag size (boolean captured?))))}
-   [:span.size-label label]
-   (for [i (range (get pieces size 0))]
-     ^{:key (str (name size) "-" i)}
-     [draw-stash-pyramid size colour {:captured? captured?}])])
+  (let [piece-count (get pieces size 0)]
+    (when (pos? piece-count)
+      [:div.piece-row {:style (merge (when selected?
+                                       {:background "rgba(255, 255, 255, 0.15)"
+                                        :border-radius "4px"
+                                        :box-shadow "0 0 8px rgba(255, 255, 255, 0.3)"})
+                                     (when on-start-drag
+                                       {:cursor "grab"}))
+                       :on-mouse-down (when on-start-drag
+                                        (fn [e]
+                                          (.preventDefault e)
+                                          ;; Ensure captured? is boolean, not nil
+                                          (on-start-drag size (boolean captured?))))}
+       [:span.size-label label]
+       [draw-stash-pyramid size colour {:captured? captured? :count piece-count}]])))
 
 (defn player-stash [player-id player-data]
   "Renders a single player's stash of unplayed pieces"
