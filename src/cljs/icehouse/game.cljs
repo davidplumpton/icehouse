@@ -669,6 +669,9 @@
                         ;; If dragging from stash, any explicit adjustment (Shift or M toggle)
                         ;; anchors the piece at its current position, turning it into a normal drag.
                         anchoring? (and from-stash? (or shift-held move-mode-toggled))
+                        
+                        _ (when anchoring? (js/console.log "ANCHORING DRAG"))
+                        
                         ;; Create next-drag with updated from-stash? flag if anchoring
                         next-drag (if anchoring? (assoc drag :from-stash? false) drag)
                         ;; Use the flag from next-drag for logic
@@ -677,6 +680,13 @@
                         ;; A piece follows the cursor if it's still in the initial stash-drag phase,
                         ;; or if it's a normal drag in position-adjust mode.
                         follow-cursor? (if current-from-stash? true position-adjust?)]
+                    
+                    (when (or anchoring? (not= from-stash? current-from-stash?))
+                      (js/console.log "Drag State:" (clj->js {:from-stash? from-stash? 
+                                                              :anchoring? anchoring? 
+                                                              :follow-cursor? follow-cursor? 
+                                                              :shift? shift-held})))
+                    
                     (if follow-cursor?
                       ;; Position-adjust mode: move position by delta, keep locked angle
                       (swap! state/ui-state assoc :drag
@@ -745,6 +755,7 @@
 
 (defn handle-keydown [e]
   (let [key (.-key e)]
+    (js/console.log "Keydown:" key)
     (case key
       "1" (swap! state/ui-state update :selected-piece assoc :size :small :captured? false)
       "2" (swap! state/ui-state update :selected-piece assoc :size :medium :captured? false)
@@ -768,16 +779,20 @@
       "Escape" (swap! state/ui-state assoc :drag nil :show-help false :zoom-active false :move-mode false)
       "?" (swap! state/ui-state update :show-help not)
       ("m" "M") (let [drag (:drag @state/ui-state)]
+                  (js/console.log "M key pressed, dragging?" (boolean drag) "from-stash?" (boolean (:from-stash? drag)))
                   (if (and drag (:from-stash? drag))
                     ;; If dragging from stash, switch to Rotation (Normal mode).
                     ;; Anchor the drag and ensure move-mode is OFF.
                     (do
+                      (js/console.log "Anchoring from stash via M key")
                       (swap! state/ui-state update :drag assoc :from-stash? false)
                       (swap! state/ui-state assoc :move-mode false))
                     ;; Otherwise, toggle move mode as usual
                     (swap! state/ui-state update :move-mode not)))
       "Shift" (let [drag (:drag @state/ui-state)]
-                (when (:from-stash? drag)
+                (js/console.log "Shift key pressed, dragging?" (boolean drag) "from-stash?" (boolean (:from-stash? drag)))
+                (when (and drag (:from-stash? drag))
+                  (js/console.log "Anchoring from stash via Shift key")
                   (swap! state/ui-state update :drag assoc :from-stash? false)))
       ("z" "Z") (let [drag (:drag @state/ui-state)
                       currently-zoomed (:zoom-active @state/ui-state)]
