@@ -943,7 +943,7 @@
   "Button for players to signal they want to end the game"
   (let [game @state/game-state
         player-id (:id @state/current-player)
-        finished-set (or (:finished game) #{})
+        finished-set (set (or (:finished game) []))
         players-map (:players game)
         player-count (count players-map)
         finished-count (count finished-set)
