@@ -49,6 +49,8 @@ htmlcov/
 .shadow-cljs
 .diagrams
 .claude
+.clj-kondo
+.lsp
 
 # bv (beads viewer) local config and caches
 .bv/

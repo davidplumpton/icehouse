@@ -577,7 +577,7 @@
                     {:keys [selected-piece zoom-active last-placement-time]} @state/ui-state
                     {:keys [size captured?]} selected-piece
                     ;; Check placement throttle
-                    throttle-sec (get-in @state/game-state [:options :placement-throttle] 2)
+                    throttle-sec (get-in @state/game-state [:options :placement-throttle] 1)
                     throttle-ms (* throttle-sec 1000)
                     now (js/Date.now)
                     time-since-last (- now last-placement-time)
@@ -604,9 +604,9 @@
               (when (and @stash-drag-pending (pos? (.-buttons e)))
                 (let [{:keys [x y]} (get-canvas-coords e)
                       {:keys [size captured?]} @stash-drag-pending
-                      {:keys [zoom-active move-mode last-placement-time]} @state/ui-state
+                      {:keys [zoom-active last-placement-time]} @state/ui-state
                       ;; Check placement throttle
-                      throttle-sec (get-in @state/game-state [:options :placement-throttle] 2)
+                      throttle-sec (get-in @state/game-state [:options :placement-throttle] 1)
                       throttle-ms (* throttle-sec 1000)
                       now (js/Date.now)
                       time-since-last (- now last-placement-time)
@@ -620,8 +620,7 @@
                                                        :current-x adjusted-x :current-y adjusted-y
                                                        :last-x adjusted-x :last-y adjusted-y
                                                        :locked-angle 0
-                                                       :from-stash? true
-                                                       :initial-move-mode move-mode})
+                                                       :from-stash? true})
                     ;; Show warning if throttled (and they have pieces)
                     (when (and (not can-place?) (has-pieces-of-size? size captured?))
                       (show-throttle-warning! (- throttle-ms time-since-last))))
@@ -644,7 +643,7 @@
                 ;; Only if mouse button is held (buttons > 0)
                 (when (and @stash-drag-pending (pos? (.-buttons e)))
                   (let [{:keys [size captured?]} @stash-drag-pending
-                        throttle-sec (get-in @state/game-state [:options :placement-throttle] 2)
+                        throttle-sec (get-in @state/game-state [:options :placement-throttle] 1)
                         throttle-ms (* throttle-sec 1000)
                         now (js/Date.now)
                         time-since-last (- now last-placement-time)
@@ -654,43 +653,25 @@
                                                          :current-x adjusted-x :current-y adjusted-y
                                                          :last-x adjusted-x :last-y adjusted-y
                                                          :locked-angle 0
-                                                         :from-stash? true
-                                                         :initial-move-mode move-mode})
+                                                         :from-stash? true})
                       ;; Show warning if throttled (and they have pieces)
                       (when (and (not can-place?) (has-pieces-of-size? size captured?))
                         (show-throttle-warning! (- throttle-ms time-since-last))))
                     (reset! stash-drag-pending nil)))
                 ;; Update drag state if dragging
                 (when-let [drag (:drag @state/ui-state)]
-                  (let [{:keys [start-x start-y last-x last-y from-stash? initial-move-mode]} drag
+                  (let [{:keys [start-x start-y last-x last-y from-stash?]} drag
                         dx (- adjusted-x last-x)
                         dy (- adjusted-y last-y)
-                        move-mode-toggled (not= move-mode initial-move-mode)
-                        ;; If dragging from stash, any explicit adjustment (Shift or M toggle)
-                        ;; anchors the piece at its current position, turning it into a normal drag.
-                        anchoring? (and from-stash? (or shift-held move-mode-toggled))
-                        
-                        _ (when anchoring? (js/console.log "ANCHORING DRAG"))
-                        
-                        ;; Create next-drag with updated from-stash? flag if anchoring
-                        next-drag (if anchoring? (assoc drag :from-stash? false) drag)
-                        ;; Use the flag from next-drag for logic
-                        current-from-stash? (:from-stash? next-drag)
-                        
-                        ;; A piece follows the cursor if it's still in the initial stash-drag phase,
-                        ;; or if it's a normal drag in position-adjust mode.
-                        follow-cursor? (if current-from-stash? true position-adjust?)]
-                    
-                    (when from-stash?
-                      (js/console.log "Stash Drag Check:" (clj->js {:shift? shift-held 
-                                                                    :move-mode move-mode 
-                                                                    :initial-move-mode initial-move-mode
-                                                                    :anchoring? anchoring?})))
-                    
+                        ;; Read fresh from-stash? state to catch key presses during drag
+                        current-drag (:drag @state/ui-state)
+                        current-from-stash? (:from-stash? current-drag)
+                        ;; Stash drags and position-adjust mode: piece follows cursor
+                        follow-cursor? (or position-adjust? current-from-stash?)]
                     (if follow-cursor?
                       ;; Position-adjust mode: move position by delta, keep locked angle
                       (swap! state/ui-state assoc :drag
-                             (assoc next-drag
+                             (assoc drag
                                     :start-x (+ start-x dx)
                                     :start-y (+ start-y dy)
                                     :current-x (+ start-x dx)
@@ -698,11 +679,10 @@
                                     :last-x adjusted-x :last-y adjusted-y))
                       ;; Normal: update current position for angle calculation, lock that angle
                       (let [new-angle (geo/calculate-angle start-x start-y adjusted-x adjusted-y)]
-                        (swap! state/ui-state assoc :drag 
-                               (assoc next-drag
-                                      :current-x adjusted-x :current-y adjusted-y
-                                      :last-x adjusted-x :last-y adjusted-y
-                                      :locked-angle new-angle)))))))
+                        (swap! state/ui-state update :drag assoc
+                               :current-x adjusted-x :current-y adjusted-y
+                               :last-x adjusted-x :last-y adjusted-y
+                               :locked-angle new-angle)))))))
             :on-mouse-up
             (fn [e]
               (when-let [drag (:drag @state/ui-state)]
@@ -755,7 +735,6 @@
 
 (defn handle-keydown [e]
   (let [key (.-key e)]
-    (js/console.log "Keydown:" key)
     (case key
       "1" (swap! state/ui-state update :selected-piece assoc :size :small :captured? false)
       "2" (swap! state/ui-state update :selected-piece assoc :size :medium :captured? false)
@@ -779,22 +758,16 @@
       "Escape" (swap! state/ui-state assoc :drag nil :show-help false :zoom-active false :move-mode false)
       "?" (swap! state/ui-state update :show-help not)
       ("m" "M") (let [drag (:drag @state/ui-state)]
-                  (js/console.log "M key pressed, dragging?" (boolean drag) "from-stash?" (boolean (:from-stash? drag)))
-                  (if (and drag (:from-stash? drag))
-                    ;; If dragging from stash, switch to Rotation (Normal mode).
-                    ;; Anchor the drag and ensure move-mode is OFF.
-                    (do
-                      (js/console.log "Anchoring from stash via M key")
-                      (swap! state/ui-state update :drag assoc :from-stash? false)
-                      (swap! state/ui-state assoc :move-mode false))
-                    ;; Otherwise, toggle move mode as usual
-                    (swap! state/ui-state update :move-mode not)))
+                   (if (and drag (:from-stash? drag))
+                     ;; If dragging from stash, switch to rotation mode
+                     (do
+                       (swap! state/ui-state update :drag assoc :from-stash? false)
+                       (swap! state/ui-state assoc :move-mode false))
+                     ;; Otherwise, toggle move mode as usual
+                     (swap! state/ui-state update :move-mode not)))
       "Shift" (let [drag (:drag @state/ui-state)]
-                (js/console.log "Shift key pressed, dragging?" (boolean drag) "from-stash?" (boolean (:from-stash? drag)))
                 (when (and drag (:from-stash? drag))
-                  (js/console.log "Anchoring from stash via Shift key")
-                  (swap! state/ui-state update :drag assoc :from-stash? false)))
-      ("z" "Z") (let [drag (:drag @state/ui-state)
+                  (swap! state/ui-state update :drag assoc :from-stash? false)))      ("z" "Z") (let [drag (:drag @state/ui-state)
                       currently-zoomed (:zoom-active @state/ui-state)]
                   (if drag
                     ;; Transform drag coordinates when toggling zoom mid-drag
@@ -996,18 +969,13 @@
       (when (> show-until now)
         (let [seconds (/ remaining-ms 1000)]
           [:div.throttle-warning
-           {:style {:position "fixed"
-                    :top "4rem"
-                    :left "50%"
-                    :transform "translateX(-50%)"
-                    :background theme/orange
+           {:style {:background theme/orange
                     :color "#000"
                     :padding "0.5rem 1rem"
                     :border-radius "4px"
+                    :margin-bottom "0.5rem"
                     :font-weight "bold"
-                    :text-align "center"
-                    :z-index 100
-                    :box-shadow "0 2px 8px rgba(0,0,0,0.3)"}}
+                    :text-align "center"}}
            (str "Wait " (.toFixed seconds 1) "s before placing")])))))
 
 (defn game-timer []
@@ -1197,15 +1165,14 @@
     (r/create-class
      {:component-did-mount
       (fn [this]
-        (js/console.log "Game View Mounted - Attaching Keydown Listener")
-        (.addEventListener js/window "keydown" handle-keydown)
+        (.addEventListener js/document "keydown" handle-keydown)
         ;; Start timer update interval
         (reset! timer-interval
                 (js/setInterval #(reset! state/current-time (js/Date.now)) 1000)))
 
       :component-will-unmount
       (fn [this]
-        (.removeEventListener js/window "keydown" handle-keydown)
+        (.removeEventListener js/document "keydown" handle-keydown)
         ;; Clear timer interval
         (when @timer-interval
           (js/clearInterval @timer-interval)))
