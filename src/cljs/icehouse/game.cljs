@@ -878,10 +878,14 @@
              [draw-stash-pyramid sz (:colour cap-piece) {:captured? true}])])])]))
 
 (defn stash-panel [position]
-  "Renders stash panels for players on left or right side"
+  "Renders stash panels for players on left or right side.
+   Current player always appears first (top-left position)."
   (let [game @state/game-state
         players-map (:players game)
-        player-list (vec (sort (keys players-map)))
+        my-id (:id @state/current-player)
+        ;; Sort players but put current player first
+        sorted-others (vec (sort (remove #(= (name %) my-id) (keys players-map))))
+        player-list (into [(keyword my-id)] sorted-others)
         ;; Left gets players at indices 0, 2; Right gets 1, 3
         indices (if (= position :left) [0 2] [1 3])
         panel-players (keep #(when-let [pid (get player-list %)]
