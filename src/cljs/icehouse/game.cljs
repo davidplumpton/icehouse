@@ -853,14 +853,14 @@
       player-name
       (when is-me " (you)")]
      [:div.stash-pieces
-      [piece-size-row :large "L" pieces colour
-       {:selected? (and is-me (not captured?) (= size :large))
+      [piece-size-row :small "1" pieces colour
+       {:selected? (and is-me (not captured?) (= size :small))
         :on-start-drag start-stash-drag}]
-      [piece-size-row :medium "M" pieces colour
+      [piece-size-row :medium "2" pieces colour
        {:selected? (and is-me (not captured?) (= size :medium))
         :on-start-drag start-stash-drag}]
-      [piece-size-row :small "S" pieces colour
-       {:selected? (and is-me (not captured?) (= size :small))
+      [piece-size-row :large "3" pieces colour
+       {:selected? (and is-me (not captured?) (= size :large))
         :on-start-drag start-stash-drag}]]
      (when has-captured?
        [:div.captured-pieces
