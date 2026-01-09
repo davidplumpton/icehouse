@@ -351,6 +351,12 @@
    [:x [:or :double :int]]
    [:y [:or :double :int]]])
 
+(def ThrottleWarning
+  "Warning displayed when player tries to move too quickly"
+  [:map
+   [:remaining-ms [:or :int :double]]
+   [:show-until [:or :int :double]]])
+
 (def UIState
   "Frontend UI interaction state"
   [:map
@@ -360,7 +366,8 @@
    [:zoom-active :boolean]
    [:show-help :boolean]
    [:move-mode :boolean]
-   [:last-placement-time [:or :int :double]]])
+   [:last-placement-time [:or :int :double]]
+   [:throttle-warning {:optional true} [:or ThrottleWarning :nil]]])
 
 ;; =============================================================================
 ;; Replay State Schemas

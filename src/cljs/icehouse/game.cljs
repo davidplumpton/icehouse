@@ -38,6 +38,17 @@
 ;; Utility Functions
 ;; =============================================================================
 
+(def throttle-warning-duration-ms 2000)
+
+(defn show-throttle-warning!
+  "Display a warning when placement is blocked due to throttle.
+   Shows remaining time until next placement allowed."
+  [remaining-ms]
+  (let [now (js/Date.now)]
+    (swap! state/ui-state assoc :throttle-warning
+           {:remaining-ms remaining-ms
+            :show-until (+ now throttle-warning-duration-ms)})))
+
 (defn set-line-width
   "Set line width, accounting for zoom scale if present. Maintains minimum width for visibility."
   [ctx width zoom-state]
@@ -569,7 +580,8 @@
                     throttle-sec (get-in @state/game-state [:options :placement-throttle] 1)
                     throttle-ms (* throttle-sec 1000)
                     now (js/Date.now)
-                    can-place? (>= (- now last-placement-time) throttle-ms)
+                    time-since-last (- now last-placement-time)
+                    can-place? (>= time-since-last throttle-ms)
                     actual-zoom-scale (if zoom-active zoom-scale 1)
                     ;; Scale down position when zoomed to account for canvas scaling
                     adjusted-x (if zoom-active (/ x actual-zoom-scale) x)
@@ -577,11 +589,14 @@
                 ;; Clear any pending stash drag since we're clicking directly on canvas
                 (reset! stash-drag-pending nil)
                 ;; Only start drag if player has pieces and not throttled
-                (when (and can-place? (has-pieces-of-size? size captured?))
+                (if (and can-place? (has-pieces-of-size? size captured?))
                   (swap! state/ui-state assoc :drag {:start-x adjusted-x :start-y adjusted-y
                                                      :current-x adjusted-x :current-y adjusted-y
                                                      :last-x adjusted-x :last-y adjusted-y
-                                                     :locked-angle 0}))))
+                                                     :locked-angle 0})
+                  ;; Show warning if throttled (and they have pieces)
+                  (when (and (not can-place?) (has-pieces-of-size? size captured?))
+                    (show-throttle-warning! (- throttle-ms time-since-last))))))
             :on-mouse-enter
             (fn [e]
               ;; If user dragged from stash and entered canvas, start the drag
@@ -594,17 +609,21 @@
                       throttle-sec (get-in @state/game-state [:options :placement-throttle] 1)
                       throttle-ms (* throttle-sec 1000)
                       now (js/Date.now)
-                      can-place? (>= (- now last-placement-time) throttle-ms)
+                      time-since-last (- now last-placement-time)
+                      can-place? (>= time-since-last throttle-ms)
                       actual-zoom-scale (if zoom-active zoom-scale 1)
                       adjusted-x (if zoom-active (/ x actual-zoom-scale) x)
                       adjusted-y (if zoom-active (/ y actual-zoom-scale) y)]
                   ;; Only start if player has pieces and not throttled
-                  (when (and can-place? (has-pieces-of-size? size captured?))
+                  (if (and can-place? (has-pieces-of-size? size captured?))
                     (swap! state/ui-state assoc :drag {:start-x adjusted-x :start-y adjusted-y
                                                        :current-x adjusted-x :current-y adjusted-y
                                                        :last-x adjusted-x :last-y adjusted-y
                                                        :locked-angle 0
-                                                       :from-stash? true}))
+                                                       :from-stash? true})
+                    ;; Show warning if throttled (and they have pieces)
+                    (when (and (not can-place?) (has-pieces-of-size? size captured?))
+                      (show-throttle-warning! (- throttle-ms time-since-last))))
                   ;; Clear pending regardless (drag started or not)
                   (reset! stash-drag-pending nil))))
             :on-mouse-move
@@ -627,13 +646,17 @@
                         throttle-sec (get-in @state/game-state [:options :placement-throttle] 1)
                         throttle-ms (* throttle-sec 1000)
                         now (js/Date.now)
-                        can-place? (>= (- now last-placement-time) throttle-ms)]
-                    (when (and can-place? (has-pieces-of-size? size captured?))
+                        time-since-last (- now last-placement-time)
+                        can-place? (>= time-since-last throttle-ms)]
+                    (if (and can-place? (has-pieces-of-size? size captured?))
                       (swap! state/ui-state assoc :drag {:start-x adjusted-x :start-y adjusted-y
                                                          :current-x adjusted-x :current-y adjusted-y
                                                          :last-x adjusted-x :last-y adjusted-y
                                                          :locked-angle 0
-                                                         :from-stash? true}))
+                                                         :from-stash? true})
+                      ;; Show warning if throttled (and they have pieces)
+                      (when (and (not can-place?) (has-pieces-of-size? size captured?))
+                        (show-throttle-warning! (- throttle-ms time-since-last))))
                     (reset! stash-drag-pending nil)))
                 ;; Update drag state if dragging
                 (when-let [drag (:drag @state/ui-state)]
@@ -926,6 +949,22 @@
               :font-weight "bold"}}
      error]))
 
+(defn throttle-warning-display []
+  "Display warning when player tries to move too quickly"
+  (when-let [warning (:throttle-warning @state/ui-state)]
+    (let [now (js/Date.now)
+          {:keys [remaining-ms show-until]} warning]
+      (when (> show-until now)
+        (let [seconds (/ remaining-ms 1000)]
+          [:div.throttle-warning
+           {:style {:background theme/orange
+                    :color "#000"
+                    :padding "0.5rem 1rem"
+                    :border-radius "4px"
+                    :margin-bottom "0.5rem"
+                    :font-weight "bold"
+                    :text-align "center"}}
+           (str "Wait " (.toFixed seconds 1) "s before placing")])))))
 
 (defn game-timer []
   "Display remaining game time"
@@ -1139,6 +1178,7 @@
            [finish-button]
            [game-timer]]]
          [error-display]
+         [throttle-warning-display]
          [game-results-overlay]
          [help-overlay]
          [piece-selector]

@@ -10,6 +10,7 @@
 (def gold "#ffd700")
 (def green "#4CAF50")
 (def red "#f44336")
+(def orange "#ff9800")
 
 ;; UI colors
 (def button-inactive "#333")
