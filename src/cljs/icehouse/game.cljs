@@ -577,7 +577,7 @@
                     {:keys [selected-piece zoom-active last-placement-time]} @state/ui-state
                     {:keys [size captured?]} selected-piece
                     ;; Check placement throttle
-                    throttle-sec (get-in @state/game-state [:options :placement-throttle] 1)
+                    throttle-sec (get-in @state/game-state [:options :placement-throttle] 2)
                     throttle-ms (* throttle-sec 1000)
                     now (js/Date.now)
                     time-since-last (- now last-placement-time)
@@ -606,7 +606,7 @@
                       {:keys [size captured?]} @stash-drag-pending
                       {:keys [zoom-active last-placement-time]} @state/ui-state
                       ;; Check placement throttle
-                      throttle-sec (get-in @state/game-state [:options :placement-throttle] 1)
+                      throttle-sec (get-in @state/game-state [:options :placement-throttle] 2)
                       throttle-ms (* throttle-sec 1000)
                       now (js/Date.now)
                       time-since-last (- now last-placement-time)
@@ -643,7 +643,7 @@
                 ;; Only if mouse button is held (buttons > 0)
                 (when (and @stash-drag-pending (pos? (.-buttons e)))
                   (let [{:keys [size captured?]} @stash-drag-pending
-                        throttle-sec (get-in @state/game-state [:options :placement-throttle] 1)
+                        throttle-sec (get-in @state/game-state [:options :placement-throttle] 2)
                         throttle-ms (* throttle-sec 1000)
                         now (js/Date.now)
                         time-since-last (- now last-placement-time)

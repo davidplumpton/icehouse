@@ -39,3 +39,8 @@
                         icehouse.lobby/broadcast-players! (fn [& _] nil)]
             (lobby/handle-set-colour clients "ch2" {:colour free-colour})
             (is (= free-colour (get-in @clients ["ch2" :colour])))))))))
+
+(deftest default-options-test
+  (testing "default placement throttle is 2.0 seconds"
+    (is (= 2.0 (:placement-throttle lobby/default-options)))
+    (is (= 2.0 (:placement-throttle (lobby/get-room-options "any-room"))))))

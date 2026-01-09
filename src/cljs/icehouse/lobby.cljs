@@ -65,7 +65,7 @@
   (let [local-value (r/atom nil)]
     (fn []
       (let [options @state/game-options
-            server-value (or (:placement-throttle options) 1)
+            server-value (or (:placement-throttle options) 2)
             display-value (if (nil? @local-value) server-value @local-value)]
         [:input {:type "text"
                  :value display-value

@@ -79,7 +79,9 @@
                   :drag nil
                   :hover-pos nil
                   :zoom-active false
-                  :show-help false}]
+                  :show-help false
+                  :move-mode false
+                  :last-placement-time 0}]
     (is (schema/validate-or-nil schema/UIState ui-state))))
 
 (deftest test-client-message-validation
