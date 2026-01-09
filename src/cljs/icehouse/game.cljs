@@ -720,7 +720,10 @@
         ;; Get selection state for highlighting
         {:keys [size captured?]} (when is-me (:selected-piece @state/ui-state))
         ;; Group captured pieces by size for selection highlighting
-        captured-by-size (when is-me (group-by #(keyword (:size %)) captured))]
+        captured-by-size (when is-me (group-by #(keyword (:size %)) captured))
+        ;; Compute hotkey mapping for captured pieces (4, 5, 6 based on order captured)
+        available-sizes (when is-me (vec (distinct (map #(keyword (:size %)) captured))))
+        size-to-hotkey (when is-me (into {} (map-indexed (fn [idx sz] [sz (+ 4 idx)]) available-sizes)))]
     [:div.player-stash {:class (when is-me "is-me")}
      [:div.stash-header {:style {:color colour}}
       player-name
@@ -738,13 +741,18 @@
          "Captured:"]
         ;; Group captured pieces by size and render with selection indicator
         (for [sz [:large :medium :small]
-              :let [caps (get captured-by-size sz)]
+              :let [caps (get captured-by-size sz)
+                    hotkey (get size-to-hotkey sz)]
               :when (seq caps)]
           ^{:key (str "cap-row-" (name sz))}
-          [:div.captured-row {:style (when (and is-me captured? (= size sz))
-                                       {:background "rgba(255, 215, 0, 0.2)"
-                                        :border-radius "4px"
-                                        :box-shadow "0 0 8px rgba(255, 215, 0, 0.4)"})}
+          [:div.captured-row {:style (merge {:display "flex" :align-items "center" :gap "4px"}
+                                            (when (and is-me captured? (= size sz))
+                                              {:background "rgba(255, 215, 0, 0.2)"
+                                               :border-radius "4px"
+                                               :box-shadow "0 0 8px rgba(255, 215, 0, 0.4)"}))}
+           (when hotkey
+             [:span.captured-hotkey {:style {:color theme/gold :font-weight "bold" :min-width "1em"}}
+              (str hotkey)])
            (for [[idx cap-piece] (map-indexed vector caps)]
              ^{:key (str "cap-" (name sz) "-" idx)}
              [draw-stash-pyramid sz (:colour cap-piece) {:captured? true}])])])]))
