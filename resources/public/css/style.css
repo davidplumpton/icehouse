@@ -201,3 +201,29 @@
   color: #666;
   font-weight: bold;
 }
+
+/* Replay */
+.replay-btn, .speed-btn {
+  padding: 8px 16px;
+  background: #4a4a5e;
+  color: #fff;
+  border: 1px solid #6a6a7e;
+  border-radius: 4px;
+  cursor: pointer;
+  font-weight: bold;
+  transition: all 0.2s;
+}
+
+.replay-btn:hover, .speed-btn:hover {
+  background: #5a5a6e;
+  border-color: #7a7a8e;
+}
+
+.replay-btn:active, .speed-btn:active {
+  transform: translateY(1px);
+}
+
+.speed-btn {
+  padding: 4px 8px;
+  font-size: 0.8rem;
+}

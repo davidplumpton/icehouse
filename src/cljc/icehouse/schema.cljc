@@ -7,7 +7,7 @@
 
 (def id-string
   "Unique identifier as a string (or keyword in CLJS map keys)"
-  [:or :string :keyword])
+  [:or :string :keyword :nil])
 
 (def colour
   "Hex colour string (e.g., #ff6b6b)"
@@ -288,12 +288,13 @@
    [:started-at :int]
    [:ended-at :int]
    [:duration-ms :int]
-        [:end-reason [:enum :all-pieces-placed :time-up :all-players-finished]]
-        [:moves [:vector Move]]
-        [:final-board [:vector Piece]]
-        [:final-scores Scores]
-        [:icehouse-players [:vector id-string]]
-        [:winner {:optional true} [:or id-string :nil]]])
+   [:end-reason [:enum :all-pieces-placed :time-up :all-players-finished]]
+   [:moves [:vector Move]]
+   [:final-board [:vector Piece]]
+   [:final-scores Scores]
+   [:icehouse-players [:vector id-string]]
+   [:winner {:optional true} [:or id-string :nil]]])
+
 (def GameRecordMessage
   "Server game record message"
   [:map
@@ -365,7 +366,7 @@
 (def ReplayState
   "Game replay state"
   [:map
-   [:record [:or GameState :nil]]
+   [:record [:or GameRecord :nil]]
    [:current-move :int]
    [:playing? :boolean]
    [:speed [:or :double :int {:min 0.1}]]])
@@ -379,6 +380,7 @@
   [:map
    [:valid? :boolean]
    [:error-message [:or :string :nil]]])
+
 
 ;; =============================================================================
 ;; Validation Functions

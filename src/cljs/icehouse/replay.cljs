@@ -29,17 +29,20 @@
          (case move-type
            :place-piece (conj board (:piece move))
            :capture-piece (vec (remove (utils/by-id (:piece-id move)) board))
-           board)))
+           (do
+             (js/console.warn "Unknown move type in replay:" move-type)
+             board))))
      []
      moves)))
 
 (defn game-state-at-move
   "Create a game-state-like structure for rendering at a given move index"
   [record move-idx]
-  {:players (:players record)
-   :board (if (neg? move-idx)
-            []
-            (board-at-move record move-idx))})
+  (when record
+    {:players (:players record)
+     :board (if (neg? move-idx)
+              []
+              (board-at-move record move-idx))}))
 
 ;; =============================================================================
 ;; Replay Controls
@@ -92,7 +95,8 @@
 (defn close-replay!
   "Close the replay view"
   []
-  (reset! state/replay-state nil))
+  (reset! state/replay-state nil)
+  (reset! state/current-view :lobby))
 
 ;; =============================================================================
 ;; Replay Canvas Component
@@ -168,12 +172,12 @@
 
          ;; Control buttons
          [:div {:style {:display "flex" :justify-content "center" :gap "10px"}}
-          [:button.replay-btn {:on-click go-to-start!} "|<"]
-          [:button.replay-btn {:on-click step-back!} "<"]
-          [:button.replay-btn {:on-click toggle-play!}
+          [:button.replay-btn {:on-click #(go-to-start!)} "|<"]
+          [:button.replay-btn {:on-click #(step-back!)} "<"]
+          [:button.replay-btn {:on-click #(toggle-play!)}
            (if playing? "||" ">")]
-          [:button.replay-btn {:on-click step-forward!} ">"]
-          [:button.replay-btn {:on-click go-to-end!} ">|"]]
+          [:button.replay-btn {:on-click #(step-forward!)} ">"]
+          [:button.replay-btn {:on-click #(go-to-end!)} ">|"]]
 
          ;; Speed controls
          [:div {:style {:margin-top "10px"}}
@@ -212,7 +216,8 @@
 (defn close-game-list!
   "Close the game list and return to lobby"
   []
-  (reset! state/game-list nil))
+  (reset! state/game-list nil)
+  (reset! state/current-view :lobby))
 
 (defn game-list-panel
   "Panel showing list of saved games"
@@ -291,27 +296,16 @@
 (defn replay-view
   "Main replay view component with integrated auto-play timer"
   []
-  (let [timer-ref (r/atom nil)]
-    (r/create-class
-     {:component-did-mount
-      (fn [_]
-        (reset! timer-ref
-                (js/setInterval auto-play-tick! replay-tick-ms)))
-
-      :component-will-unmount
-      (fn [_]
-        (when @timer-ref
-          (js/clearInterval @timer-ref)))
-
-      :reagent-render
-      (fn []
-        (let [replay @state/replay-state]
-          [:div.replay-view {:style {:background "#1a1a2e"
-                                      :min-height "100vh"
-                                      :padding "20px"}}
-           (if replay
-             [:div
-              [:h2 {:style {:color "white" :text-align "center"}} "Game Replay"]
-              [replay-canvas]
-              [replay-controls]]
-             [game-list-panel])]))})))
+  (r/with-let [timer (js/setInterval auto-play-tick! replay-tick-ms)]
+    (let [replay @state/replay-state]
+      [:div.replay-view {:style {:background "#1a1a2e"
+                                  :min-height "100vh"
+                                  :padding "20px"}}
+       (if replay
+         [:div
+          [:h2 {:style {:color "white" :text-align "center"}} "Game Replay"]
+          [replay-canvas]
+          [replay-controls]]
+         [game-list-panel])])
+    (finally
+      (js/clearInterval timer))))

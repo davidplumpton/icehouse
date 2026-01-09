@@ -26,12 +26,9 @@
         game-list-visible? (some? @state/game-list)]
     [:div.app
      [connection-warning]
-     ;; Show replay view if replay is active or game list is visible
+     ;; Show replay view if replay is active, game list is visible, or view is :replay
      (cond
-       replay-active?
-       [replay/replay-view]
-
-       game-list-visible?
+       (or (= view :replay) replay-active? game-list-visible?)
        [replay/replay-view]
 
        :else

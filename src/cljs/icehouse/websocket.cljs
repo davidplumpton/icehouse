@@ -98,11 +98,15 @@
                                     :game-id (:game-id data)})
 
         msg/game-list
-        (reset! state/game-list (:games data))
+        (do
+          (reset! state/current-view :replay)
+          (reset! state/game-list (:games data)))
 
         msg/game-record
         (do
           (reset! state/game-list nil)  ;; Clear game list when loading replay
+          (reset! state/game-result nil) ;; Clear game results overlay
+          (reset! state/current-view :replay) ;; Explicitly switch to replay view
           (reset! state/replay-state {:record (:record data)
                                        :current-move 0
                                        :playing? false

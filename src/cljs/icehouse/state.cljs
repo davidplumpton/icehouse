@@ -79,9 +79,13 @@
 (defonce _ui-state-validator
   (add-watch ui-state :validator
              (fn [_ _ _ new-state]
-               (when-not (m/validate schema/UIState new-state)
-                 (.error js/console "Invalid UI state update:"
-                         (clj->js (m/explain schema/UIState new-state)))))))
+               (try
+                 (if (m/validate schema/UIState new-state)
+                   nil
+                   (.error js/console "Invalid UI state update:"
+                           (clj->js (m/explain schema/UIState new-state))))
+                 (catch js/Error e
+                   (.error js/console "Schema validation error in UIState:" e))))))
 
 ;; =============================================================================
 ;; Replay State
@@ -95,9 +99,14 @@
 (defonce _replay-state-validator
   (add-watch replay-state :validator
              (fn [_ _ _ new-state]
-               (when (and new-state (not (m/validate schema/ReplayState new-state)))
-                 (.error js/console "Invalid replay state update:"
-                         (clj->js (m/explain schema/ReplayState new-state)))))))
+               (when new-state
+                 (try
+                   (if (m/validate schema/ReplayState new-state)
+                     nil
+                     (.error js/console "Invalid replay state update:"
+                             (clj->js (m/explain schema/ReplayState new-state))))
+                   (catch js/Error e
+                     (.error js/console "Schema validation error in ReplayState:" e)))))))
 
 ;; List of available saved game IDs
 (defonce game-list (r/atom nil))
