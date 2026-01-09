@@ -91,8 +91,8 @@
   (when (and piece x y)
     (let [base-size (get piece-sizes (keyword size) default-piece-size)
           half (/ base-size 2)
-          ;; Standing pieces don't rotate - they're viewed from above
-          effective-angle (if (standing? piece) 0 (or angle 0))
+          ;; All pieces can rotate - the angle affects collision detection
+          effective-angle (or angle 0)
           local-verts (if (standing? piece)
                         ;; Standing: square (axis-aligned)
                         [[(- half) (- half)]
