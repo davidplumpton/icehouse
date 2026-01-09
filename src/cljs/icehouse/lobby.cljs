@@ -60,6 +60,23 @@
       :class (when (:ready me) "is-ready")}
      (if (:ready me) "Not Ready" "Ready!")]))
 
+(defn throttle-input []
+  "Input for placement throttle with local state, syncs on blur"
+  (let [local-value (r/atom nil)]
+    (fn []
+      (let [options @state/game-options
+            server-value (or (:placement-throttle options) 1)
+            display-value (if (nil? @local-value) server-value @local-value)]
+        [:input {:type "text"
+                 :value display-value
+                 :on-focus #(reset! local-value (str server-value))
+                 :on-change #(reset! local-value (.. % -target -value))
+                 :on-blur #(let [parsed (js/parseFloat @local-value)]
+                             (when-not (js/isNaN parsed)
+                               (ws/set-option! :placement-throttle parsed))
+                             (reset! local-value nil))
+                 :style {:width "50px" :margin-right "5px" :text-align "center"}}]))))
+
 (defn game-options-panel []
   (let [options @state/game-options]
     (when options
@@ -89,13 +106,7 @@
        [:div.option {:style {:margin "10px 0"}}
         [:label {:style {:display "flex" :align-items "center"}}
          [:span {:style {:margin-right "10px"}} "Placement Throttle"]
-         [:input {:type "number"
-                  :min 0
-                  :max 10
-                  :step 0.1
-                  :value (or (:placement-throttle options) 1)
-                  :on-change #(ws/set-option! :placement-throttle (js/parseFloat (.. % -target -value)))
-                  :style {:width "60px" :margin-right "5px"}}]
+         [throttle-input]
          [:span "sec"]
          [:span {:style {:color "#888" :font-size "0.85em" :margin-left "10px"}}
           "(cooldown between placements)"]]]])))
