@@ -5,6 +5,7 @@
             [icehouse.utils :as utils]
             [icehouse.geometry :as geo]
             [icehouse.game-logic :as logic]
+            [icehouse.constants :as const]
             [icehouse.websocket :as ws]))
 
 ;; =============================================================================
@@ -514,7 +515,7 @@
                     {:keys [selected-piece zoom-active last-placement-time]} @state/ui-state
                     {:keys [size captured?]} selected-piece
                     ;; Check placement throttle
-                    throttle-sec (get-in @state/game-state [:options :placement-throttle] 2)
+                    throttle-sec (get-in @state/game-state [:options :placement-throttle] const/default-placement-throttle-sec)
                     throttle-ms (* throttle-sec 1000)
                     now (js/Date.now)
                     time-since-last (- now last-placement-time)
@@ -543,7 +544,7 @@
                       {:keys [size captured?]} @stash-drag-pending
                       {:keys [zoom-active last-placement-time]} @state/ui-state
                       ;; Check placement throttle
-                      throttle-sec (get-in @state/game-state [:options :placement-throttle] 2)
+                      throttle-sec (get-in @state/game-state [:options :placement-throttle] const/default-placement-throttle-sec)
                       throttle-ms (* throttle-sec 1000)
                       now (js/Date.now)
                       time-since-last (- now last-placement-time)
@@ -580,7 +581,7 @@
                 ;; Only if mouse button is held (buttons > 0)
                 (when (and @stash-drag-pending (pos? (.-buttons e)))
                   (let [{:keys [size captured?]} @stash-drag-pending
-                        throttle-sec (get-in @state/game-state [:options :placement-throttle] 2)
+                        throttle-sec (get-in @state/game-state [:options :placement-throttle] const/default-placement-throttle-sec)
                         throttle-ms (* throttle-sec 1000)
                         now (js/Date.now)
                         time-since-last (- now last-placement-time)
@@ -641,7 +642,7 @@
                               (geo/calculate-angle start-x start-y current-x current-y)
                               (or locked-angle 0))
                       ;; Start cooldown indicator
-                      throttle-sec (get-in @state/game-state [:options :placement-throttle] 2)
+                      throttle-sec (get-in @state/game-state [:options :placement-throttle] const/default-placement-throttle-sec)
                       throttle-ms (* throttle-sec 1000)]
                   (ws/place-piece! final-x final-y size orientation angle nil captured?)
                   (swap! state/ui-state assoc :drag nil :last-placement-time (js/Date.now))

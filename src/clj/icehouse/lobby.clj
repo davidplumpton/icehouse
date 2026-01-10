@@ -3,6 +3,7 @@
             [icehouse.messages :as msg]
             [icehouse.utils :as utils]
             [icehouse.schema :as schema]
+            [icehouse.constants :as const]
             [malli.core :as m]))
 
 ;; Game options stored per room
@@ -12,7 +13,7 @@
   {:icehouse-rule true        ;; Whether icehouse rule is enforced
    :timer-enabled true        ;; Whether game has a time limit
    :timer-duration :random    ;; :random (2-5 min), or specific ms value
-   :placement-throttle 2.0})  ;; Seconds to wait between placements
+   :placement-throttle const/default-placement-throttle-sec})
 
 (defn get-room-options [room-id]
   {:post [(m/validate schema/GameOptions %)]}

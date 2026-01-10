@@ -5,6 +5,7 @@
              [icehouse.schema :as schema]
              [icehouse.geometry :as geo]
              [icehouse.game-logic :as logic]
+             [icehouse.constants :as const]
              [malli.core :as m]))
 
 (defonce games (atom {}))
@@ -21,20 +22,15 @@
     (str "Invalid game state: " (m/explain schema/GameState game))))
 
 ;; =============================================================================
-;; Game Constants
+;; Game Constants (aliases to shared constants)
 ;; =============================================================================
 
-;; Play area dimensions (must match frontend canvas)
-(def play-area-width 1000)
-(def play-area-height 750)
-
-;; Game rules constants
-(def icehouse-min-pieces 8)       ;; Minimum pieces to trigger icehouse rule
-(def initial-piece-counts {:small 5 :medium 5 :large 5})
-
-;; Game duration in milliseconds (random between min and max)
-(def game-duration-min-ms (* 2 60 1000))  ;; 2 minutes
-(def game-duration-max-ms (* 5 60 1000))  ;; 5 minutes
+(def play-area-width const/play-area-width)
+(def play-area-height const/play-area-height)
+(def icehouse-min-pieces const/icehouse-min-pieces)
+(def initial-piece-counts const/initial-piece-counts)
+(def game-duration-min-ms const/game-duration-min-ms)
+(def game-duration-max-ms const/game-duration-max-ms)
 
 
 ;; =============================================================================

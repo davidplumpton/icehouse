@@ -3,6 +3,7 @@
             [icehouse.state :as state]
             [icehouse.theme :as theme]
             [icehouse.utils :as utils]
+            [icehouse.constants :as const]
             [icehouse.websocket :as ws]))
 
 (defn colour-picker []
@@ -65,7 +66,7 @@
   (let [local-value (r/atom nil)]
     (fn []
       (let [options @state/game-options
-            server-value (or (:placement-throttle options) 2)
+            server-value (or (:placement-throttle options) const/default-placement-throttle-sec)
             display-value (if (nil? @local-value) server-value @local-value)]
         [:input {:type "text"
                  :value display-value
