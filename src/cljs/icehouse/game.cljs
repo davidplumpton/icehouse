@@ -4,6 +4,7 @@
             [icehouse.theme :as theme]
             [icehouse.utils :as utils]
             [icehouse.geometry :as geo]
+            [icehouse.game-logic :as logic]
             [icehouse.websocket :as ws]))
 
 ;; =============================================================================
@@ -102,39 +103,9 @@
                      (geo/point-in-polygon? [x y] verts)))
                  (reverse board))))
 
-(defn find-piece-by-id
-  "Find a piece by its ID"
-  [board id]
-  (first (filter (utils/by-id id) board)))
-
-(defn attackers-by-target
-  "Returns a map of target-id -> list of attackers targeting that piece"
-  [board]
-  (let [pointing-pieces (filter #(and (geo/pointing? %)
-                                      (:target-id %))
-                                board)]
-    (group-by :target-id pointing-pieces)))
-
-(defn attack-strength
-  "Sum of pip values of all attackers"
-  [attackers]
-  (reduce + (map geo/piece-pips attackers)))
-
-(defn calculate-iced-pieces
-  "Returns set of piece IDs that are successfully iced.
-   Per Icehouse rules: a defender is iced when total attacker pips > defender pips"
-  [board]
-  (let [attacks (attackers-by-target board)]
-    (reduce-kv
-     (fn [iced target-id attackers]
-       (let [defender (find-piece-by-id board target-id)
-             defender-pips (geo/piece-pips defender)
-             attacker-pips (attack-strength attackers)]
-         (if (and defender (> attacker-pips defender-pips))
-           (conj iced target-id)
-           iced)))
-     #{}
-     attacks)))
+;; Core game logic functions moved to icehouse.game-logic (shared .cljc)
+;; Use logic/find-piece-by-id, logic/attackers-by-target, logic/attack-strength,
+;; logic/calculate-iced-pieces, logic/calculate-over-ice, logic/capturable-piece?
 
 ;; Track last board to avoid unnecessary recalculations
 (defonce ^:private last-board (atom nil))
@@ -144,7 +115,7 @@
   [board]
   (when (not= board @last-board)
     (reset! last-board board)
-    (reset! state/cached-iced-pieces (calculate-iced-pieces board))))
+    (reset! state/cached-iced-pieces (logic/calculate-iced-pieces board))))
 
 ;; Set up a watch to update cached iced pieces when game state changes
 (defonce ^:private _iced-cache-watch
@@ -152,38 +123,6 @@
              (fn [_ _ _ new-state]
                (when new-state
                  (update-cached-iced-pieces! (:board new-state))))))
-
-(defn calculate-over-ice
-  "Returns a map of defender-id -> {:excess pips :attackers [...] :defender-owner player-id}
-   for each over-iced defender"
-  [board]
-  (let [attacks (attackers-by-target board)]
-    (reduce-kv
-     (fn [result target-id attackers]
-       (let [defender (find-piece-by-id board target-id)
-             defender-pips (geo/piece-pips defender)
-             attacker-pips (attack-strength attackers)
-             excess (- attacker-pips (+ defender-pips 1))]
-         (if (and defender (> attacker-pips defender-pips) (pos? excess))
-           (assoc result target-id {:excess excess
-                                    :attackers attackers
-                                    :defender-owner (:player-id defender)})
-           result)))
-     {}
-     attacks)))
-
-(defn capturable-piece?
-  "Check if a piece can be captured by the current player.
-   Returns true if piece is an attacker in an over-iced situation where
-   the current player owns the defender and the attacker's pips <= excess."
-  [piece player-id board]
-  (when (and piece (geo/pointing? piece))
-    (let [over-ice (calculate-over-ice board)
-          target-id (:target-id piece)]
-      (when-let [info (get over-ice target-id)]
-        (and (= (utils/normalize-player-id (:defender-owner info))
-                (utils/normalize-player-id player-id))
-             (<= (geo/piece-pips piece) (:excess info)))))))
 
 (defn get-hovered-piece
   "Get the piece currently under the mouse cursor, if any"
@@ -315,7 +254,7 @@
                          {:iced? is-iced? :zoom-state zoom-state})))
        ;; Draw capture highlight if hovering over a capturable piece
        (when (and hovered-piece
-                  (capturable-piece? hovered-piece current-player-id board))
+                  (logic/capturable-piece? hovered-piece current-player-id board))
          (draw-capture-highlight ctx hovered-piece zoom-state))))))
 
 (defn get-canvas-coords [e]
@@ -732,7 +671,7 @@
     (when-let [game @state/game-state]
       (let [player-id (utils/normalize-player-id (:id @state/current-player))
             board (:board game)]
-        (when (capturable-piece? hovered player-id board)
+        (when (logic/capturable-piece? hovered player-id board)
           (ws/capture-piece! (:id hovered)))))))
 
 (defn handle-keydown [e]

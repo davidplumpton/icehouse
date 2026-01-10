@@ -1,6 +1,7 @@
 (ns icehouse.game-test
   (:require [clojure.test :refer [deftest is testing]]
             [icehouse.game :as game]
+            [icehouse.game-logic :as logic]
             [icehouse.geometry :as geo]
             [icehouse.utils :as utils]))
 
@@ -40,59 +41,59 @@
   (testing "no icing when no pointing pieces"
     (let [board [{:id "piece1" :orientation :standing :size :small}
                  {:id "piece2" :orientation :standing :size :medium}]]
-      (is (= #{} (game/calculate-iced-pieces board)))))
+      (is (= #{} (logic/calculate-iced-pieces board)))))
 
   (testing "single attacker must exceed defender pips to ice"
     ;; Small attacker (1 pip) vs Small defender (1 pip) - no ice (must exceed)
     (let [board [{:id "a1" :orientation :pointing :target-id "d1" :size :small}
                  {:id "d1" :orientation :standing :size :small}]]
-      (is (= #{} (game/calculate-iced-pieces board))))
+      (is (= #{} (logic/calculate-iced-pieces board))))
     ;; Medium attacker (2 pips) vs Small defender (1 pip) - iced!
     (let [board [{:id "a1" :orientation :pointing :target-id "d1" :size :medium}
                  {:id "d1" :orientation :standing :size :small}]]
-      (is (= #{"d1"} (game/calculate-iced-pieces board)))))
+      (is (= #{"d1"} (logic/calculate-iced-pieces board)))))
 
   (testing "multiple attackers combine pips"
     ;; Two small attackers (2 pips total) vs Medium defender (2 pips) - no ice
     (let [board [{:id "a1" :orientation :pointing :target-id "d1" :size :small}
                  {:id "a2" :orientation :pointing :target-id "d1" :size :small}
                  {:id "d1" :orientation :standing :size :medium}]]
-      (is (= #{} (game/calculate-iced-pieces board))))
+      (is (= #{} (logic/calculate-iced-pieces board))))
     ;; Three small attackers (3 pips total) vs Medium defender (2 pips) - iced!
     (let [board [{:id "a1" :orientation :pointing :target-id "d1" :size :small}
                  {:id "a2" :orientation :pointing :target-id "d1" :size :small}
                  {:id "a3" :orientation :pointing :target-id "d1" :size :small}
                  {:id "d1" :orientation :standing :size :medium}]]
-      (is (= #{"d1"} (game/calculate-iced-pieces board)))))
+      (is (= #{"d1"} (logic/calculate-iced-pieces board)))))
 
   (testing "large defender needs 4+ pips to ice"
     ;; Large attacker (3 pips) vs Large defender (3 pips) - no ice
     (let [board [{:id "a1" :orientation :pointing :target-id "d1" :size :large}
                  {:id "d1" :orientation :standing :size :large}]]
-      (is (= #{} (game/calculate-iced-pieces board))))
+      (is (= #{} (logic/calculate-iced-pieces board))))
     ;; Large + Small attackers (4 pips) vs Large defender (3 pips) - iced!
     (let [board [{:id "a1" :orientation :pointing :target-id "d1" :size :large}
                  {:id "a2" :orientation :pointing :target-id "d1" :size :small}
                  {:id "d1" :orientation :standing :size :large}]]
-      (is (= #{"d1"} (game/calculate-iced-pieces board)))))
+      (is (= #{"d1"} (logic/calculate-iced-pieces board)))))
 
   (testing "pointing pieces without targets don't contribute"
     (let [board [{:id "a1" :orientation :pointing :target-id nil :size :large}
                  {:id "d1" :orientation :standing :size :small}]]
-      (is (= #{} (game/calculate-iced-pieces board))))))
+      (is (= #{} (logic/calculate-iced-pieces board))))))
 
 (deftest calculate-over-ice-test
   (testing "no over-ice when exactly enough pips to ice"
     ;; Medium attacker (2 pips) vs Small defender (1 pip) - iced with 2 pips, needs 2, no excess
     (let [board [{:id "a1" :orientation :pointing :target-id "d1" :size :medium :player-id "bob"}
                  {:id "d1" :orientation :standing :size :small :player-id "alice"}]]
-      (is (= {} (game/calculate-over-ice board)))))
+      (is (= {} (logic/calculate-over-ice board)))))
 
   (testing "over-ice when more pips than needed"
     ;; Large attacker (3 pips) vs Small defender (1 pip) - needs 2, has 3, excess = 1
     (let [board [{:id "a1" :orientation :pointing :target-id "d1" :size :large :player-id "bob"}
                  {:id "d1" :orientation :standing :size :small :player-id "alice"}]
-          over-ice (game/calculate-over-ice board)]
+          over-ice (logic/calculate-over-ice board)]
       (is (= 1 (get-in over-ice ["d1" :excess])))
       (is (= "alice" (get-in over-ice ["d1" :defender-owner])))))
 
@@ -101,7 +102,7 @@
     (let [board [{:id "a1" :orientation :pointing :target-id "d1" :size :large :player-id "bob"}
                  {:id "a2" :orientation :pointing :target-id "d1" :size :large :player-id "carol"}
                  {:id "d1" :orientation :standing :size :medium :player-id "alice"}]
-          over-ice (game/calculate-over-ice board)]
+          over-ice (logic/calculate-over-ice board)]
       (is (= 3 (get-in over-ice ["d1" :excess])))))
 
   (testing "capturable-attackers returns valid options"
@@ -110,7 +111,7 @@
     (let [board [{:id "a1" :orientation :pointing :target-id "d1" :size :large :player-id "bob"}
                  {:id "a2" :orientation :pointing :target-id "d1" :size :large :player-id "carol"}
                  {:id "d1" :orientation :standing :size :small :player-id "alice"}]
-          over-ice (game/calculate-over-ice board)
+          over-ice (logic/calculate-over-ice board)
           capturable (game/capturable-attackers (get over-ice "d1"))]
       ;; With 4 excess, can capture a large (3 pips) attacker
       (is (= 2 (count capturable)))

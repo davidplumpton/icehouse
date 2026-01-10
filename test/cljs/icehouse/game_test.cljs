@@ -1,6 +1,7 @@
 (ns icehouse.game-test
   (:require [cljs.test :refer-macros [deftest is testing]]
             [icehouse.game :as game]
+            [icehouse.game-logic :as logic]
             [icehouse.utils :as utils]
             [icehouse.geometry :as geo]))
 
@@ -25,7 +26,7 @@
     (let [board [{:id "d1" :player-id "p2" :size :small :orientation :standing :x 200 :y 100}
                  {:id "a1" :player-id "p1" :size :medium :orientation :pointing :angle 0 :target-id "d1" :x 100 :y 100}]]
       ;; medium attacker (2 pips) vs small defender (1 pip)
-      (is (contains? (game/calculate-iced-pieces board) "d1") "Defender should be iced"))))
+      (is (contains? (logic/calculate-iced-pieces board) "d1") "Defender should be iced"))))
 
 (deftest calculate-over-ice-test
   (testing "calculate-over-ice calculates excess pips correctly"
@@ -33,7 +34,7 @@
                  {:id "a1" :player-id "p1" :size :large :orientation :pointing :angle 0 :target-id "d1" :x 100 :y 100}]]
       ;; large attacker (3 pips) vs small defender (1 pip)
       ;; needs 2 pips to ice, so excess is 1
-      (let [over-ice (game/calculate-over-ice board)]
+      (let [over-ice (logic/calculate-over-ice board)]
         (is (= 1 (get-in over-ice ["d1" :excess])) "Excess should be 1")))))
 
 (deftest capturable-piece-test
@@ -45,5 +46,5 @@
       ;; Attacker a2 (Small, 1 pip) should be capturable. Attacker a1 (Medium, 2 pips) should NOT.
       (let [a1 (first (filter #(= (:id %) "a1") board))
             a2 (first (filter #(= (:id %) "a2") board))]
-        (is (game/capturable-piece? a2 "p2" board) "Owner of iced defender should be able to capture Small attacker (1 pip <= 1 excess)")
-        (is (not (game/capturable-piece? a1 "p2" board)) "Should NOT be able to capture Medium attacker (2 pips > 1 excess)")))))
+        (is (logic/capturable-piece? a2 "p2" board) "Owner of iced defender should be able to capture Small attacker (1 pip <= 1 excess)")
+        (is (not (logic/capturable-piece? a1 "p2" board)) "Should NOT be able to capture Medium attacker (2 pips > 1 excess)")))))

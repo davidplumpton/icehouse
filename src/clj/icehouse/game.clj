@@ -4,6 +4,7 @@
              [icehouse.storage :as storage]
              [icehouse.schema :as schema]
              [icehouse.geometry :as geo]
+             [icehouse.game-logic :as logic]
              [malli.core :as m]))
 
 (defonce games (atom {}))
@@ -243,68 +244,9 @@
 (defn valid-placement? [game player-id piece]
   (nil? (validate-placement game player-id piece)))
 
-(defn attackers-by-target
-  "Returns a map of target-id -> list of attackers targeting that piece"
-  [board]
-  (let [pointing-pieces (filter #(and (geo/pointing? %)
-                                      (:target-id %))
-                                board)]
-    (group-by :target-id pointing-pieces)))
-
-(defn attack-strength
-  "Sum of pip values of all attackers targeting a piece"
-  [attackers]
-  (reduce + (map geo/piece-pips attackers)))
-
-(defn find-piece-by-id [board id]
-  (first (filter (utils/by-id id) board)))
-
-(defn calculate-attack-stats
-  "Calculate attacker statistics for all targets on the board.
-   Returns map of target-id -> {:defender piece :attackers [...] :attacker-pips sum}"
-  [board]
-  (let [attacks (attackers-by-target board)]
-    (reduce-kv
-     (fn [stats target-id attackers]
-       (if-let [defender (find-piece-by-id board target-id)]
-         (assoc stats target-id {:defender defender
-                                 :attackers attackers
-                                 :attacker-pips (attack-strength attackers)})
-         stats))
-     {}
-     attacks)))
-
-(defn calculate-iced-pieces
-  "Returns set of piece IDs that are successfully iced.
-   Per Icehouse rules: a defender is iced when total attacker pips > defender pips"
-  [board]
-  {:post [(m/validate schema/PieceIDSet %)]}
-  (let [stats (calculate-attack-stats board)]
-    (reduce-kv
-     (fn [iced target-id {:keys [defender attacker-pips]}]
-       (if (> attacker-pips (geo/piece-pips defender))
-         (conj iced target-id)
-         iced))
-     #{}
-     stats)))
-
-(defn calculate-over-ice
-  "Returns a map of defender-id -> {:excess pips :attackers [...] :defender-owner player-id}
-   for each over-iced defender. Excess = attacker-pips - (defender-pips + 1)"
-  [board]
-  (let [stats (calculate-attack-stats board)]
-    (reduce-kv
-     (fn [result target-id {:keys [defender attackers attacker-pips]}]
-       (let [defender-pips (geo/piece-pips defender)
-             ;; Minimum to ice is defender-pips + 1, excess is anything beyond that
-             excess (- attacker-pips (+ defender-pips 1))]
-         (if (and (> attacker-pips defender-pips) (pos? excess))
-           (assoc result target-id {:excess excess
-                                    :attackers attackers
-                                    :defender-owner (utils/normalize-player-id (:player-id defender))})
-           result)))
-     {}
-     stats)))
+;; Core game logic functions moved to icehouse.game-logic (shared .cljc)
+;; Use logic/find-piece-by-id, logic/attackers-by-target, logic/attack-strength,
+;; logic/calculate-attack-stats, logic/calculate-iced-pieces, logic/calculate-over-ice
 
 (defn capturable-attackers
   "Given over-ice info for a defender, returns attackers that could be captured.
@@ -347,15 +289,15 @@
   ([board options]
    (if (false? (get options :icehouse-rule))
      #{}  ;; Icehouse rule disabled
-     (let [iced (calculate-iced-pieces board)
+     (let [iced (logic/calculate-iced-pieces board)
            player-ids (distinct (map #(utils/normalize-player-id (:player-id %)) board))]
        (set (filter #(in-icehouse? board iced %) player-ids))))))
 
 (defn successful-attackers
   "Returns set of piece IDs that are attacking pieces which successfully ice a defender."
   [board]
-  (let [stats (calculate-attack-stats board)
-        iced (calculate-iced-pieces board)]
+  (let [stats (logic/calculate-attack-stats board)
+        iced (logic/calculate-iced-pieces board)]
     (reduce-kv
      (fn [successful target-id {:keys [attackers]}]
        (if (contains? iced target-id)
@@ -374,7 +316,7 @@
   {:post [(m/validate schema/Scores %)]}
   (let [board (:board game)
         options (get game :options {})
-        iced (calculate-iced-pieces board)
+        iced (logic/calculate-iced-pieces board)
         successful-attacks (successful-attackers board)
         icehouse-players (calculate-icehouse-players board options)
         ;; Initialize all players with 0 score
@@ -514,7 +456,7 @@
     (when (game-over? updated-game)
       (let [board (:board updated-game)
             options (get updated-game :options {})
-            over-ice (calculate-over-ice board)
+            over-ice (logic/calculate-over-ice board)
             icehouse-players (calculate-icehouse-players board options)
             end-reason (if (all-pieces-placed? updated-game)
                          :all-pieces-placed
@@ -540,7 +482,7 @@
       (do
         (apply-placement! room-id player-id piece using-captured?)
         (let [updated-game (get @games room-id)
-              final-piece (find-piece-by-id (:board updated-game) (:id piece))]
+              final-piece (logic/find-piece-by-id (:board updated-game) (:id piece))]
           (handle-post-placement! clients room-id player-id final-piece using-captured?)))
       (utils/send-msg! channel {:type msg/error :message (or error "Invalid game state")}))))
 
@@ -549,8 +491,8 @@
    Returns nil if valid, or error message if invalid."
   [game player-id piece-id]
   (let [board (:board game)
-        piece (find-piece-by-id board piece-id)
-        over-ice (calculate-over-ice board)]
+        piece (logic/find-piece-by-id board piece-id)
+        over-ice (logic/calculate-over-ice board)]
     (cond
       (nil? piece)
       "Piece not found"
@@ -580,7 +522,7 @@
         piece-id (:piece-id msg)
         error (when game (validate-capture game player-id piece-id))]
     (if (and game (nil? error))
-      (let [piece (find-piece-by-id (:board game) piece-id)
+      (let [piece (logic/find-piece-by-id (:board game) piece-id)
             piece-size (:size piece)
             ;; Get the original owner's colour
             original-owner (:player-id piece)
@@ -629,7 +571,7 @@
   (when-let [game (get @games room-id)]
     (let [board (:board game)
           options (get game :options {})
-          over-ice (calculate-over-ice board)
+          over-ice (logic/calculate-over-ice board)
           icehouse-players (calculate-icehouse-players board options)
           record (build-game-record game end-reason)]
       (storage/save-game-record! record)

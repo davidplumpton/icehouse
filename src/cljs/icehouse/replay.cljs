@@ -4,7 +4,8 @@
             [icehouse.theme :as theme]
             [icehouse.utils :as utils]
             [icehouse.websocket :as ws]
-            [icehouse.game :as game]))
+            [icehouse.game :as game]
+            [icehouse.game-logic :as logic]))
 
 ;; =============================================================================
 ;; Replay Constants
@@ -111,7 +112,7 @@
           game-state (when replay
                        (game-state-at-move (:record replay) (:current-move replay)))
           iced-pieces (when game-state
-                        (game/calculate-iced-pieces (:board game-state)))]
+                        (logic/calculate-iced-pieces (:board game-state)))]
       (game/draw-board ctx game-state nil nil {:iced-pieces iced-pieces}))))
 
 (defn replay-canvas
