@@ -39,15 +39,7 @@
   (let [normalized (normalize-player-id player-id)]
     (fn [item] (= (normalize-player-id (:player-id item)) normalized))))
 
-(defn standing?
-  "Check if a piece's orientation is :standing"
-  [piece]
-  (= (keyword (:orientation piece)) :standing))
-
-(defn pointing?
-  "Check if a piece's orientation is :pointing"
-  [piece]
-  (= (keyword (:orientation piece)) :pointing))
+;; Note: standing? and pointing? are defined in icehouse.geometry
 
 ;; =============================================================================
 ;; Captured Piece Helpers
