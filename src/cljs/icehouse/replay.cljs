@@ -323,66 +323,6 @@
               (swap! state/replay-state assoc :playing? false))))))))
 
 ;; =============================================================================
-;; Replay Stash Components
-;; =============================================================================
-
-(defn replay-stash-pyramid
-  "SVG pyramid for replay stash display"
-  [size colour]
-  (let [sizes {:small [20 30] :medium [26 39] :large [32 48]}
-        [width height] (get sizes size [20 30])]
-    [:svg {:width width :height height :style {:display "inline-block" :margin "1px"}}
-     [:polygon {:points (str (/ width 2) ",0 0," height " " width "," height)
-                :fill colour
-                :stroke "#222"
-                :stroke-width "1"}]]))
-
-(defn replay-player-stash
-  "Renders a single player's stash for replay (read-only, no interaction)"
-  [player-id player-data]
-  (let [pieces (or (:pieces player-data) default-pieces)
-        captured (or (:captured player-data) [])
-        colour (or (:colour player-data) "#888")
-        player-name (or (:name player-data) (name player-id))
-        has-captured? (seq captured)]
-    [:div.replay-player-stash {:style {:background "#222"
-                                        :border-radius "8px"
-                                        :padding "10px"
-                                        :margin-bottom "10px"}}
-     [:div {:style {:color colour :font-weight "bold" :margin-bottom "8px"}}
-      player-name]
-     [:div {:style {:display "flex" :flex-direction "column" :gap "4px"}}
-      (for [size [:small :medium :large]]
-        ^{:key size}
-        [:div {:style {:display "flex" :align-items "center" :gap "2px"}}
-         (for [i (range (get pieces size 0))]
-           ^{:key i}
-           [replay-stash-pyramid size colour])])]
-     (when has-captured?
-       [:div {:style {:margin-top "8px" :padding-top "8px" :border-top "1px solid #444"}}
-        [:div {:style {:color theme/gold :font-size "0.8em" :margin-bottom "4px"}}
-         "Captured:"]
-        [:div {:style {:display "flex" :flex-wrap "wrap" :gap "2px"}}
-         (for [[idx cap] (map-indexed vector captured)]
-           ^{:key idx}
-           [replay-stash-pyramid (keyword (:size cap)) (:colour cap)])]])]))
-
-(defn replay-stash-panel
-  "Renders stash panels for replay on left or right side"
-  [position game-state]
-  (let [players-map (:players game-state)
-        sorted-players (vec (sort (keys players-map)))
-        indices (if (= position :left) [0 2] [1 3])
-        panel-players (keep #(when-let [pid (get sorted-players %)]
-                               [pid (get players-map pid)])
-                            indices)]
-    [:div.replay-stash-panel {:style {:min-width "120px"
-                                       :padding "10px"}}
-     (for [[pid pdata] panel-players]
-       ^{:key pid}
-       [replay-player-stash pid pdata])]))
-
-;; =============================================================================
 ;; Main Replay View
 ;; =============================================================================
 
@@ -399,13 +339,10 @@
        (if replay
          [:div
           [:h2 {:style {:color "white" :text-align "center"}} "Game Replay"]
-          [:div {:style {:display "flex"
-                         :justify-content "center"
-                         :align-items "flex-start"
-                         :gap "20px"}}
-           [replay-stash-panel :left game-state]
+          [:div.game-area
+           [game/stash-panel :left {:game-state game-state :read-only? true}]
            [replay-canvas]
-           [replay-stash-panel :right game-state]]
+           [game/stash-panel :right {:game-state game-state :read-only? true}]]
           [replay-controls]]
          [game-list-panel])])
     (finally

@@ -829,89 +829,100 @@
        [:span.size-label label]
        [draw-stash-pyramid size colour {:captured? captured? :count piece-count}]])))
 
-(defn player-stash [player-id player-data]
-  "Renders a single player's stash of unplayed pieces"
-  (let [pieces (or (:pieces player-data) default-pieces)
-        captured (or (:captured player-data) [])  ;; Now a list of {:size :colour}
-        colour (or (:colour player-data) "#888")
-        player-name (or (:name player-data) "Player")
-        is-me (= (name player-id) (:id @state/current-player))
-        has-captured? (pos? (count captured))
-        ;; Get selection state for highlighting
-        {:keys [size captured?]} (when is-me (:selected-piece @state/ui-state))
-        ;; Group captured pieces by size for selection highlighting
-        captured-by-size (when is-me (group-by #(keyword (:size %)) captured))
-        ;; Compute hotkey mapping for captured pieces (4, 5, 6 based on order captured)
-        available-sizes (when is-me (vec (distinct (map #(keyword (:size %)) captured))))
-        size-to-hotkey (when is-me (into {} (map-indexed (fn [idx sz] [sz (+ 4 idx)]) available-sizes)))
-        ;; Handler for starting a drag from stash
-        start-stash-drag (when is-me
-                           (fn [piece-size is-captured?]
-                             ;; Select the piece and set stash-drag-pending
-                             (swap! state/ui-state update :selected-piece assoc
-                                    :size piece-size
-                                    :captured? is-captured?)
-                             (reset! stash-drag-pending {:size piece-size :captured? is-captured?})))]
-    [:div.player-stash {:class (when is-me "is-me")}
-     [:div.stash-header {:style {:color colour}}
-      player-name
-      (when is-me " (you)")]
-     [:div.stash-pieces
-      [piece-size-row :small "1" pieces colour
-       {:selected? (and is-me (not captured?) (= size :small))
-        :on-start-drag start-stash-drag}]
-      [piece-size-row :medium "2" pieces colour
-       {:selected? (and is-me (not captured?) (= size :medium))
-        :on-start-drag start-stash-drag}]
-      [piece-size-row :large "3" pieces colour
-       {:selected? (and is-me (not captured?) (= size :large))
-        :on-start-drag start-stash-drag}]]
-     (when has-captured?
-       [:div.captured-pieces
-        [:div.captured-header {:style {:color theme/gold :font-size "0.8em" :margin-top "0.5rem"}}
-         "Captured:"]
-        ;; Group captured pieces by size and render with selection indicator
-        (for [sz [:large :medium :small]
-              :let [caps (get captured-by-size sz)
-                    hotkey (get size-to-hotkey sz)]
-              :when (seq caps)]
-          ^{:key (str "cap-row-" (name sz))}
-          [:div.captured-row {:style (merge {:display "flex" :align-items "center" :gap "4px"}
-                                            (when (and is-me captured? (= size sz))
-                                              {:background "rgba(255, 215, 0, 0.2)"
-                                               :border-radius "4px"
-                                               :box-shadow "0 0 8px rgba(255, 215, 0, 0.4)"})
-                                            (when is-me
-                                              {:cursor "grab"}))
-                              :on-mouse-down (when is-me
-                                               (fn [e]
-                                                 (.preventDefault e)
-                                                 (start-stash-drag sz true)))}
-           (when hotkey
-             [:span.captured-hotkey {:style {:color theme/gold :font-weight "bold" :min-width "1em"}}
-              (str hotkey)])
-           (for [[idx cap-piece] (map-indexed vector caps)]
-             ^{:key (str "cap-" (name sz) "-" idx)}
-             [draw-stash-pyramid sz (:colour cap-piece) {:captured? true}])])])]))
+(defn player-stash
+  "Renders a single player's stash of unplayed pieces.
+   opts can include :read-only? true for replay mode (no interaction)."
+  ([player-id player-data] (player-stash player-id player-data nil))
+  ([player-id player-data opts]
+   (let [read-only? (:read-only? opts)
+         pieces (or (:pieces player-data) default-pieces)
+         captured (or (:captured player-data) [])
+         colour (or (:colour player-data) "#888")
+         player-name (or (:name player-data) "Player")
+         is-me (and (not read-only?) (= (name player-id) (:id @state/current-player)))
+         has-captured? (pos? (count captured))
+         ;; Get selection state for highlighting (only in interactive mode)
+         {:keys [size captured?]} (when is-me (:selected-piece @state/ui-state))
+         ;; Group captured pieces by size for selection highlighting
+         captured-by-size (group-by #(keyword (:size %)) captured)
+         ;; Compute hotkey mapping for captured pieces (4, 5, 6 based on order captured)
+         available-sizes (when is-me (vec (distinct (map #(keyword (:size %)) captured))))
+         size-to-hotkey (when is-me (into {} (map-indexed (fn [idx sz] [sz (+ 4 idx)]) available-sizes)))
+         ;; Handler for starting a drag from stash (only in interactive mode)
+         start-stash-drag (when is-me
+                            (fn [piece-size is-captured?]
+                              (swap! state/ui-state update :selected-piece assoc
+                                     :size piece-size
+                                     :captured? is-captured?)
+                              (reset! stash-drag-pending {:size piece-size :captured? is-captured?})))]
+     [:div.player-stash {:class (when is-me "is-me")}
+      [:div.stash-header {:style {:color colour}}
+       player-name
+       (when is-me " (you)")]
+      [:div.stash-pieces
+       [piece-size-row :small "1" pieces colour
+        {:selected? (and is-me (not captured?) (= size :small))
+         :on-start-drag start-stash-drag}]
+       [piece-size-row :medium "2" pieces colour
+        {:selected? (and is-me (not captured?) (= size :medium))
+         :on-start-drag start-stash-drag}]
+       [piece-size-row :large "3" pieces colour
+        {:selected? (and is-me (not captured?) (= size :large))
+         :on-start-drag start-stash-drag}]]
+      (when has-captured?
+        [:div.captured-pieces
+         [:div.captured-header {:style {:color theme/gold :font-size "0.8em" :margin-top "0.5rem"}}
+          "Captured:"]
+         ;; Group captured pieces by size and render with selection indicator
+         (for [sz [:large :medium :small]
+               :let [caps (get captured-by-size sz)
+                     hotkey (get size-to-hotkey sz)]
+               :when (seq caps)]
+           ^{:key (str "cap-row-" (name sz))}
+           [:div.captured-row {:style (merge {:display "flex" :align-items "center" :gap "4px"}
+                                             (when (and is-me captured? (= size sz))
+                                               {:background "rgba(255, 215, 0, 0.2)"
+                                                :border-radius "4px"
+                                                :box-shadow "0 0 8px rgba(255, 215, 0, 0.4)"})
+                                             (when is-me
+                                               {:cursor "grab"}))
+                               :on-mouse-down (when is-me
+                                                (fn [e]
+                                                  (.preventDefault e)
+                                                  (start-stash-drag sz true)))}
+            (when hotkey
+              [:span.captured-hotkey {:style {:color theme/gold :font-weight "bold" :min-width "1em"}}
+               (str hotkey)])
+            (for [[idx cap-piece] (map-indexed vector caps)]
+              ^{:key (str "cap-" (name sz) "-" idx)}
+              [draw-stash-pyramid sz (:colour cap-piece) {:captured? true}])])])])))
 
-(defn stash-panel [position]
+(defn stash-panel
   "Renders stash panels for players on left or right side.
-   Current player always appears first (top-left position)."
-  (let [game @state/game-state
-        players-map (:players game)
-        my-id (:id @state/current-player)
-        ;; Sort players but put current player first
-        sorted-others (vec (sort (remove #(= (name %) my-id) (keys players-map))))
-        player-list (into [(keyword my-id)] sorted-others)
-        ;; Left gets players at indices 0, 2; Right gets 1, 3
-        indices (if (= position :left) [0 2] [1 3])
-        panel-players (keep #(when-let [pid (get player-list %)]
-                               [pid (get players-map pid)])
-                            indices)]
-    [:div.stash-panel {:class (name position)}
-     (for [[pid pdata] panel-players]
-       ^{:key pid}
-       [player-stash pid pdata])]))
+   Current player always appears first (top-left position).
+   opts can include :game-state for replay mode (uses provided state instead of atom)
+   and :read-only? to disable interaction."
+  ([position] (stash-panel position nil))
+  ([position opts]
+   (let [game (or (:game-state opts) @state/game-state)
+         read-only? (:read-only? opts)
+         players-map (:players game)
+         my-id (when-not read-only? (:id @state/current-player))
+         ;; Sort players, put current player first if in interactive mode
+         sorted-players (vec (sort (keys players-map)))
+         player-list (if (and my-id (some #(= (name %) my-id) sorted-players))
+                       (let [sorted-others (vec (remove #(= (name %) my-id) sorted-players))]
+                         (into [(keyword my-id)] sorted-others))
+                       sorted-players)
+         ;; Left gets players at indices 0, 2; Right gets 1, 3
+         indices (if (= position :left) [0 2] [1 3])
+         panel-players (keep #(when-let [pid (get player-list %)]
+                                [pid (get players-map pid)])
+                             indices)]
+     [:div.stash-panel {:class (name position)}
+      (for [[pid pdata] panel-players]
+        ^{:key pid}
+        [player-stash pid pdata (when read-only? {:read-only? true})])])))
 
 (defn error-display []
   (when-let [error @state/error-message]
