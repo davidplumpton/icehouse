@@ -8,6 +8,9 @@
             [icehouse.constants :as const]
             [icehouse.websocket :as ws]))
 
+;; Forward declarations for functions used before definition
+(declare has-pieces-of-size?)
+
 ;; =============================================================================
 ;; Game Constants
 ;; =============================================================================
@@ -87,6 +90,98 @@
                 scaled-width (/ width scale)]
             (max min-line-width scaled-width))
           width)))
+
+(defn calculate-zoom-state
+  "Calculate zoom state for rendering based on current drag and hover position.
+   When dragging, zoom centers on the piece being placed.
+   When not dragging, zoom centers on hover position or canvas center."
+  [zoom-active drag hover-pos]
+  (when zoom-active
+    (let [;; Drag coordinates are stored in scaled space, so scale them back up for zoom center
+          zoom-center-x (if drag
+                          (* (:start-x drag) zoom-scale)
+                          (if hover-pos
+                            (:x hover-pos)
+                            (/ canvas-width 2)))
+          zoom-center-y (if drag
+                          (* (:start-y drag) zoom-scale)
+                          (if hover-pos
+                            (:y hover-pos)
+                            (/ canvas-height 2)))]
+      {:center-x zoom-center-x
+       :center-y zoom-center-y
+       :scale zoom-scale})))
+
+(defn try-start-drag!
+  "Attempt to start a drag operation at the given coordinates.
+   Returns true if drag started, false otherwise.
+   Shows throttle warning if placement is blocked by cooldown."
+  [adjusted-x adjusted-y size captured? from-stash?]
+  (let [{:keys [last-placement-time]} @state/ui-state
+        {:keys [can-place? throttle-ms time-since-last]} (check-placement-throttle last-placement-time)]
+    (if (and can-place? (has-pieces-of-size? size captured?))
+      (do
+        (swap! state/ui-state assoc :drag {:start-x adjusted-x :start-y adjusted-y
+                                           :current-x adjusted-x :current-y adjusted-y
+                                           :last-x adjusted-x :last-y adjusted-y
+                                           :locked-angle 0
+                                           :from-stash? from-stash?})
+        true)
+      (do
+        ;; Show warning if throttled (and they have pieces)
+        (when (and (not can-place?) (has-pieces-of-size? size captured?))
+          (start-placement-cooldown! (- throttle-ms time-since-last) throttle-ms))
+        false))))
+
+(defn update-drag-position!
+  "Update drag state based on mouse movement.
+   In position-adjust mode (shift or move-mode), piece follows cursor.
+   In normal mode, updates angle based on start-to-current vector."
+  [adjusted-x adjusted-y position-adjust?]
+  (when-let [drag (:drag @state/ui-state)]
+    (let [{:keys [start-x start-y last-x last-y]} drag
+          dx (- adjusted-x last-x)
+          dy (- adjusted-y last-y)
+          ;; Read fresh from-stash? state to catch key presses during drag
+          current-from-stash? (:from-stash? (:drag @state/ui-state))
+          ;; Stash drags and position-adjust mode: piece follows cursor
+          follow-cursor? (or position-adjust? current-from-stash?)]
+      (if follow-cursor?
+        ;; Position-adjust mode: move position by delta, keep locked angle
+        (swap! state/ui-state assoc :drag
+               (assoc drag
+                      :start-x (+ start-x dx)
+                      :start-y (+ start-y dy)
+                      :current-x (+ start-x dx)
+                      :current-y (+ start-y dy)
+                      :last-x adjusted-x :last-y adjusted-y))
+        ;; Normal: update current position for angle calculation, lock that angle
+        (let [new-angle (geo/calculate-angle start-x start-y adjusted-x adjusted-y)]
+          (swap! state/ui-state update :drag assoc
+                 :current-x adjusted-x :current-y adjusted-y
+                 :last-x adjusted-x :last-y adjusted-y
+                 :locked-angle new-angle))))))
+
+(defn complete-placement!
+  "Complete a piece placement from the current drag state.
+   Handles coordinate scaling for zoom and sends placement to server."
+  [shift-held]
+  (when-let [drag (:drag @state/ui-state)]
+    (let [{:keys [start-x start-y current-x current-y locked-angle]} drag
+          {:keys [selected-piece zoom-active move-mode]} @state/ui-state
+          {:keys [size orientation captured?]} selected-piece
+          position-adjust? (or shift-held move-mode)
+          ;; Scale coordinates back up if zoom was active
+          [final-x final-y] (scale-coords-for-placement start-x start-y zoom-active)
+          ;; Use locked angle if available, otherwise calculate from position
+          has-movement (or (not= start-x current-x) (not= start-y current-y))
+          angle (if (and has-movement (not position-adjust?))
+                  (geo/calculate-angle start-x start-y current-x current-y)
+                  (or locked-angle 0))
+          {:keys [throttle-ms]} (check-placement-throttle 0)]
+      (ws/place-piece! final-x final-y size orientation angle nil captured?)
+      (swap! state/ui-state assoc :drag nil :last-placement-time (js/Date.now))
+      (start-placement-cooldown! throttle-ms throttle-ms))))
 
 ;; =============================================================================
 ;; Attack Target Detection (for preview highlighting)
@@ -497,26 +592,7 @@
           (let [ctx (.getContext canvas "2d")
                 ui @state/ui-state
                 player @state/current-player
-                zoom? (:zoom-active ui)
-                drag (:drag ui)
-                ;; When dragging, zoom center should be on the piece being placed
-                ;; When not dragging, zoom center should be on hover position
-                ;; Drag coordinates are stored in scaled space, so scale them back up for zoom center
-                zoom-center-x (if drag
-                                (* (:start-x drag) (if zoom? zoom-scale 1))
-                                (if-let [hover (:hover-pos ui)]
-                                  (:x hover)
-                                  (/ canvas-width 2)))
-                zoom-center-y (if drag
-                                (* (:start-y drag) (if zoom? zoom-scale 1))
-                                (if-let [hover (:hover-pos ui)]
-                                  (:y hover)
-                                  (/ canvas-height 2)))
-                ;; Create zoom state map if zoom is active
-                zoom-state (when zoom?
-                             {:center-x zoom-center-x
-                              :center-y zoom-center-y
-                              :scale zoom-scale})]
+                zoom-state (calculate-zoom-state (:zoom-active ui) (:drag ui) (:hover-pos ui))]
             (draw-with-preview ctx
                                @state/game-state
                                (:drag ui)
@@ -541,21 +617,12 @@
             (fn [e]
               (.preventDefault e)
               (let [{:keys [x y]} (get-canvas-coords e)
-                    {:keys [selected-piece zoom-active last-placement-time]} @state/ui-state
+                    {:keys [selected-piece zoom-active]} @state/ui-state
                     {:keys [size captured?]} selected-piece
-                    {:keys [can-place? throttle-ms time-since-last]} (check-placement-throttle last-placement-time)
                     [adjusted-x adjusted-y] (adjust-coords-for-zoom x y zoom-active)]
                 ;; Clear any pending stash drag since we're clicking directly on canvas
                 (reset! stash-drag-pending nil)
-                ;; Only start drag if player has pieces and not throttled
-                (if (and can-place? (has-pieces-of-size? size captured?))
-                  (swap! state/ui-state assoc :drag {:start-x adjusted-x :start-y adjusted-y
-                                                     :current-x adjusted-x :current-y adjusted-y
-                                                     :last-x adjusted-x :last-y adjusted-y
-                                                     :locked-angle 0})
-                  ;; Show warning if throttled (and they have pieces)
-                  (when (and (not can-place?) (has-pieces-of-size? size captured?))
-                    (start-placement-cooldown! (- throttle-ms time-since-last) throttle-ms)))))
+                (try-start-drag! adjusted-x adjusted-y size captured? false)))
             :on-mouse-enter
             (fn [e]
               ;; If user dragged from stash and entered canvas, start the drag
@@ -563,93 +630,30 @@
               (when (and @stash-drag-pending (pos? (.-buttons e)))
                 (let [{:keys [x y]} (get-canvas-coords e)
                       {:keys [size captured?]} @stash-drag-pending
-                      {:keys [zoom-active last-placement-time]} @state/ui-state
-                      {:keys [can-place? throttle-ms time-since-last]} (check-placement-throttle last-placement-time)
+                      {:keys [zoom-active]} @state/ui-state
                       [adjusted-x adjusted-y] (adjust-coords-for-zoom x y zoom-active)]
-                  ;; Only start if player has pieces and not throttled
-                  (if (and can-place? (has-pieces-of-size? size captured?))
-                    (swap! state/ui-state assoc :drag {:start-x adjusted-x :start-y adjusted-y
-                                                       :current-x adjusted-x :current-y adjusted-y
-                                                       :last-x adjusted-x :last-y adjusted-y
-                                                       :locked-angle 0
-                                                       :from-stash? true})
-                    ;; Show warning if throttled (and they have pieces)
-                    (when (and (not can-place?) (has-pieces-of-size? size captured?))
-                      (start-placement-cooldown! (- throttle-ms time-since-last) throttle-ms)))
+                  (try-start-drag! adjusted-x adjusted-y size captured? true)
                   ;; Clear pending regardless (drag started or not)
                   (reset! stash-drag-pending nil))))
             :on-mouse-move
             (fn [e]
               (let [{:keys [x y]} (get-canvas-coords e)
                     shift-held (.-shiftKey e)
-                    {:keys [zoom-active move-mode last-placement-time]} @state/ui-state
+                    {:keys [zoom-active move-mode]} @state/ui-state
                     [adjusted-x adjusted-y] (adjust-coords-for-zoom x y zoom-active)
-                    ;; Position-adjust mode: shift OR move-mode toggle
                     position-adjust? (or shift-held move-mode)]
                 ;; Always update hover position for capture detection (use original unscaled coords)
                 (swap! state/ui-state assoc :hover-pos {:x x :y y})
                 ;; Check for pending stash drag (mouse was already on canvas when stash clicked)
-                ;; Only if mouse button is held (buttons > 0)
                 (when (and @stash-drag-pending (pos? (.-buttons e)))
-                  (let [{:keys [size captured?]} @stash-drag-pending
-                        {:keys [can-place? throttle-ms time-since-last]} (check-placement-throttle last-placement-time)]
-                    (if (and can-place? (has-pieces-of-size? size captured?))
-                      (swap! state/ui-state assoc :drag {:start-x adjusted-x :start-y adjusted-y
-                                                         :current-x adjusted-x :current-y adjusted-y
-                                                         :last-x adjusted-x :last-y adjusted-y
-                                                         :locked-angle 0
-                                                         :from-stash? true})
-                      ;; Show warning if throttled (and they have pieces)
-                      (when (and (not can-place?) (has-pieces-of-size? size captured?))
-                        (start-placement-cooldown! (- throttle-ms time-since-last) throttle-ms)))
+                  (let [{:keys [size captured?]} @stash-drag-pending]
+                    (try-start-drag! adjusted-x adjusted-y size captured? true)
                     (reset! stash-drag-pending nil)))
                 ;; Update drag state if dragging
-                (when-let [drag (:drag @state/ui-state)]
-                  (let [{:keys [start-x start-y last-x last-y from-stash?]} drag
-                        dx (- adjusted-x last-x)
-                        dy (- adjusted-y last-y)
-                        ;; Read fresh from-stash? state to catch key presses during drag
-                        current-drag (:drag @state/ui-state)
-                        current-from-stash? (:from-stash? current-drag)
-                        ;; Stash drags and position-adjust mode: piece follows cursor
-                        follow-cursor? (or position-adjust? current-from-stash?)]
-                    (if follow-cursor?
-                      ;; Position-adjust mode: move position by delta, keep locked angle
-                      (swap! state/ui-state assoc :drag
-                             (assoc drag
-                                    :start-x (+ start-x dx)
-                                    :start-y (+ start-y dy)
-                                    :current-x (+ start-x dx)
-                                    :current-y (+ start-y dy)
-                                    :last-x adjusted-x :last-y adjusted-y))
-                      ;; Normal: update current position for angle calculation, lock that angle
-                      (let [new-angle (geo/calculate-angle start-x start-y adjusted-x adjusted-y)]
-                        (swap! state/ui-state update :drag assoc
-                               :current-x adjusted-x :current-y adjusted-y
-                               :last-x adjusted-x :last-y adjusted-y
-                               :locked-angle new-angle)))))))
+                (update-drag-position! adjusted-x adjusted-y position-adjust?)))
             :on-mouse-up
             (fn [e]
-              (when-let [drag (:drag @state/ui-state)]
-                (let [{:keys [start-x start-y current-x current-y locked-angle]} drag
-                      {:keys [selected-piece zoom-active move-mode]} @state/ui-state
-                      {:keys [size orientation captured?]} selected-piece
-                      shift-held (.-shiftKey e)
-                      position-adjust? (or shift-held move-mode)
-                      ;; Scale coordinates back up if zoom was active (they were scaled down on mouse-down/move)
-                      [final-x final-y] (scale-coords-for-placement start-x start-y zoom-active)
-                      ;; Use locked angle if available, otherwise calculate from position
-                      ;; locked-angle is set during dragging and preserved through zoom transforms
-                      ;; Only recalculate if there's actual distance between start and current
-                      has-movement (or (not= start-x current-x) (not= start-y current-y))
-                      angle (if (and has-movement (not position-adjust?))
-                              (geo/calculate-angle start-x start-y current-x current-y)
-                              (or locked-angle 0))
-                      ;; Start cooldown indicator
-                      {:keys [throttle-ms]} (check-placement-throttle 0)]
-                  (ws/place-piece! final-x final-y size orientation angle nil captured?)
-                  (swap! state/ui-state assoc :drag nil :last-placement-time (js/Date.now))
-                  (start-placement-cooldown! throttle-ms throttle-ms))))
+              (complete-placement! (.-shiftKey e)))
             :on-mouse-leave
             (fn [e]
               (swap! state/ui-state assoc :hover-pos nil :drag nil))}]))})))
