@@ -61,6 +61,23 @@
      :throttle-ms throttle-ms
      :time-since-last time-since-last}))
 
+(defn adjust-coords-for-zoom
+  "Scale down mouse coordinates when zoom is active.
+   Returns [adjusted-x adjusted-y]."
+  [x y zoom-active]
+  (if zoom-active
+    [(/ x zoom-scale) (/ y zoom-scale)]
+    [x y]))
+
+(defn scale-coords-for-placement
+  "Scale up coordinates for placement when zoom is active.
+   Returns [scaled-x scaled-y] rounded to integers."
+  [x y zoom-active]
+  (if zoom-active
+    [(js/Math.round (* x zoom-scale))
+     (js/Math.round (* y zoom-scale))]
+    [(js/Math.round x) (js/Math.round y)]))
+
 (defn set-line-width
   "Set line width, accounting for zoom scale if present. Maintains minimum width for visibility."
   [ctx width zoom-state]
@@ -527,10 +544,7 @@
                     {:keys [selected-piece zoom-active last-placement-time]} @state/ui-state
                     {:keys [size captured?]} selected-piece
                     {:keys [can-place? throttle-ms time-since-last]} (check-placement-throttle last-placement-time)
-                    actual-zoom-scale (if zoom-active zoom-scale 1)
-                    ;; Scale down position when zoomed to account for canvas scaling
-                    adjusted-x (if zoom-active (/ x actual-zoom-scale) x)
-                    adjusted-y (if zoom-active (/ y actual-zoom-scale) y)]
+                    [adjusted-x adjusted-y] (adjust-coords-for-zoom x y zoom-active)]
                 ;; Clear any pending stash drag since we're clicking directly on canvas
                 (reset! stash-drag-pending nil)
                 ;; Only start drag if player has pieces and not throttled
@@ -551,9 +565,7 @@
                       {:keys [size captured?]} @stash-drag-pending
                       {:keys [zoom-active last-placement-time]} @state/ui-state
                       {:keys [can-place? throttle-ms time-since-last]} (check-placement-throttle last-placement-time)
-                      actual-zoom-scale (if zoom-active zoom-scale 1)
-                      adjusted-x (if zoom-active (/ x actual-zoom-scale) x)
-                      adjusted-y (if zoom-active (/ y actual-zoom-scale) y)]
+                      [adjusted-x adjusted-y] (adjust-coords-for-zoom x y zoom-active)]
                   ;; Only start if player has pieces and not throttled
                   (if (and can-place? (has-pieces-of-size? size captured?))
                     (swap! state/ui-state assoc :drag {:start-x adjusted-x :start-y adjusted-y
@@ -571,10 +583,7 @@
               (let [{:keys [x y]} (get-canvas-coords e)
                     shift-held (.-shiftKey e)
                     {:keys [zoom-active move-mode last-placement-time]} @state/ui-state
-                    actual-zoom-scale (if zoom-active zoom-scale 1)
-                    ;; Scale down movement when zoomed to account for canvas scaling
-                    adjusted-x (if zoom-active (/ x actual-zoom-scale) x)
-                    adjusted-y (if zoom-active (/ y actual-zoom-scale) y)
+                    [adjusted-x adjusted-y] (adjust-coords-for-zoom x y zoom-active)
                     ;; Position-adjust mode: shift OR move-mode toggle
                     position-adjust? (or shift-held move-mode)]
                 ;; Always update hover position for capture detection (use original unscaled coords)
@@ -627,11 +636,8 @@
                       {:keys [size orientation captured?]} selected-piece
                       shift-held (.-shiftKey e)
                       position-adjust? (or shift-held move-mode)
-                      actual-zoom-scale (if zoom-active zoom-scale 1)
                       ;; Scale coordinates back up if zoom was active (they were scaled down on mouse-down/move)
-                      ;; Round coordinates to integers (schema expects :int)
-                      final-x (js/Math.round (* start-x actual-zoom-scale))
-                      final-y (js/Math.round (* start-y actual-zoom-scale))
+                      [final-x final-y] (scale-coords-for-placement start-x start-y zoom-active)
                       ;; Use locked angle if available, otherwise calculate from position
                       ;; locked-angle is set during dragging and preserved through zoom transforms
                       ;; Only recalculate if there's actual distance between start and current
