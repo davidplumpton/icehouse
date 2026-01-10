@@ -260,19 +260,20 @@
 ;; Track last board to avoid unnecessary recalculations
 (defonce ^:private last-board (atom nil))
 
-(defn- update-cached-iced-pieces!
-  "Update the cached iced pieces when the board changes"
+(defn- update-board-caches!
+  "Update cached iced pieces and over-ice when the board changes"
   [board]
   (when (not= board @last-board)
     (reset! last-board board)
-    (reset! state/cached-iced-pieces (logic/calculate-iced-pieces board))))
+    (reset! state/cached-iced-pieces (logic/calculate-iced-pieces board))
+    (reset! state/cached-over-ice (logic/calculate-over-ice board))))
 
-;; Set up a watch to update cached iced pieces when game state changes
-(defonce ^:private _iced-cache-watch
-  (add-watch state/game-state ::iced-pieces-cache
+;; Set up a watch to update board caches when game state changes
+(defonce ^:private _board-cache-watch
+  (add-watch state/game-state ::board-caches
              (fn [_ _ _ new-state]
                (when new-state
-                 (update-cached-iced-pieces! (:board new-state))))))
+                 (update-board-caches! (:board new-state))))))
 
 (defn get-hovered-piece
   "Get the piece currently under the mouse cursor, if any"
@@ -387,6 +388,7 @@
            ;; Use provided iced-pieces, or cached value, or calculate
            iced-pieces (or (:iced-pieces opts)
                            @state/cached-iced-pieces)
+           over-ice @state/cached-over-ice
            zoom-state (:zoom-state opts)]
        ;; Draw all pieces
        (doseq [piece board]
@@ -404,7 +406,7 @@
                          {:iced? is-iced? :zoom-state zoom-state})))
        ;; Draw capture highlight if hovering over a capturable piece
        (when (and hovered-piece
-                  (logic/capturable-piece? hovered-piece current-player-id board))
+                  (logic/capturable-piece? hovered-piece current-player-id board over-ice))
          (draw-capture-highlight ctx hovered-piece zoom-state))))))
 
 (defn get-canvas-coords [e]
@@ -700,8 +702,9 @@
   (when-let [hovered (get-hovered-piece)]
     (when-let [game @state/game-state]
       (let [player-id (utils/normalize-player-id (:id @state/current-player))
-            board (:board game)]
-        (when (logic/capturable-piece? hovered player-id board)
+            board (:board game)
+            over-ice @state/cached-over-ice]
+        (when (logic/capturable-piece? hovered player-id board over-ice)
           (ws/capture-piece! (:id hovered)))))))
 
 (defn handle-keydown [e]

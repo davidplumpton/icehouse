@@ -59,6 +59,10 @@
 ;; Updated automatically when board changes to avoid recalculating every frame
 (defonce cached-iced-pieces (r/atom #{}))
 
+;; Cached over-ice calculation (map of defender-id to over-ice info)
+;; Updated automatically when board changes to avoid recalculating on every hover
+(defonce cached-over-ice (r/atom {}))
+
 ;; =============================================================================
 ;; UI Interaction State
 ;; =============================================================================

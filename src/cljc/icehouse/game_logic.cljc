@@ -89,12 +89,15 @@
 (defn capturable-piece?
   "Check if a piece can be captured by the given player.
    Returns true if piece is an attacker in an over-iced situation where
-   the player owns the defender and the attacker's pips <= excess."
-  [piece player-id board]
-  (when (and piece (geo/pointing? piece))
-    (let [over-ice (calculate-over-ice board)
-          target-id (:target-id piece)]
-      (when-let [info (get over-ice target-id)]
-        (and (= (utils/normalize-player-id (:defender-owner info))
-                (utils/normalize-player-id player-id))
-             (<= (geo/piece-pips piece) (:excess info)))))))
+   the player owns the defender and the attacker's pips <= excess.
+   Optionally accepts pre-computed over-ice map for performance."
+  ([piece player-id board]
+   (capturable-piece? piece player-id board nil))
+  ([piece player-id board over-ice]
+   (when (and piece (geo/pointing? piece))
+     (let [over-ice (or over-ice (calculate-over-ice board))
+           target-id (:target-id piece)]
+       (when-let [info (get over-ice target-id)]
+         (and (= (utils/normalize-player-id (:defender-owner info))
+                 (utils/normalize-player-id player-id))
+              (<= (geo/piece-pips piece) (:excess info))))))))
