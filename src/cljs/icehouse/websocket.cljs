@@ -14,6 +14,97 @@
 (def error-message-timeout-ms 3000)
 
 ;; =============================================================================
+;; Message Handlers
+;; =============================================================================
+
+(defn- handle-joined
+  "Handle player joined confirmation"
+  [data]
+  (swap! state/current-player merge
+         {:id (:player-id data)}
+         (when-let [n (:name data)] {:name n})
+         (when-let [c (:colour data)] {:colour c})))
+
+(defn- handle-players
+  "Handle player list update"
+  [data]
+  (reset! state/players (:players data)))
+
+(defn- handle-options
+  "Handle game options update"
+  [data]
+  (reset! state/game-options (:options data)))
+
+(defn- handle-game-start
+  "Handle game start"
+  [data]
+  (reset! state/game-state (:game data))
+  (reset! state/game-result nil)
+  (swap! state/ui-state assoc :selected-piece {:size :small :orientation :standing :captured? false})
+  (reset! state/current-view :game))
+
+(defn- handle-piece-placed
+  "Handle piece placement update"
+  [data]
+  (reset! state/game-state (:game data)))
+
+(defn- handle-piece-captured
+  "Handle piece capture update"
+  [data]
+  (reset! state/game-state (:game data)))
+
+(defn- handle-player-finished
+  "Handle player finished signal"
+  [data]
+  (reset! state/game-state (:game data)))
+
+(defn- handle-game-over
+  "Handle game over with final scores"
+  [data]
+  (reset! state/game-result {:scores (:scores data)
+                             :icehouse-players (:icehouse-players data)
+                             :over-ice (:over-ice data)
+                             :game-id (:game-id data)}))
+
+(defn- handle-game-list
+  "Handle list of saved games"
+  [data]
+  (reset! state/current-view :replay)
+  (reset! state/game-list (:games data)))
+
+(defn- handle-game-record
+  "Handle game record for replay"
+  [data]
+  (reset! state/game-list nil)
+  (reset! state/game-result nil)
+  (reset! state/current-view :replay)
+  (reset! state/replay-state {:record (:record data)
+                              :current-move 0
+                              :playing? false
+                              :speed 1}))
+
+(defn- handle-error
+  "Handle error message from server"
+  [data]
+  (js/console.log "Error from server:" (:message data))
+  (reset! state/error-message (:message data))
+  (js/setTimeout #(reset! state/error-message nil) error-message-timeout-ms))
+
+(def ^:private message-handlers
+  "Map of message types to handler functions"
+  {msg/joined         handle-joined
+   msg/players        handle-players
+   msg/options        handle-options
+   msg/game-start     handle-game-start
+   msg/piece-placed   handle-piece-placed
+   msg/piece-captured handle-piece-captured
+   msg/player-finished handle-player-finished
+   msg/game-over      handle-game-over
+   msg/game-list      handle-game-list
+   msg/game-record    handle-game-record
+   msg/error          handle-error})
+
+;; =============================================================================
 ;; Validation Helpers
 ;; =============================================================================
 
@@ -54,72 +145,16 @@
 
 (defn handle-message [event]
   (try
-    (let [raw-data (js->clj (js/JSON.parse (.-data event)) :keywordize-keys true)
-          data raw-data]  ;; Use data as-is, validation is non-blocking
+    (let [raw-data (js->clj (js/JSON.parse (.-data event)) :keywordize-keys true)]
       ;; Log validation errors but still process the message
       (when-not (validate-incoming-message raw-data)
         (js/console.warn "Message validation warning:" raw-data))
-      (let [msg-type (:type data)]
-        (when-not msg-type
-          (js/console.warn "Received message without type:" data))
-        (condp = msg-type
-        msg/joined
-        (swap! state/current-player merge
-               {:id (:player-id data)}
-               (when-let [n (:name data)] {:name n})
-               (when-let [c (:colour data)] {:colour c}))
-
-        msg/players
-        (reset! state/players (:players data))
-
-        msg/options
-        (reset! state/game-options (:options data))
-
-        msg/game-start
-        (do
-          (reset! state/game-state (:game data))
-          (reset! state/game-result nil)  ;; Clear previous game result
-          (swap! state/ui-state assoc :selected-piece {:size :small :orientation :standing :captured? false})
-          (reset! state/current-view :game))
-
-        msg/piece-placed
-        (reset! state/game-state (:game data))
-
-        msg/piece-captured
-        (reset! state/game-state (:game data))
-
-        msg/player-finished
-        (reset! state/game-state (:game data))
-
-        msg/game-over
-        (reset! state/game-result {:scores (:scores data)
-                                    :icehouse-players (:icehouse-players data)
-                                    :over-ice (:over-ice data)
-                                    :game-id (:game-id data)})
-
-        msg/game-list
-        (do
-          (reset! state/current-view :replay)
-          (reset! state/game-list (:games data)))
-
-        msg/game-record
-        (do
-          (reset! state/game-list nil)  ;; Clear game list when loading replay
-          (reset! state/game-result nil) ;; Clear game results overlay
-          (reset! state/current-view :replay) ;; Explicitly switch to replay view
-          (reset! state/replay-state {:record (:record data)
-                                       :current-move 0
-                                       :playing? false
-                                       :speed 1}))
-
-        msg/error
-        (do
-          (js/console.log "Error from server:" (:message data))
-          (reset! state/error-message (:message data))
-          ;; Auto-clear after timeout
-          (js/setTimeout #(reset! state/error-message nil) error-message-timeout-ms))
-
-        (js/console.log "Unknown message:" msg-type))))
+      (let [msg-type (:type raw-data)]
+        (if-let [handler (get message-handlers msg-type)]
+          (handler raw-data)
+          (if msg-type
+            (js/console.log "Unknown message:" msg-type)
+            (js/console.warn "Received message without type:" raw-data)))))
     (catch js/Error e
       (js/console.error "Failed to parse WebSocket message:" e)
       (js/console.error "Raw data:" (.-data event)))))
