@@ -352,10 +352,10 @@
    [:y [:or :double :int]]])
 
 (def ThrottleWarning
-  "Warning displayed when player tries to move too quickly"
+  "Cooldown indicator shown after piece placement"
   [:map
-   [:remaining-ms [:or :int :double]]
-   [:show-until [:or :int :double]]])
+   [:throttle-ends-at [:or :int :double]]
+   [:throttle-duration-ms [:or :int :double]]])
 
 (def UIState
   "Frontend UI interaction state"

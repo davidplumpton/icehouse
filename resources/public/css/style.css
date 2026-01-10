@@ -115,14 +115,6 @@
   z-index: 100;
 }
 
-.throttle-warning {
-  position: absolute;
-  top: 3rem;
-  left: 50%;
-  transform: translateX(-50%);
-  z-index: 100;
-}
-
 .game h2 {
   margin-bottom: 1rem;
 }

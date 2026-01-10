@@ -38,16 +38,14 @@
 ;; Utility Functions
 ;; =============================================================================
 
-(def throttle-warning-duration-ms 2000)
-
-(defn show-throttle-warning!
-  "Display a warning when placement is blocked due to throttle.
-   Shows remaining time until next placement allowed."
-  [remaining-ms]
+(defn start-placement-cooldown!
+  "Start the placement cooldown indicator. Called after a piece is placed
+   or when player tries to place too early."
+  [remaining-ms total-throttle-ms]
   (let [now (js/Date.now)]
     (swap! state/ui-state assoc :throttle-warning
-           {:remaining-ms remaining-ms
-            :show-until (+ now throttle-warning-duration-ms)})))
+           {:throttle-ends-at (+ now remaining-ms)
+            :throttle-duration-ms total-throttle-ms})))
 
 (defn set-line-width
   "Set line width, accounting for zoom scale if present. Maintains minimum width for visibility."
@@ -577,7 +575,7 @@
                     {:keys [selected-piece zoom-active last-placement-time]} @state/ui-state
                     {:keys [size captured?]} selected-piece
                     ;; Check placement throttle
-                    throttle-sec (get-in @state/game-state [:options :placement-throttle] 1)
+                    throttle-sec (get-in @state/game-state [:options :placement-throttle] 2)
                     throttle-ms (* throttle-sec 1000)
                     now (js/Date.now)
                     time-since-last (- now last-placement-time)
@@ -596,7 +594,7 @@
                                                      :locked-angle 0})
                   ;; Show warning if throttled (and they have pieces)
                   (when (and (not can-place?) (has-pieces-of-size? size captured?))
-                    (show-throttle-warning! (- throttle-ms time-since-last))))))
+                    (start-placement-cooldown! (- throttle-ms time-since-last) throttle-ms)))))
             :on-mouse-enter
             (fn [e]
               ;; If user dragged from stash and entered canvas, start the drag
@@ -606,7 +604,7 @@
                       {:keys [size captured?]} @stash-drag-pending
                       {:keys [zoom-active last-placement-time]} @state/ui-state
                       ;; Check placement throttle
-                      throttle-sec (get-in @state/game-state [:options :placement-throttle] 1)
+                      throttle-sec (get-in @state/game-state [:options :placement-throttle] 2)
                       throttle-ms (* throttle-sec 1000)
                       now (js/Date.now)
                       time-since-last (- now last-placement-time)
@@ -623,7 +621,7 @@
                                                        :from-stash? true})
                     ;; Show warning if throttled (and they have pieces)
                     (when (and (not can-place?) (has-pieces-of-size? size captured?))
-                      (show-throttle-warning! (- throttle-ms time-since-last))))
+                      (start-placement-cooldown! (- throttle-ms time-since-last) throttle-ms)))
                   ;; Clear pending regardless (drag started or not)
                   (reset! stash-drag-pending nil))))
             :on-mouse-move
@@ -643,7 +641,7 @@
                 ;; Only if mouse button is held (buttons > 0)
                 (when (and @stash-drag-pending (pos? (.-buttons e)))
                   (let [{:keys [size captured?]} @stash-drag-pending
-                        throttle-sec (get-in @state/game-state [:options :placement-throttle] 1)
+                        throttle-sec (get-in @state/game-state [:options :placement-throttle] 2)
                         throttle-ms (* throttle-sec 1000)
                         now (js/Date.now)
                         time-since-last (- now last-placement-time)
@@ -656,7 +654,7 @@
                                                          :from-stash? true})
                       ;; Show warning if throttled (and they have pieces)
                       (when (and (not can-place?) (has-pieces-of-size? size captured?))
-                        (show-throttle-warning! (- throttle-ms time-since-last))))
+                        (start-placement-cooldown! (- throttle-ms time-since-last) throttle-ms)))
                     (reset! stash-drag-pending nil)))
                 ;; Update drag state if dragging
                 (when-let [drag (:drag @state/ui-state)]
@@ -702,9 +700,13 @@
                       has-movement (or (not= start-x current-x) (not= start-y current-y))
                       angle (if (and has-movement (not position-adjust?))
                               (geo/calculate-angle start-x start-y current-x current-y)
-                              (or locked-angle 0))]
+                              (or locked-angle 0))
+                      ;; Start cooldown indicator
+                      throttle-sec (get-in @state/game-state [:options :placement-throttle] 2)
+                      throttle-ms (* throttle-sec 1000)]
                   (ws/place-piece! final-x final-y size orientation angle nil captured?)
-                  (swap! state/ui-state assoc :drag nil :last-placement-time (js/Date.now)))))
+                  (swap! state/ui-state assoc :drag nil :last-placement-time (js/Date.now))
+                  (start-placement-cooldown! throttle-ms throttle-ms))))
             :on-mouse-leave
             (fn [e]
               (swap! state/ui-state assoc :hover-pos nil :drag nil))}]))})))
@@ -961,22 +963,78 @@
               :font-weight "bold"}}
      error]))
 
-(defn throttle-warning-display []
-  "Display warning when player tries to move too quickly"
-  (when-let [warning (:throttle-warning @state/ui-state)]
-    (let [now (js/Date.now)
-          {:keys [remaining-ms show-until]} warning]
-      (when (> show-until now)
-        (let [seconds (/ remaining-ms 1000)]
-          [:div.throttle-warning
-           {:style {:background theme/orange
-                    :color "#000"
-                    :padding "0.5rem 1rem"
-                    :border-radius "4px"
-                    :margin-bottom "0.5rem"
-                    :font-weight "bold"
-                    :text-align "center"}}
-           (str "Wait " (.toFixed seconds 1) "s before placing")])))))
+(defn placement-cooldown-indicator []
+  "Subtle circular cooldown indicator with smooth animation"
+  (let [animation-frame (atom nil)
+        local-progress (r/atom 1)
+        start-animation
+        (fn start-animation []
+          (letfn [(animate []
+                    (if-let [warning (:throttle-warning @state/ui-state)]
+                      (let [now (js/Date.now)
+                            {:keys [throttle-ends-at throttle-duration-ms]} warning
+                            remaining-ms (- throttle-ends-at now)]
+                        (if (pos? remaining-ms)
+                          (do
+                            (reset! local-progress (/ remaining-ms throttle-duration-ms))
+                            (reset! animation-frame (js/requestAnimationFrame animate)))
+                          ;; Cooldown complete - clear state and reset frame
+                          (do
+                            (reset! local-progress 0)
+                            (reset! animation-frame nil)
+                            (swap! state/ui-state dissoc :throttle-warning))))
+                      ;; No warning - reset frame
+                      (reset! animation-frame nil)))]
+            (animate)))]
+    (r/create-class
+     {:component-did-mount
+      (fn [this]
+        (when (:throttle-warning @state/ui-state)
+          (start-animation)))
+
+      :component-did-update
+      (fn [this old-argv]
+        ;; Restart animation when warning appears and no animation running
+        (when (and (:throttle-warning @state/ui-state)
+                   (nil? @animation-frame))
+          (start-animation)))
+
+      :component-will-unmount
+      (fn [this]
+        (when @animation-frame
+          (js/cancelAnimationFrame @animation-frame)))
+
+      :reagent-render
+      (fn []
+        (when (:throttle-warning @state/ui-state)
+          (let [progress @local-progress
+                ;; Small, subtle circle
+                size 28
+                stroke-width 3
+                radius (/ (- size stroke-width) 2)
+                circumference (* 2 js/Math.PI radius)
+                ;; Progress goes from 1 (full wait) to 0 (ready)
+                dash-offset (* circumference (- 1 progress))]
+            [:div.cooldown-indicator
+             {:style {:display "inline-flex"
+                      :align-items "center"
+                      :justify-content "center"
+                      :opacity 0.6}}
+             [:svg {:width size :height size
+                    :style {:transform "rotate(-90deg)"}}
+              ;; Background circle
+              [:circle {:cx (/ size 2) :cy (/ size 2) :r radius
+                        :fill "none"
+                        :stroke "rgba(255,255,255,0.2)"
+                        :stroke-width stroke-width}]
+              ;; Progress circle - depletes as cooldown progresses
+              [:circle {:cx (/ size 2) :cy (/ size 2) :r radius
+                        :fill "none"
+                        :stroke "#4ecdc4"
+                        :stroke-width stroke-width
+                        :stroke-linecap "round"
+                        :stroke-dasharray circumference
+                        :stroke-dashoffset dash-offset}]]])))})))
 
 (defn game-timer []
   "Display remaining game time"
@@ -1187,10 +1245,10 @@
                    :margin-bottom "0.5rem"}}
           [:h2 {:style {:margin 0}} "Icehouse"]
           [:div {:style {:display "flex" :align-items "center" :gap "1rem"}}
+           [placement-cooldown-indicator]
            [finish-button]
            [game-timer]]]
          [error-display]
-         [throttle-warning-display]
          [game-results-overlay]
          [help-overlay]
          [piece-selector]
