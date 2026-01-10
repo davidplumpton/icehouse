@@ -479,7 +479,11 @@
         (apply-placement! room-id player-id piece using-captured?)
         (let [updated-game (get @games room-id)
               final-piece (logic/find-piece-by-id (:board updated-game) (:id piece))]
-          (handle-post-placement! clients room-id player-id final-piece using-captured?)))
+          (if final-piece
+            (handle-post-placement! clients room-id player-id final-piece using-captured?)
+            (do
+              (println "ERROR: Piece not found after placement:" (:id piece))
+              (utils/send-msg! channel {:type msg/error :message "Internal error: piece not found after placement"})))))
       (utils/send-msg! channel {:type msg/error :message (or error "Invalid game state")}))))
 
 (defn validate-capture
