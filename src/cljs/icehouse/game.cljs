@@ -49,6 +49,18 @@
            {:throttle-ends-at (+ now remaining-ms)
             :throttle-duration-ms total-throttle-ms})))
 
+(defn check-placement-throttle
+  "Check if placement is allowed based on throttle timing.
+   Returns map with :can-place? :throttle-ms :time-since-last"
+  [last-placement-time]
+  (let [throttle-sec (get-in @state/game-state [:options :placement-throttle] const/default-placement-throttle-sec)
+        throttle-ms (* throttle-sec 1000)
+        now (js/Date.now)
+        time-since-last (- now last-placement-time)]
+    {:can-place? (>= time-since-last throttle-ms)
+     :throttle-ms throttle-ms
+     :time-since-last time-since-last}))
+
 (defn set-line-width
   "Set line width, accounting for zoom scale if present. Maintains minimum width for visibility."
   [ctx width zoom-state]
@@ -514,12 +526,7 @@
               (let [{:keys [x y]} (get-canvas-coords e)
                     {:keys [selected-piece zoom-active last-placement-time]} @state/ui-state
                     {:keys [size captured?]} selected-piece
-                    ;; Check placement throttle
-                    throttle-sec (get-in @state/game-state [:options :placement-throttle] const/default-placement-throttle-sec)
-                    throttle-ms (* throttle-sec 1000)
-                    now (js/Date.now)
-                    time-since-last (- now last-placement-time)
-                    can-place? (>= time-since-last throttle-ms)
+                    {:keys [can-place? throttle-ms time-since-last]} (check-placement-throttle last-placement-time)
                     actual-zoom-scale (if zoom-active zoom-scale 1)
                     ;; Scale down position when zoomed to account for canvas scaling
                     adjusted-x (if zoom-active (/ x actual-zoom-scale) x)
@@ -543,12 +550,7 @@
                 (let [{:keys [x y]} (get-canvas-coords e)
                       {:keys [size captured?]} @stash-drag-pending
                       {:keys [zoom-active last-placement-time]} @state/ui-state
-                      ;; Check placement throttle
-                      throttle-sec (get-in @state/game-state [:options :placement-throttle] const/default-placement-throttle-sec)
-                      throttle-ms (* throttle-sec 1000)
-                      now (js/Date.now)
-                      time-since-last (- now last-placement-time)
-                      can-place? (>= time-since-last throttle-ms)
+                      {:keys [can-place? throttle-ms time-since-last]} (check-placement-throttle last-placement-time)
                       actual-zoom-scale (if zoom-active zoom-scale 1)
                       adjusted-x (if zoom-active (/ x actual-zoom-scale) x)
                       adjusted-y (if zoom-active (/ y actual-zoom-scale) y)]
@@ -581,11 +583,7 @@
                 ;; Only if mouse button is held (buttons > 0)
                 (when (and @stash-drag-pending (pos? (.-buttons e)))
                   (let [{:keys [size captured?]} @stash-drag-pending
-                        throttle-sec (get-in @state/game-state [:options :placement-throttle] const/default-placement-throttle-sec)
-                        throttle-ms (* throttle-sec 1000)
-                        now (js/Date.now)
-                        time-since-last (- now last-placement-time)
-                        can-place? (>= time-since-last throttle-ms)]
+                        {:keys [can-place? throttle-ms time-since-last]} (check-placement-throttle last-placement-time)]
                     (if (and can-place? (has-pieces-of-size? size captured?))
                       (swap! state/ui-state assoc :drag {:start-x adjusted-x :start-y adjusted-y
                                                          :current-x adjusted-x :current-y adjusted-y
@@ -642,8 +640,7 @@
                               (geo/calculate-angle start-x start-y current-x current-y)
                               (or locked-angle 0))
                       ;; Start cooldown indicator
-                      throttle-sec (get-in @state/game-state [:options :placement-throttle] const/default-placement-throttle-sec)
-                      throttle-ms (* throttle-sec 1000)]
+                      {:keys [throttle-ms]} (check-placement-throttle 0)]
                   (ws/place-piece! final-x final-y size orientation angle nil captured?)
                   (swap! state/ui-state assoc :drag nil :last-placement-time (js/Date.now))
                   (start-placement-cooldown! throttle-ms throttle-ms))))
