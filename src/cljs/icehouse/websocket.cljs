@@ -2,6 +2,8 @@
   (:require [icehouse.messages :as msg]
              [icehouse.state :as state]
              [icehouse.schema :as schema]
+             [icehouse.constants :as const]
+             [icehouse.utils :as utils]
              [malli.core :as m]))
 
 (defonce ws (atom nil))
@@ -44,9 +46,23 @@
   (reset! state/current-view :game))
 
 (defn- handle-piece-placed
-  "Handle piece placement update"
+  "Handle piece placement update.
+   Starts cooldown timer only when the placed piece belongs to current player."
   [data]
-  (reset! state/game-state (:game data)))
+  (reset! state/game-state (:game data))
+  ;; Start cooldown only if this was our placement
+  (let [piece (:piece data)
+        current-player-id (:id @state/current-player)
+        piece-player-id (utils/normalize-player-id (:player-id piece))]
+    (when (and current-player-id
+               (= (utils/normalize-player-id current-player-id) piece-player-id))
+      (let [throttle-sec (get-in (:game data) [:options :placement-throttle] const/default-placement-throttle-sec)
+            throttle-ms (* throttle-sec 1000)
+            now (js/Date.now)]
+        (swap! state/ui-state assoc
+               :last-placement-time now
+               :throttle-warning {:throttle-ends-at (+ now throttle-ms)
+                                  :throttle-duration-ms throttle-ms})))))
 
 (defn- handle-piece-captured
   "Handle piece capture update"

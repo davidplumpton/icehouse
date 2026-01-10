@@ -202,11 +202,10 @@
           has-movement (or (not= start-x current-x) (not= start-y current-y))
           angle (if (and has-movement (not position-adjust?))
                   (geo/calculate-angle start-x start-y current-x current-y)
-                  (or locked-angle 0))
-          {:keys [throttle-ms]} (check-placement-throttle 0)]
+                  (or locked-angle 0))]
       (ws/place-piece! final-x final-y size orientation angle nil captured?)
-      (swap! state/ui-state assoc :drag nil :last-placement-time (js/Date.now))
-      (start-placement-cooldown! throttle-ms throttle-ms))))
+      ;; Clear drag state but don't start cooldown - that happens when server confirms placement
+      (swap! state/ui-state assoc :drag nil))))
 
 ;; =============================================================================
 ;; Attack Target Detection (for preview highlighting)
