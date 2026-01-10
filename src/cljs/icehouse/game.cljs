@@ -81,6 +81,31 @@
      (js/Math.round (* y zoom-scale))]
     [(js/Math.round x) (js/Math.round y)]))
 
+(defn scale-to-world-coords
+  "Scale coordinates from zoomed space to world space for rendering.
+   Uses zoom-state scale if provided, otherwise returns original coords."
+  [x y zoom-state]
+  (let [scale (if zoom-state (:scale zoom-state) 1)]
+    [(* x scale) (* y scale)]))
+
+(defn transform-drag-for-zoom-toggle
+  "Transform drag coordinates when toggling zoom on or off.
+   When zooming in (currently-zoomed false), scales coords down.
+   When zooming out (currently-zoomed true), scales coords up."
+  [drag currently-zoomed]
+  (let [{:keys [start-x start-y current-x current-y last-x last-y locked-angle from-stash?]} drag
+        transform-fn (if currently-zoomed
+                       #(* % zoom-scale)  ;; Zooming out: scale up
+                       #(/ % zoom-scale))]  ;; Zooming in: scale down
+    {:start-x (transform-fn start-x)
+     :start-y (transform-fn start-y)
+     :current-x (transform-fn current-x)
+     :current-y (transform-fn current-y)
+     :last-x (transform-fn last-x)
+     :last-y (transform-fn last-y)
+     :locked-angle locked-angle
+     :from-stash? from-stash?}))
+
 (defn set-line-width
   "Set line width, accounting for zoom scale if present. Maintains minimum width for visibility."
   [ctx width zoom-state]
@@ -493,12 +518,9 @@
                                cap-piece (utils/get-captured-piece captured-pieces size)]
                            (or (:colour cap-piece) player-colour))
                          player-colour)
-        ;; When zoom is active, drag coords are in scaled space - convert to world coords for drawing
-        zoom-scale (if zoom-state (:scale zoom-state) 1)
-        draw-start-x (* start-x zoom-scale)
-        draw-start-y (* start-y zoom-scale)
-        draw-current-x (* current-x zoom-scale)
-        draw-current-y (* current-y zoom-scale)
+        ;; Convert drag coords from scaled space to world coords for drawing
+        [draw-start-x draw-start-y] (scale-to-world-coords start-x start-y zoom-state)
+        [draw-current-x draw-current-y] (scale-to-world-coords current-x current-y zoom-state)
         ;; In shift mode (position adjustment), start equals current, so use locked-angle
         ;; In normal mode, calculate angle from start to current
         in-shift-mode? (and (= start-x current-x) (= start-y current-y))
@@ -716,25 +738,14 @@
                      (swap! state/ui-state update :move-mode not)))
       "Shift" (let [drag (:drag @state/ui-state)]
                 (when (and drag (:from-stash? drag))
-                  (swap! state/ui-state update :drag assoc :from-stash? false)))      ("z" "Z") (let [drag (:drag @state/ui-state)
+                  (swap! state/ui-state update :drag assoc :from-stash? false)))
+      ("z" "Z") (let [drag (:drag @state/ui-state)
                       currently-zoomed (:zoom-active @state/ui-state)]
                   (if drag
                     ;; Transform drag coordinates when toggling zoom mid-drag
-                    (let [{:keys [start-x start-y current-x current-y last-x last-y locked-angle]} drag
-                          transform-fn (if currently-zoomed
-                                         ;; Zooming out: scale coordinates up
-                                         #(* % zoom-scale)
-                                         ;; Zooming in: scale coordinates down
-                                         #(/ % zoom-scale))]
-                      (swap! state/ui-state assoc
-                             :zoom-active (not currently-zoomed)
-                             :drag {:start-x (transform-fn start-x)
-                                    :start-y (transform-fn start-y)
-                                    :current-x (transform-fn current-x)
-                                    :current-y (transform-fn current-y)
-                                    :last-x (transform-fn last-x)
-                                    :last-y (transform-fn last-y)
-                                    :locked-angle locked-angle}))
+                    (swap! state/ui-state assoc
+                           :zoom-active (not currently-zoomed)
+                           :drag (transform-drag-for-zoom-toggle drag currently-zoomed))
                     ;; Not dragging: simple toggle
                     (swap! state/ui-state update :zoom-active not)))
       nil)))
