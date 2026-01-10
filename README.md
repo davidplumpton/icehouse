@@ -1,10 +1,17 @@
-# Icehouse
+# Icehouse Game
 
-> Multiplayer browser-based Classic Icehouse (Looney Pyramids) game
+Multiplayer browser-based Icehouse (Looney Pyramids) game. [Icehouse](https://www.looneylabs.com/content/icehouse) is a tabletop game using plastic pyramid pieces from [Looney Labs](https://store.looneylabs.com/). The notable feature of this game is that players do not take turns; they just play a move when they are ready. The pieces can also be used to play all sorts of other fun games.
+
+This project is a personal experiment to understand the current state and capability of vibe coding by asking AIs to write the all the code with myself guiding the process. My intention is to write zero lines of code and see what the result is, and maybe get a fun game out of it. I chose Clojure and ClojureScript just because I think they are fun and interesting to work with. It may be that other languages would be a better choice in terms of the agent compentency for coding.
 
 ## Overview
 
-A real-time multiplayer implementation of Classic Icehouse for 3-4 players. Players connect via browser, join a lobby, and compete by placing pyramids to attack and defend.
+A real-time multiplayer implementation of Classic Icehouse for 3-4 players. Players connect via browser, join a lobby, and compete by placing pyramids to attack and defend. Requires only Java and a single jar file to play on a local network. However even a single player can start a game and place defensive pieces. Two players would be needed for attacks and captures. Three players for any real kind of strategy.
+
+## Running the Standalone Game
+`java -jar icehouse-game.jar`
+
+Then connect to http://localhost:3000, other players connect to http://SERVER-IP-ADDRESS:3000
 
 ## Features
 
@@ -16,11 +23,10 @@ A real-time multiplayer implementation of Classic Icehouse for 3-4 players. Play
 
 ## Prerequisites
 
+- To play the game, only Java is needed.
 - Java 11+ (for Clojure backend)
 - Node.js 16+ (for ClojureScript tooling)
 - Clojure CLI tools (`brew install clojure/tools/clojure` on macOS)
-- [Jujutsu (jj)](https://martinvonz.github.io/jj/) for version control
-- [Beads (bd)](https://github.com/mads-hartmann/beads) for issue tracking
 
 ## Development Workflow
 
