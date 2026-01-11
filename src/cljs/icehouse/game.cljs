@@ -1091,15 +1091,78 @@
                  :color "#aaa"}}
         (str finished-count "/" player-count)])]))
 
+(defn- scores-table
+  "Renders the scores table for the game results overlay."
+  [{:keys [sorted-scores players-map icehouse-players max-score]}]
+  [:table {:style {:width "100%" :border-collapse "collapse" :margin "1rem 0"}}
+   [:thead
+    [:tr
+     [:th {:style {:text-align "left" :padding "0.5rem"}} "Player"]
+     [:th {:style {:text-align "right" :padding "0.5rem"}} "Score"]]]
+   [:tbody
+    (for [[player-id score] sorted-scores]
+      (let [player-data (get players-map (keyword player-id))
+            player-name (or (:name player-data) player-id)
+            player-colour (or (:colour player-data) "#888")
+            in-icehouse? (contains? icehouse-players player-id)
+            is-winner? (= score max-score)]
+        ^{:key player-id}
+        [:tr {:style {:background (when is-winner? "#e8f5e9")}}
+         [:td {:style {:text-align "left" :padding "0.5rem"}}
+          [:span {:style {:color player-colour :font-weight "bold"}}
+           player-name]
+          (when in-icehouse?
+            [:span {:style {:color theme/red :margin-left "0.5rem" :font-size "0.8em"}}
+             "(Icehouse!)"])]
+         [:td {:style {:text-align "right" :padding "0.5rem" :font-size "1.2em" :color "#333"}}
+          (str score)]]))]])
+
+(defn- results-action-buttons
+  "Renders the action buttons for the game results overlay."
+  [{:keys [game-id]}]
+  [:div {:style {:display "flex" :flex-direction "column" :gap "0.5rem" :margin-top "1rem"}}
+   [:button
+    {:style {:padding "0.5rem 2rem"
+             :font-size "1rem"
+             :cursor "pointer"
+             :background theme/gold
+             :color "#000"
+             :border "none"
+             :border-radius "4px"}
+     :on-click #(ws/load-game! game-id)}
+    "Watch Replay"]
+   [:button
+    {:style {:padding "0.5rem 2rem"
+             :font-size "1rem"
+             :cursor "pointer"
+             :background theme/green
+             :color "#fff"
+             :border "none"
+             :border-radius "4px"}
+     :on-click #(do
+                  (reset! state/game-result nil)
+                  (reset! state/game-state nil)
+                  (reset! state/current-view :lobby))}
+    "Back to Lobby"]
+   [:button
+    {:style {:padding "0.5rem 1rem"
+             :font-size "0.8rem"
+             :cursor "pointer"
+             :background "transparent"
+             :color "#666"
+             :border "none"
+             :text-decoration "underline"}
+     :on-click #(ws/list-games!)}
+    "Watch All Replays"]])
+
 (defn game-results-overlay []
   "Display final scores when game ends"
   (when-let [result @state/game-result]
     (let [scores (:scores result)
           icehouse-players (set (:icehouse-players result))
-          game @state/game-state
-          players-map (:players game)
-          ;; Sort by score descending
-          sorted-scores (sort-by (fn [[_ score]] (- score)) scores)]
+          players-map (:players @state/game-state)
+          sorted-scores (sort-by (fn [[_ score]] (- score)) scores)
+          max-score (apply max (vals scores))]
       [:div.game-results-overlay
        {:style {:position "fixed"
                 :top 0 :left 0 :right 0 :bottom 0
@@ -1115,62 +1178,11 @@
                  :min-width "300px"
                  :text-align "center"}}
         [:h2 {:style {:margin-top 0}} "Game Over!"]
-        [:table {:style {:width "100%" :border-collapse "collapse" :margin "1rem 0"}}
-         [:thead
-          [:tr
-           [:th {:style {:text-align "left" :padding "0.5rem"}} "Player"]
-           [:th {:style {:text-align "right" :padding "0.5rem"}} "Score"]]]
-         [:tbody
-          (for [[player-id score] sorted-scores]
-            (let [player-data (get players-map (keyword player-id))
-                  player-name (or (:name player-data) player-id)
-                  player-colour (or (:colour player-data) "#888")
-                  in-icehouse? (contains? icehouse-players player-id)
-                  is-winner? (= score (apply max (vals scores)))]
-              ^{:key player-id}
-              [:tr {:style {:background (when is-winner? "#e8f5e9")}}
-               [:td {:style {:text-align "left" :padding "0.5rem"}}
-                [:span {:style {:color player-colour :font-weight "bold"}}
-                 player-name]
-                (when in-icehouse?
-                  [:span {:style {:color theme/red :margin-left "0.5rem" :font-size "0.8em"}}
-                   "(Icehouse!)"])]
-               [:td {:style {:text-align "right" :padding "0.5rem" :font-size "1.2em" :color "#333"}}
-                (str score)]]))]]
-        [:div {:style {:display "flex" :flex-direction "column" :gap "0.5rem" :margin-top "1rem"}}
-         [:button
-          {:style {:padding "0.5rem 2rem"
-                   :font-size "1rem"
-                   :cursor "pointer"
-                   :background theme/gold
-                   :color "#000"
-                   :border "none"
-                   :border-radius "4px"}
-           :on-click #(ws/load-game! (:game-id result))}
-          "Watch Replay"]
-         [:button
-          {:style {:padding "0.5rem 2rem"
-                   :font-size "1rem"
-                   :cursor "pointer"
-                   :background theme/green
-                   :color "#fff"
-                   :border "none"
-                   :border-radius "4px"}
-           :on-click #(do
-                        (reset! state/game-result nil)
-                        (reset! state/game-state nil)
-                        (reset! state/current-view :lobby))}
-          "Back to Lobby"]
-         [:button
-          {:style {:padding "0.5rem 1rem"
-                   :font-size "0.8rem"
-                   :cursor "pointer"
-                   :background "transparent"
-                   :color "#666"
-                   :border "none"
-                   :text-decoration "underline"}
-           :on-click #(ws/list-games!)}
-          "Watch All Replays"]]]])))
+        [scores-table {:sorted-scores sorted-scores
+                       :players-map players-map
+                       :icehouse-players icehouse-players
+                       :max-score max-score}]
+        [results-action-buttons {:game-id (:game-id result)}]]])))
 
 (defn help-overlay []
   "Display help overlay with hotkey descriptions"
