@@ -588,6 +588,59 @@
         captured (or (:captured player-data) [])]
     (vec (distinct (map #(keyword (:size %)) captured)))))
 
+(defn- handle-canvas-mousedown
+  "Handles mousedown on canvas - starts a new drag from clicked position.
+   Clears any pending stash drag since we're clicking directly on canvas."
+  [e]
+  (.preventDefault e)
+  (let [{:keys [x y]} (get-canvas-coords e)
+        {:keys [selected-piece zoom-active]} @state/ui-state
+        {:keys [size captured?]} selected-piece
+        [adjusted-x adjusted-y] (adjust-coords-for-zoom x y zoom-active)]
+    (reset! stash-drag-pending nil)
+    (try-start-drag! adjusted-x adjusted-y size captured? false)))
+
+(defn- handle-canvas-mouseenter
+  "Handles mouseenter on canvas - starts drag if user dragged from stash.
+   Only triggers if mouse button is held (buttons > 0)."
+  [e]
+  (when (and @stash-drag-pending (pos? (.-buttons e)))
+    (let [{:keys [x y]} (get-canvas-coords e)
+          {:keys [size captured?]} @stash-drag-pending
+          {:keys [zoom-active]} @state/ui-state
+          [adjusted-x adjusted-y] (adjust-coords-for-zoom x y zoom-active)]
+      (try-start-drag! adjusted-x adjusted-y size captured? true)
+      (reset! stash-drag-pending nil))))
+
+(defn- handle-canvas-mousemove
+  "Handles mousemove on canvas - updates hover position and drag state.
+   Also handles stash drag continuation if mouse was already on canvas when stash clicked."
+  [e]
+  (let [{:keys [x y]} (get-canvas-coords e)
+        shift-held (.-shiftKey e)
+        {:keys [zoom-active move-mode]} @state/ui-state
+        [adjusted-x adjusted-y] (adjust-coords-for-zoom x y zoom-active)
+        position-adjust? (or shift-held move-mode)]
+    ;; Always update hover position for capture detection (use original unscaled coords)
+    (swap! state/ui-state assoc :hover-pos {:x x :y y})
+    ;; Check for pending stash drag (mouse was already on canvas when stash clicked)
+    (when (and @stash-drag-pending (pos? (.-buttons e)))
+      (let [{:keys [size captured?]} @stash-drag-pending]
+        (try-start-drag! adjusted-x adjusted-y size captured? true)
+        (reset! stash-drag-pending nil)))
+    ;; Update drag state if dragging
+    (update-drag-position! adjusted-x adjusted-y position-adjust?)))
+
+(defn- handle-canvas-mouseup
+  "Handles mouseup on canvas - completes the piece placement."
+  [e]
+  (complete-placement! (.-shiftKey e)))
+
+(defn- handle-canvas-mouseleave
+  "Handles mouseleave on canvas - clears hover position and drag state."
+  [_e]
+  (swap! state/ui-state assoc :hover-pos nil :drag nil))
+
 (defn game-canvas []
   (let [canvas-ref (r/atom nil)
         ;; Handler to clear stash-drag-pending on mouseup anywhere
@@ -636,50 +689,11 @@
             :width canvas-width
             :height canvas-height
             :style {:border "2px solid #4ecdc4" :cursor "crosshair"}
-            :on-mouse-down
-            (fn [e]
-              (.preventDefault e)
-              (let [{:keys [x y]} (get-canvas-coords e)
-                    {:keys [selected-piece zoom-active]} @state/ui-state
-                    {:keys [size captured?]} selected-piece
-                    [adjusted-x adjusted-y] (adjust-coords-for-zoom x y zoom-active)]
-                ;; Clear any pending stash drag since we're clicking directly on canvas
-                (reset! stash-drag-pending nil)
-                (try-start-drag! adjusted-x adjusted-y size captured? false)))
-            :on-mouse-enter
-            (fn [e]
-              ;; If user dragged from stash and entered canvas, start the drag
-              ;; Only if mouse button is held (buttons > 0)
-              (when (and @stash-drag-pending (pos? (.-buttons e)))
-                (let [{:keys [x y]} (get-canvas-coords e)
-                      {:keys [size captured?]} @stash-drag-pending
-                      {:keys [zoom-active]} @state/ui-state
-                      [adjusted-x adjusted-y] (adjust-coords-for-zoom x y zoom-active)]
-                  (try-start-drag! adjusted-x adjusted-y size captured? true)
-                  ;; Clear pending regardless (drag started or not)
-                  (reset! stash-drag-pending nil))))
-            :on-mouse-move
-            (fn [e]
-              (let [{:keys [x y]} (get-canvas-coords e)
-                    shift-held (.-shiftKey e)
-                    {:keys [zoom-active move-mode]} @state/ui-state
-                    [adjusted-x adjusted-y] (adjust-coords-for-zoom x y zoom-active)
-                    position-adjust? (or shift-held move-mode)]
-                ;; Always update hover position for capture detection (use original unscaled coords)
-                (swap! state/ui-state assoc :hover-pos {:x x :y y})
-                ;; Check for pending stash drag (mouse was already on canvas when stash clicked)
-                (when (and @stash-drag-pending (pos? (.-buttons e)))
-                  (let [{:keys [size captured?]} @stash-drag-pending]
-                    (try-start-drag! adjusted-x adjusted-y size captured? true)
-                    (reset! stash-drag-pending nil)))
-                ;; Update drag state if dragging
-                (update-drag-position! adjusted-x adjusted-y position-adjust?)))
-            :on-mouse-up
-            (fn [e]
-              (complete-placement! (.-shiftKey e)))
-            :on-mouse-leave
-            (fn [e]
-              (swap! state/ui-state assoc :hover-pos nil :drag nil))}]))})))
+            :on-mouse-down handle-canvas-mousedown
+            :on-mouse-enter handle-canvas-mouseenter
+            :on-mouse-move handle-canvas-mousemove
+            :on-mouse-up handle-canvas-mouseup
+            :on-mouse-leave handle-canvas-mouseleave}]))})))
 
 (defn can-attack? []
   "Returns true if attacking is allowed (after first few moves)"
