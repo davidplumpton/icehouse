@@ -720,51 +720,101 @@
         (when (logic/capturable-piece? hovered player-id board over-ice)
           (ws/capture-piece! (:id hovered)))))))
 
+;; Keyboard handlers for dispatch map pattern
+(defn- select-regular-piece
+  "Handler for selecting regular pieces (keys 1-3)."
+  [size]
+  (fn [] (swap! state/ui-state update :selected-piece assoc :size size :captured? false)))
+
+(defn- select-captured-piece
+  "Handler for selecting captured pieces (keys 4-6)."
+  [index]
+  (fn []
+    (when-let [size (nth (available-captured-sizes) index nil)]
+      (swap! state/ui-state update :selected-piece assoc :size size :captured? true))))
+
+(defn- handle-attack-mode
+  "Handler for 'A' key - set attack orientation."
+  []
+  (when (can-attack?)
+    (swap! state/ui-state update :selected-piece assoc :orientation :pointing)))
+
+(defn- handle-defend-mode
+  "Handler for 'D' key - set defense orientation."
+  []
+  (swap! state/ui-state update :selected-piece assoc :orientation :standing))
+
+(defn- handle-capture-key
+  "Handler for 'C' key - capture hovered piece or toggle captured selection."
+  []
+  (if (get-hovered-piece)
+    (try-capture-hovered-piece!)
+    (when (has-captured-pieces?)
+      (swap! state/ui-state update-in [:selected-piece :captured?] not))))
+
+(defn- handle-escape
+  "Handler for Escape key - clear all modes."
+  []
+  (swap! state/ui-state assoc :drag nil :show-help false :zoom-active false :move-mode false))
+
+(defn- handle-help-toggle
+  "Handler for '?' key - toggle help overlay."
+  []
+  (swap! state/ui-state update :show-help not))
+
+(defn- handle-move-mode
+  "Handler for 'M' key - toggle move mode or switch from stash drag to rotation."
+  []
+  (let [drag (:drag @state/ui-state)]
+    (if (and drag (:from-stash? drag))
+      (do
+        (swap! state/ui-state update :drag assoc :from-stash? false)
+        (swap! state/ui-state assoc :move-mode false))
+      (swap! state/ui-state update :move-mode not))))
+
+(defn- handle-shift
+  "Handler for Shift key - switch from stash drag to rotation mode."
+  []
+  (let [drag (:drag @state/ui-state)]
+    (when (and drag (:from-stash? drag))
+      (swap! state/ui-state update :drag assoc :from-stash? false))))
+
+(defn- handle-zoom-toggle
+  "Handler for 'Z' key - toggle zoom mode."
+  []
+  (let [drag (:drag @state/ui-state)
+        currently-zoomed (:zoom-active @state/ui-state)]
+    (if drag
+      (swap! state/ui-state assoc
+             :zoom-active (not currently-zoomed)
+             :drag (transform-drag-for-zoom-toggle drag currently-zoomed))
+      (swap! state/ui-state update :zoom-active not))))
+
+(def ^:private keyboard-handlers
+  "Dispatch map for keyboard handlers."
+  {"1" (select-regular-piece :small)
+   "2" (select-regular-piece :medium)
+   "3" (select-regular-piece :large)
+   "4" (select-captured-piece 0)
+   "5" (select-captured-piece 1)
+   "6" (select-captured-piece 2)
+   "a" handle-attack-mode
+   "A" handle-attack-mode
+   "d" handle-defend-mode
+   "D" handle-defend-mode
+   "c" handle-capture-key
+   "C" handle-capture-key
+   "Escape" handle-escape
+   "?" handle-help-toggle
+   "m" handle-move-mode
+   "M" handle-move-mode
+   "Shift" handle-shift
+   "z" handle-zoom-toggle
+   "Z" handle-zoom-toggle})
+
 (defn handle-keydown [e]
-  (let [key (.-key e)]
-    (case key
-      "1" (swap! state/ui-state update :selected-piece assoc :size :small :captured? false)
-      "2" (swap! state/ui-state update :selected-piece assoc :size :medium :captured? false)
-      "3" (swap! state/ui-state update :selected-piece assoc :size :large :captured? false)
-      ;; 4, 5, 6 select captured pieces dynamically based on what's available
-      "4" (when-let [size (first (available-captured-sizes))]
-            (swap! state/ui-state update :selected-piece assoc :size size :captured? true))
-      "5" (when-let [size (second (available-captured-sizes))]
-            (swap! state/ui-state update :selected-piece assoc :size size :captured? true))
-      "6" (when-let [size (nth (available-captured-sizes) 2 nil)]
-            (swap! state/ui-state update :selected-piece assoc :size size :captured? true))
-      ("a" "A") (when (can-attack?)
-                  (swap! state/ui-state update :selected-piece assoc :orientation :pointing))
-      ("d" "D") (swap! state/ui-state update :selected-piece assoc :orientation :standing)
-      ("c" "C") (if (get-hovered-piece)
-                  ;; If hovering over a piece, try to capture it
-                  (try-capture-hovered-piece!)
-                  ;; Otherwise, toggle captured piece selection
-                  (when (has-captured-pieces?)
-                    (swap! state/ui-state update-in [:selected-piece :captured?] not)))
-      "Escape" (swap! state/ui-state assoc :drag nil :show-help false :zoom-active false :move-mode false)
-      "?" (swap! state/ui-state update :show-help not)
-      ("m" "M") (let [drag (:drag @state/ui-state)]
-                   (if (and drag (:from-stash? drag))
-                     ;; If dragging from stash, switch to rotation mode
-                     (do
-                       (swap! state/ui-state update :drag assoc :from-stash? false)
-                       (swap! state/ui-state assoc :move-mode false))
-                     ;; Otherwise, toggle move mode as usual
-                     (swap! state/ui-state update :move-mode not)))
-      "Shift" (let [drag (:drag @state/ui-state)]
-                (when (and drag (:from-stash? drag))
-                  (swap! state/ui-state update :drag assoc :from-stash? false)))
-      ("z" "Z") (let [drag (:drag @state/ui-state)
-                      currently-zoomed (:zoom-active @state/ui-state)]
-                  (if drag
-                    ;; Transform drag coordinates when toggling zoom mid-drag
-                    (swap! state/ui-state assoc
-                           :zoom-active (not currently-zoomed)
-                           :drag (transform-drag-for-zoom-toggle drag currently-zoomed))
-                    ;; Not dragging: simple toggle
-                    (swap! state/ui-state update :zoom-active not)))
-      nil)))
+  (when-let [handler (get keyboard-handlers (.-key e))]
+    (handler)))
 
 (defn piece-selector []
   (let [ui @state/ui-state
