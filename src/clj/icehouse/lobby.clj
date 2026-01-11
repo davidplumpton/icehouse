@@ -126,10 +126,23 @@
     (broadcast-players! clients room-id)
     (when (all-ready? clients room-id)
       (let [players (get-room-players @clients room-id)
-            options (get-room-options room-id)]
-        (game/start-game! room-id players options)
-        (utils/broadcast-room! clients room-id {:type msg/game-start
-                                                :game (get @game/games room-id)})))))
+            options (get-room-options room-id)
+            result (game/start-game! room-id players options)]
+        (if (:success result)
+          ;; Game started successfully - broadcast to all players
+          (utils/broadcast-room! clients room-id {:type msg/game-start
+                                                  :game (:game result)})
+          ;; Game failed to start - broadcast error to all players and reset ready status
+          (do
+            (utils/broadcast-room! clients room-id {:type msg/error
+                                                    :code (:code (:error result))
+                                                    :message (:message (:error result))
+                                                    :rule (:rule (:error result))})
+            ;; Reset all players' ready status so they can try again
+            (doseq [[ch client-data] @clients]
+              (when (= room-id (:room-id client-data))
+                (swap! clients assoc-in [ch :ready] false)))
+            (broadcast-players! clients room-id)))))))
 
 (defn handle-disconnect [clients channel]
   (let [room-id (get-in @clients [channel :room-id])]

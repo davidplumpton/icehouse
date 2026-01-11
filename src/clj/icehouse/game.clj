@@ -440,24 +440,36 @@
       base-piece)))
 
 (defn apply-placement!
-  "Update game state with placed piece and decrement stash/captured counts"
+  "Update game state with placed piece and decrement stash/captured counts.
+   Returns {:success true} on success, or {:success false :error <structured-error>} on failure."
   [room-id player-id piece using-captured?]
-  (swap! games (fn [games-map]
-                 (if-let [game (get games-map room-id)]
-                   (let [new-game (-> game
-                                      (update :board conj piece)
-                                      (update :board refresh-all-targets)
-                                      (as-> g
-                                        (if using-captured?
-                                          (update-in g [:players player-id :captured]
-                                                     utils/remove-first-captured (:size piece))
-                                          (update-in g [:players player-id :pieces (:size piece)] dec))))]
-                     (if-let [error (validate-game-state new-game)]
-                       (do
-                         (println "ERROR: Invalid game state after placement:" error)
-                         games-map)
-                       (assoc games-map room-id new-game)))
-                   games-map))))
+  (let [result (atom {:success true})]
+    (swap! games (fn [games-map]
+                   (if-let [game (get games-map room-id)]
+                     (let [new-game (-> game
+                                        (update :board conj piece)
+                                        (update :board refresh-all-targets)
+                                        (as-> g
+                                          (if using-captured?
+                                            (update-in g [:players player-id :captured]
+                                                       utils/remove-first-captured (:size piece))
+                                            (update-in g [:players player-id :pieces (:size piece)] dec))))]
+                       (if-let [error (validate-game-state new-game)]
+                         (do
+                           (println "ERROR: Invalid game state after placement:" error)
+                           (reset! result {:success false
+                                           :error (make-error msg/err-internal-state
+                                                              "Failed to update game state after placement"
+                                                              "An internal validation error occurred. The move was not applied.")})
+                           games-map)
+                         (assoc games-map room-id new-game)))
+                     (do
+                       (reset! result {:success false
+                                       :error (make-error msg/err-invalid-game
+                                                          "Game not found"
+                                                          "The game session no longer exists.")})
+                       games-map))))
+    @result))
 
 (defn handle-post-placement!
   "Handle side effects after placement: recording, broadcasting, game over check"
@@ -506,22 +518,25 @@
         game (get @games room-id)
         using-captured? (boolean (:captured msg))
         piece (when game (construct-piece-for-placement game player-id msg))
-        error (when piece (validate-placement game player-id piece using-captured?))]
-    (if (and piece (nil? error))
-      (do
-        (apply-placement! room-id player-id piece using-captured?)
-        (let [updated-game (get @games room-id)
-              final-piece (logic/find-piece-by-id (:board updated-game) (:id piece))]
-          (if final-piece
-            (handle-post-placement! clients room-id player-id final-piece using-captured?)
-            (do
-              (println "ERROR: Piece not found after placement:" (:id piece))
-              (send-error! channel (make-error msg/err-invalid-game
+        validation-error (when piece (validate-placement game player-id piece using-captured?))]
+    (if (and piece (nil? validation-error))
+      (let [placement-result (apply-placement! room-id player-id piece using-captured?)]
+        (if (:success placement-result)
+          ;; Placement succeeded - proceed with side effects
+          (let [updated-game (get @games room-id)
+                final-piece (logic/find-piece-by-id (:board updated-game) (:id piece))]
+            (if final-piece
+              (handle-post-placement! clients room-id player-id final-piece using-captured?)
+              ;; This shouldn't happen if apply-placement! succeeded, but handle it anyway
+              (send-error! channel (make-error msg/err-internal-state
                                                "Internal error: piece not found after placement"
-                                               "An unexpected error occurred. Please try again."))))))
-      (send-error! channel (or error (make-error msg/err-invalid-game
-                                                  "Invalid game state"
-                                                  "The game is not in a valid state for this action."))))))
+                                               "An unexpected error occurred. Please try again."))))
+          ;; Placement failed - send the error from apply-placement!
+          (send-error! channel (:error placement-result))))
+      ;; Validation failed - send the validation error
+      (send-error! channel (or validation-error (make-error msg/err-invalid-game
+                                                             "Invalid game state"
+                                                             "The game is not in a valid state for this action."))))))
 
 (defn validate-capture
   "Validate that a piece can be captured by the player.
@@ -565,49 +580,68 @@
 
       :else nil)))
 
+(defn apply-capture!
+  "Update game state to capture a piece.
+   Returns {:success true} on success, or {:success false :error <structured-error>} on failure."
+  [room-id player-id piece-id piece-size original-colour]
+  (let [result (atom {:success true})]
+    (swap! games (fn [games-map]
+                   (if-let [g (get games-map room-id)]
+                     (let [new-g (-> g
+                                     (update :board (fn [board]
+                                                      (-> (remove (utils/by-id piece-id) board)
+                                                          vec
+                                                          refresh-all-targets)))
+                                     (update-in [:players player-id :captured]
+                                                conj {:size piece-size :colour original-colour}))]
+                       (if-let [err (validate-game-state new-g)]
+                         (do
+                           (println "ERROR: Invalid game state after capture:" err)
+                           (reset! result {:success false
+                                           :error (make-error msg/err-internal-state
+                                                              "Failed to update game state after capture"
+                                                              "An internal validation error occurred. The capture was not applied.")})
+                           games-map)
+                         (assoc games-map room-id new-g)))
+                     (do
+                       (reset! result {:success false
+                                       :error (make-error msg/err-invalid-game
+                                                          "Game not found"
+                                                          "The game session no longer exists.")})
+                       games-map))))
+    @result))
+
 (defn handle-capture-piece [clients channel msg]
   (let [room-id (get-in @clients [channel :room-id])
         player-id (player-id-from-channel channel)
         game (get @games room-id)
         piece-id (:piece-id msg)
-        error (when game (validate-capture game player-id piece-id))]
-    (if (and game (nil? error))
+        validation-error (when game (validate-capture game player-id piece-id))]
+    (if (and game (nil? validation-error))
       (let [piece (logic/find-piece-by-id (:board game) piece-id)
             piece-size (:size piece)
-            ;; Get the original owner's colour
             original-owner (:player-id piece)
-            original-colour (get-in game [:players original-owner :colour])]
-        ;; Update game state atomically and validate
-        (swap! games (fn [games-map]
-                       (if-let [g (get games-map room-id)]
-                         (let [new-g (-> g
-                                         (update :board (fn [board]
-                                                          (-> (remove (utils/by-id piece-id) board)
-                                                              vec
-                                                              refresh-all-targets)))
-                                         (update-in [:players player-id :captured]
-                                                    conj {:size piece-size :colour original-colour}))]
-                           (if-let [err (validate-game-state new-g)]
-                             (do
-                               (println "ERROR: Invalid game state after capture:" err)
-                               games-map)
-                             (assoc games-map room-id new-g)))
-                         games-map)))
-        ;; Record the capture move for replay
-        (record-move! room-id {:type :capture-piece
-                               :player-id player-id
-                               :piece-id piece-id
-                               :captured-piece {:size piece-size :colour original-colour}})
-        ;; Broadcast updated game state
-        (let [updated-game (get @games room-id)]
-          (utils/broadcast-room! clients room-id
-                                 {:type msg/piece-captured
-                                  :piece-id piece-id
-                                  :captured-by player-id
-                                  :game updated-game})))
-      (send-error! channel (or error (make-error msg/err-invalid-game
-                                                  "Invalid capture"
-                                                  "The capture could not be completed."))))))
+            original-colour (get-in game [:players original-owner :colour])
+            capture-result (apply-capture! room-id player-id piece-id piece-size original-colour)]
+        (if (:success capture-result)
+          ;; Capture succeeded - proceed with side effects
+          (do
+            (record-move! room-id {:type :capture-piece
+                                   :player-id player-id
+                                   :piece-id piece-id
+                                   :captured-piece {:size piece-size :colour original-colour}})
+            (let [updated-game (get @games room-id)]
+              (utils/broadcast-room! clients room-id
+                                     {:type msg/piece-captured
+                                      :piece-id piece-id
+                                      :captured-by player-id
+                                      :game updated-game})))
+          ;; Capture failed - send the error
+          (send-error! channel (:error capture-result))))
+      ;; Validation failed - send the validation error
+      (send-error! channel (or validation-error (make-error msg/err-invalid-game
+                                                             "Invalid capture"
+                                                             "The capture could not be completed."))))))
 
 (defn all-players-finished?
   "Check if all players have pressed finish"
@@ -634,44 +668,80 @@
                               :over-ice over-ice
                               :icehouse-players (vec icehouse-players)}))))
 
+(defn apply-finish!
+  "Update game state to mark a player as finished.
+   Returns {:success true :already-finished? bool} on success,
+   or {:success false :error <structured-error>} on failure."
+  [room-id player-id]
+  (let [result (atom {:success true :already-finished? false})]
+    (swap! games (fn [games-map]
+                   (if-let [g (get games-map room-id)]
+                     (let [current-finished (or (:finished g) [])
+                           already-finished? (some #{player-id} current-finished)]
+                       (if already-finished?
+                         (do
+                           (reset! result {:success true :already-finished? true})
+                           games-map)
+                         (let [new-g (update g :finished (fnil conj []) player-id)]
+                           (if-let [err (validate-game-state new-g)]
+                             (do
+                               (println "ERROR: Invalid game state after finish:" err)
+                               (reset! result {:success false
+                                               :error (make-error msg/err-internal-state
+                                                                  "Failed to update game state"
+                                                                  "An internal validation error occurred.")})
+                               games-map)
+                             (assoc games-map room-id new-g)))))
+                     (do
+                       (reset! result {:success false
+                                       :error (make-error msg/err-invalid-game
+                                                          "Game not found"
+                                                          "The game session no longer exists.")})
+                       games-map))))
+    @result))
+
 (defn handle-finish
   "Handle a player pressing the finish button"
   [clients channel _msg]
   (let [room-id (get-in @clients [channel :room-id])
         player-id (player-id-from-channel channel)
         game (get @games room-id)]
-    (when game
-      ;; Add player to finished vector and validate (only if not already finished)
-      (swap! games (fn [games-map]
-                     (if-let [g (get games-map room-id)]
-                       (let [current-finished (or (:finished g) [])
-                             already-finished? (some #{player-id} current-finished)
-                             new-g (if already-finished?
-                                     g
-                                     (update g :finished (fnil conj []) player-id))]
-                         (if-let [err (validate-game-state new-g)]
-                           (do (println "ERROR: Invalid game state after finish:" err) games-map)
-                           (assoc games-map room-id new-g)))
-                       games-map)))
-      (let [updated-game (get @games room-id)]
-        ;; Broadcast that this player finished
-        (utils/broadcast-room! clients room-id
-                               {:type msg/player-finished
-                                :player-id player-id
-                                :game updated-game})
-        ;; Check if all players have finished
-        (when (all-players-finished? updated-game)
-          (end-game! clients room-id :all-players-finished))))))
+    (if game
+      (let [finish-result (apply-finish! room-id player-id)]
+        (if (:success finish-result)
+          ;; Finish succeeded - broadcast and check for game end
+          (let [updated-game (get @games room-id)]
+            (utils/broadcast-room! clients room-id
+                                   {:type msg/player-finished
+                                    :player-id player-id
+                                    :game updated-game})
+            (when (all-players-finished? updated-game)
+              (end-game! clients room-id :all-players-finished)))
+          ;; Finish failed - send the error
+          (send-error! channel (:error finish-result))))
+      ;; No game found
+      (send-error! channel (make-error msg/err-invalid-game
+                                        "No active game"
+                                        "You must be in an active game to finish.")))))
 
 (defn start-game!
-  "Start a new game with the given players and options"
+  "Start a new game with the given players and options.
+   Returns {:success true :game <game-state>} on success,
+   or {:success false :error <structured-error>} on failure."
   ([room-id players]
    (start-game! room-id players {}))
   ([room-id players options]
    (let [new-game (create-game room-id players options)]
      (if-let [error (validate-game-state new-game)]
-       (println "ERROR: Failed to start game due to invalid initial state:" error)
-       (swap! games assoc room-id new-game)))))
+       (do
+         (println "ERROR: Failed to start game due to invalid initial state:" error)
+         {:success false
+          :error (make-error msg/err-internal-state
+                             "Failed to create game"
+                             "An internal validation error prevented the game from starting.")})
+       (do
+         (swap! games assoc room-id new-game)
+         {:success true :game new-game})))))
 
 ;; =============================================================================
 ;; Replay Handlers

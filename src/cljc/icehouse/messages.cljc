@@ -75,3 +75,4 @@
 ;; General errors
 (def err-invalid-game "INVALID_GAME_STATE")
 (def err-invalid-message "INVALID_MESSAGE")
+(def err-internal-state "INTERNAL_STATE_ERROR")
