@@ -507,56 +507,70 @@
     (.arc ctx range-end-x range-end-y 5 0 (* 2 js/Math.PI))
     (.stroke ctx)))
 
+(defn- get-preview-colour
+  "Get the colour for a preview piece, handling captured pieces."
+  [game player-id size captured? default-colour]
+  (if captured?
+    (let [player-data (get-in game [:players (keyword player-id)])
+          captured-pieces (or (:captured player-data) [])
+          cap-piece (utils/get-captured-piece captured-pieces size)]
+      (or (:colour cap-piece) default-colour))
+    default-colour))
+
+(defn- calculate-preview-angle
+  "Calculate the angle for the preview piece based on drag state."
+  [drag-state]
+  (let [{:keys [start-x start-y current-x current-y locked-angle]} drag-state
+        in-shift-mode? (and (= start-x current-x) (= start-y current-y))]
+    (if in-shift-mode?
+      (or locked-angle 0)
+      (if (and current-x current-y)
+        (geo/calculate-angle start-x start-y current-x current-y)
+        0))))
+
+(defn- draw-direction-line
+  "Draw the direction indicator line from start to current position."
+  [ctx draw-start-x draw-start-y draw-current-x draw-current-y zoom-state]
+  (set! (.-strokeStyle ctx) "rgba(255,255,255,0.5)")
+  (set-line-width ctx 2 zoom-state)
+  (.beginPath ctx)
+  (.moveTo ctx draw-start-x draw-start-y)
+  (.lineTo ctx draw-current-x draw-current-y)
+  (.stroke ctx))
+
+(defn- draw-preview-piece
+  "Draw the preview piece with appropriate colour based on overlap state."
+  [ctx x y size colour orientation angle has-overlap? zoom-state]
+  (.save ctx)
+  (set! (.-globalAlpha ctx) preview-alpha)
+  (let [draw-colour (if has-overlap? "#ff3333" colour)]
+    (draw-pyramid ctx x y size draw-colour orientation angle {:zoom-state zoom-state}))
+  (.restore ctx))
+
 (defn draw-drag-preview
   "Draw the preview of the piece being dragged/placed"
   [ctx game drag-state selected-piece player-colour player-id zoom-state]
-  (let [{:keys [start-x start-y current-x current-y locked-angle]} drag-state
+  (let [{:keys [start-x start-y current-x current-y]} drag-state
         {:keys [size orientation captured?]} selected-piece
-        ;; For captured pieces, use the captured piece's original colour
-        preview-colour (if captured?
-                         (let [player-data (get-in game [:players (keyword player-id)])
-                               captured-pieces (or (:captured player-data) [])
-                               cap-piece (utils/get-captured-piece captured-pieces size)]
-                           (or (:colour cap-piece) player-colour))
-                         player-colour)
-        ;; Convert drag coords from scaled space to world coords for drawing
+        preview-colour (get-preview-colour game player-id size captured? player-colour)
         [draw-start-x draw-start-y] (scale-to-world-coords start-x start-y zoom-state)
         [draw-current-x draw-current-y] (scale-to-world-coords current-x current-y zoom-state)
-        ;; In shift mode (position adjustment), start equals current, so use locked-angle
-        ;; In normal mode, calculate angle from start to current
         in-shift-mode? (and (= start-x current-x) (= start-y current-y))
-        angle (if in-shift-mode?
-                (or locked-angle 0)
-                (if (and current-x current-y)
-                  (geo/calculate-angle start-x start-y current-x current-y)
-                  0))
-        is-attacking? (geo/pointing? selected-piece)
-        ;; Create preview piece for collision detection (uses world coords, not draw coords)
+        angle (calculate-preview-angle drag-state)
         preview-piece {:x draw-start-x :y draw-start-y :size size :orientation orientation :angle angle}
-        board (:board game)
-        overlapping (find-overlapping-pieces preview-piece board)
-        has-overlap? (seq overlapping)]
-    ;; Draw a line showing the direction (only in normal mode)
+        overlapping (find-overlapping-pieces preview-piece (:board game))]
+    ;; Draw direction line (only in normal mode)
     (when (and current-x current-y (not in-shift-mode?))
-      (set! (.-strokeStyle ctx) "rgba(255,255,255,0.5)")
-      (set-line-width ctx 2 zoom-state)
-      (.beginPath ctx)
-      (.moveTo ctx draw-start-x draw-start-y)
-      (.lineTo ctx draw-current-x draw-current-y)
-      (.stroke ctx))
-    ;; Draw attack range indicator and target highlights for attacking pieces
-    (when (and is-attacking? current-x current-y)
+      (draw-direction-line ctx draw-start-x draw-start-y draw-current-x draw-current-y zoom-state))
+    ;; Draw attack preview for attacking pieces
+    (when (and (geo/pointing? selected-piece) current-x current-y)
       (draw-attack-preview ctx game draw-start-x draw-start-y angle size player-id zoom-state))
-    ;; Highlight overlapping board pieces
+    ;; Highlight overlapping pieces
     (doseq [piece overlapping]
       (draw-overlap-highlight ctx piece zoom-state))
-    ;; Draw preview piece with transparency (red tint if overlapping)
-    (.save ctx)
-    (set! (.-globalAlpha ctx) preview-alpha)
-    (if has-overlap?
-      (draw-pyramid ctx draw-start-x draw-start-y size "#ff3333" orientation angle {:zoom-state zoom-state})
-      (draw-pyramid ctx draw-start-x draw-start-y size preview-colour orientation angle {:zoom-state zoom-state}))
-    (.restore ctx)))
+    ;; Draw the preview piece
+    (draw-preview-piece ctx draw-start-x draw-start-y size preview-colour
+                        orientation angle (seq overlapping) zoom-state)))
 
 (defn draw-with-preview [ctx game drag-state selected-piece player-colour hover-pos player-id zoom-state]
   "Draw the board and optionally a preview of the piece being placed"
