@@ -363,9 +363,10 @@
           game {:players {"p1" {:pieces {:small 5 :medium 5 :large 5}}}
                 :board [defender]}
           ;; Attacker at x=100, pointing left (angle = PI), defender is to the right
-          attacker {:x 100 :y 100 :size :small :orientation :pointing :angle Math/PI}]
-      (is (= "Attacking piece must be pointed at an opponent's piece"
-             (game/validate-placement game "p1" attacker)))))
+          attacker {:x 100 :y 100 :size :small :orientation :pointing :angle Math/PI}
+          error (game/validate-placement game "p1" attacker)]
+      (is (= "NO_ATTACK_TARGET" (:code error)))
+      (is (= "Attacking piece must be pointed at an opponent's standing piece" (:message error)))))
 
   (testing "attack pointed at enemy but out of range"
     ;; Small piece has range of 60px (height = 2 * 0.75 * 40)
@@ -375,9 +376,10 @@
           game {:players {"p1" {:pieces {:small 5 :medium 5 :large 5}}}
                 :board [defender]}
           ;; Attacker at x=100, pointing right (angle = 0) at defender out of range
-          attacker {:x 100 :y 100 :size :small :orientation :pointing :angle 0}]
-      (is (= "Target is out of range"
-             (game/validate-placement game "p1" attacker)))))
+          attacker {:x 100 :y 100 :size :small :orientation :pointing :angle 0}
+          error (game/validate-placement game "p1" attacker)]
+      (is (= "TARGET_OUT_OF_RANGE" (:code error)))
+      (is (= "Target is out of range" (:message error)))))
 
   (testing "valid attack in trajectory and in range"
     ;; Large piece has range of 90px (height), tip extends 45px from center
@@ -397,9 +399,9 @@
     (let [own-piece {:id "d1" :player-id "p1" :x 200 :y 100 :size :small :orientation :standing :angle 0}
           game {:players {"p1" {:pieces {:small 5 :medium 5 :large 5}}}
                 :board [own-piece]}
-          attacker {:x 130 :y 100 :size :large :orientation :pointing :angle 0}]
-      (is (= "Attacking piece must be pointed at an opponent's piece"
-             (game/validate-placement game "p1" attacker)))))
+          attacker {:x 130 :y 100 :size :large :orientation :pointing :angle 0}
+          error (game/validate-placement game "p1" attacker)]
+      (is (= "NO_ATTACK_TARGET" (:code error)))))
 
   (testing "cannot attack pointing piece (must target standing)"
     ;; Attacker pointing at enemy's attacking piece should fail
@@ -407,9 +409,9 @@
     (let [enemy-attacker {:id "d1" :player-id "p2" :x 200 :y 100 :size :small :orientation :pointing :angle (- (/ Math/PI 2))}
           game {:players {"p1" {:pieces {:small 5 :medium 5 :large 5}}}
                 :board [enemy-attacker]}
-          attacker {:x 130 :y 100 :size :large :orientation :pointing :angle 0}]
-      (is (= "Attacking piece must be pointed at an opponent's piece"
-             (game/validate-placement game "p1" attacker))))))
+          attacker {:x 130 :y 100 :size :large :orientation :pointing :angle 0}
+          error (game/validate-placement game "p1" attacker)]
+      (is (= "NO_ATTACK_TARGET" (:code error))))))
 
 (deftest in-front-of-test
   (testing "ray from tip intersects target at various angles"
@@ -552,9 +554,9 @@
           blocker {:id "b1" :player-id "alice" :x 120 :y 100 :size :small :orientation :standing :angle 0}
           game {:players {"alice" {:pieces {:small 5 :medium 5 :large 5}}}
                 :board [defender blocker]}
-          attacker {:x 50 :y 100 :size :large :orientation :pointing :angle 0}]
-      (is (= "Another piece is blocking the line of attack"
-             (game/validate-placement game "alice" attacker)))))
+          attacker {:x 50 :y 100 :size :large :orientation :pointing :angle 0}
+          error (game/validate-placement game "alice" attacker)]
+      (is (= "LINE_OF_SIGHT_BLOCKED" (:code error)))))
 
   (testing "valid attack with no blockers succeeds"
     (let [defender {:id "d1" :player-id "bob" :x 200 :y 100 :size :small :orientation :standing :angle 0}
@@ -597,7 +599,7 @@
           ;; These would overlap
           attacker {:x 340 :y 200 :size :large :orientation :pointing :angle Math/PI}
           error (game/validate-placement game "alice" attacker)]
-      (is (= "Piece would overlap with existing piece" error))))
+      (is (= "PIECE_OVERLAP" (:code error)))))
 
   (testing "attack fails when target is out of range"
     (let [defender {:id "bob-d1" :player-id "bob" :x 200 :y 200
@@ -610,7 +612,7 @@
           ;; Tip at x=455, defender at x=200, distance=255 >> 90
           attacker {:x 500 :y 200 :size :large :orientation :pointing :angle Math/PI}
           error (game/validate-placement game "alice" attacker)]
-      (is (= "Target is out of range" error))))
+      (is (= "TARGET_OUT_OF_RANGE" (:code error)))))
 
   (testing "attack with acute angle relative to target"
     ;; User bug scenario: attack at an angle, not straight at target
@@ -646,41 +648,41 @@
     (let [game {:players {"p1" {:pieces {:small 5 :medium 5 :large 5}}}
                 :board []}
           ;; Small piece is 40x40, so at x=15 the left edge would be at x=-5
-          piece {:x 15 :y 375 :size :small :orientation :standing :angle 0}]
-      (is (= "Piece must be placed within the play area"
-             (game/validate-placement game "p1" piece)))))
+          piece {:x 15 :y 375 :size :small :orientation :standing :angle 0}
+          error (game/validate-placement game "p1" piece)]
+      (is (= "OUT_OF_BOUNDS" (:code error)))))
 
   (testing "piece partially outside top edge is invalid"
     (let [game {:players {"p1" {:pieces {:small 5 :medium 5 :large 5}}}
                 :board []}
           ;; Small piece at y=15, top edge at y=-5
-          piece {:x 500 :y 15 :size :small :orientation :standing :angle 0}]
-      (is (= "Piece must be placed within the play area"
-             (game/validate-placement game "p1" piece)))))
+          piece {:x 500 :y 15 :size :small :orientation :standing :angle 0}
+          error (game/validate-placement game "p1" piece)]
+      (is (= "OUT_OF_BOUNDS" (:code error)))))
 
   (testing "piece partially outside right edge is invalid"
     (let [game {:players {"p1" {:pieces {:small 5 :medium 5 :large 5}}}
                 :board []}
           ;; Play area is now 1000px wide. At x=985, right edge at 985+20=1005 > 1000
-          piece {:x 985 :y 375 :size :small :orientation :standing :angle 0}]
-      (is (= "Piece must be placed within the play area"
-             (game/validate-placement game "p1" piece)))))
+          piece {:x 985 :y 375 :size :small :orientation :standing :angle 0}
+          error (game/validate-placement game "p1" piece)]
+      (is (= "OUT_OF_BOUNDS" (:code error)))))
 
   (testing "piece partially outside bottom edge is invalid"
     (let [game {:players {"p1" {:pieces {:small 5 :medium 5 :large 5}}}
                 :board []}
           ;; Play area is now 750px tall. At y=735, bottom edge at 735+20=755 > 750
-          piece {:x 500 :y 735 :size :small :orientation :standing :angle 0}]
-      (is (= "Piece must be placed within the play area"
-             (game/validate-placement game "p1" piece)))))
+          piece {:x 500 :y 735 :size :small :orientation :standing :angle 0}
+          error (game/validate-placement game "p1" piece)]
+      (is (= "OUT_OF_BOUNDS" (:code error)))))
 
   (testing "large piece near edge is invalid"
     (let [game {:players {"p1" {:pieces {:small 5 :medium 5 :large 5}}}
                 :board []}
           ;; Large piece is 60x60, so at x=25 left edge would be at x=-5
-          piece {:x 25 :y 375 :size :large :orientation :standing :angle 0}]
-      (is (= "Piece must be placed within the play area"
-             (game/validate-placement game "p1" piece)))))
+          piece {:x 25 :y 375 :size :large :orientation :standing :angle 0}
+          error (game/validate-placement game "p1" piece)]
+      (is (= "OUT_OF_BOUNDS" (:code error)))))
 
   (testing "piece at max valid position (bottom-right corner)"
     (let [game {:players {"p1" {:pieces {:small 5 :medium 5 :large 5}}}

@@ -100,25 +100,58 @@
                               :speed 1}))
 
 (defn- handle-error
-  "Handle error message from server"
+  "Handle error message from server. Displays message and optionally the rule explanation.
+   Error data may contain :code (for programmatic handling), :message, and :rule."
   [data]
-  (js/console.log "Error from server:" (:message data))
-  (reset! state/error-message (:message data))
-  (js/setTimeout #(reset! state/error-message nil) error-message-timeout-ms))
+  (let [code (:code data)
+        message (:message data)
+        rule (:rule data)
+        ;; Include rule explanation in display if available
+        display-message (if rule
+                          (str message "\n\n" rule)
+                          message)]
+    (js/console.log "Error from server:" message)
+    (when code (js/console.log "Error code:" code))
+    (when rule (js/console.log "Rule:" rule))
+    (reset! state/error-message display-message)
+    (js/setTimeout #(reset! state/error-message nil) error-message-timeout-ms)))
+
+(defn- handle-validation-result
+  "Handle validation result from server (response to validate-move).
+   Logs the result for debugging/AI agents. Does not display to user."
+  [data]
+  (js/console.log "Validation result:" (clj->js data))
+  (when-not (:valid data)
+    (let [error (:error data)]
+      (js/console.log "Move invalid - Code:" (:code error)
+                      "Message:" (:message error)
+                      "Rule:" (:rule error)))))
+
+(defn- handle-legal-moves
+  "Handle legal moves response from server (response to query-legal-moves).
+   Logs the result for debugging/AI agents. Does not display to user."
+  [data]
+  (js/console.log "Legal moves:" (clj->js data))
+  (when (:error data)
+    (let [error (:error data)]
+      (js/console.log "Legal moves query failed - Code:" (:code error)
+                      "Message:" (:message error)))))
 
 (def ^:private message-handlers
   "Map of message types to handler functions"
-  {msg/joined         handle-joined
-   msg/players        handle-players
-   msg/options        handle-options
-   msg/game-start     handle-game-start
-   msg/piece-placed   handle-piece-placed
-   msg/piece-captured handle-piece-captured
-   msg/player-finished handle-player-finished
-   msg/game-over      handle-game-over
-   msg/game-list      handle-game-list
-   msg/game-record    handle-game-record
-   msg/error          handle-error})
+  {msg/joined            handle-joined
+   msg/players           handle-players
+   msg/options           handle-options
+   msg/game-start        handle-game-start
+   msg/piece-placed      handle-piece-placed
+   msg/piece-captured    handle-piece-captured
+   msg/player-finished   handle-player-finished
+   msg/game-over         handle-game-over
+   msg/game-list         handle-game-list
+   msg/game-record       handle-game-record
+   msg/error             handle-error
+   msg/validation-result handle-validation-result
+   msg/legal-moves       handle-legal-moves})
 
 ;; =============================================================================
 ;; Validation Helpers
@@ -242,3 +275,18 @@
   "Signal that the player wants to end the game"
   []
   (send! {:type msg/finish}))
+
+(defn validate-move!
+  "Validate a move without executing it. Server responds with validation-result message.
+   For placement: (validate-move! {:action 'place' :x 100 :y 200 :size 'small' :orientation 'standing' :angle 0})
+   For capture: (validate-move! {:action 'capture' :piece-id 'abc123'})"
+  [params]
+  (send! (merge {:type msg/validate-move} params)))
+
+(defn query-legal-moves!
+  "Query legal placement positions for a piece type. Server responds with legal-moves message.
+   Options: :size ('small'|'medium'|'large'), :orientation ('standing'|'pointing'),
+            :captured (true|false), :sample-step (grid spacing, default 50),
+            :angle-step (angle increment for attacks, default 15)"
+  [params]
+  (send! (merge {:type msg/query-legal-moves} params)))

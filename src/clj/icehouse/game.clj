@@ -192,8 +192,16 @@
                     :timestamp (System/currentTimeMillis)
                     :elapsed-ms elapsed)))))
 
+(defn make-error
+  "Create a structured error response with code, message, and rule explanation."
+  [code message rule]
+  {:code code
+   :message message
+   :rule rule})
+
 (defn validate-placement
-  "Validate piece placement, returns nil if valid or error message if invalid.
+  "Validate piece placement, returns nil if valid or structured error map if invalid.
+   Error map contains :code (for programmatic handling), :message, and :rule (game rule explanation).
    If using-captured? is true, checks captured pieces instead of regular pieces."
   ([game player-id piece]
    (validate-placement game player-id piece false))
@@ -217,23 +225,38 @@
      (cond
        (not (pos? remaining))
        (if using-captured?
-         "No captured pieces of that size remaining"
-         "No pieces of that size remaining")
+         (make-error msg/err-no-captured
+                     "No captured pieces of that size remaining"
+                     "You can only place captured pieces that you have captured from opponents.")
+         (make-error msg/err-no-pieces
+                     (str "No " (name size) " pieces remaining")
+                     "Each player has a limited stash of pieces (5 small, 5 medium, 5 large). Once placed, pieces cannot be moved."))
 
        (not (within-play-area? piece-with-owner))
-       "Piece must be placed within the play area"
+       (make-error msg/err-out-of-bounds
+                   "Piece must be placed within the play area"
+                   "All pieces must be placed entirely within the rectangular play area boundaries.")
 
        (intersects-any-piece? piece-with-owner board)
-       "Piece would overlap with existing piece"
+       (make-error msg/err-overlap
+                   "Piece would overlap with existing piece"
+                   "Pieces cannot overlap. Each piece must have its own space on the board.")
 
        (and is-attacking? (not (has-potential-target? piece-with-owner board)))
-       "Attacking piece must be pointed at an opponent's piece"
+       (make-error msg/err-no-target
+                   "Attacking piece must be pointed at an opponent's standing piece"
+                   "Attacking (pointing) pieces must be aimed at an opponent's standing (defending) piece. You cannot attack your own pieces or other attacking pieces.")
 
        (and is-attacking? (not (has-target-in-range? piece-with-owner board)))
-       "Target is out of range"
+       (make-error msg/err-out-of-range
+                   "Target is out of range"
+                   (str "Attack range depends on piece size: small=60px, medium=75px, large=90px. "
+                        "The target must be within this distance from the attacking piece's tip."))
 
        (and is-attacking? (has-blocked-target? piece-with-owner board))
-       "Another piece is blocking the line of attack"
+       (make-error msg/err-blocked
+                   "Another piece is blocking the line of attack"
+                   "Attacking pieces must have a clear line of sight to their target. Other pieces between the attacker and target block the attack.")
 
        :else nil))))
 
@@ -467,6 +490,16 @@
                                 :over-ice over-ice
                                 :icehouse-players (vec icehouse-players)})))))
 
+(defn send-error!
+  "Send a structured error to the client. Handles both old string errors and new structured errors."
+  [channel error]
+  (if (map? error)
+    (utils/send-msg! channel {:type msg/error
+                              :code (:code error)
+                              :message (:message error)
+                              :rule (:rule error)})
+    (utils/send-msg! channel {:type msg/error :message (or error "Unknown error")})))
+
 (defn handle-place-piece [clients channel msg]
   (let [room-id (get-in @clients [channel :room-id])
         player-id (player-id-from-channel channel)
@@ -483,35 +516,52 @@
             (handle-post-placement! clients room-id player-id final-piece using-captured?)
             (do
               (println "ERROR: Piece not found after placement:" (:id piece))
-              (utils/send-msg! channel {:type msg/error :message "Internal error: piece not found after placement"})))))
-      (utils/send-msg! channel {:type msg/error :message (or error "Invalid game state")}))))
+              (send-error! channel (make-error msg/err-invalid-game
+                                               "Internal error: piece not found after placement"
+                                               "An unexpected error occurred. Please try again."))))))
+      (send-error! channel (or error (make-error msg/err-invalid-game
+                                                  "Invalid game state"
+                                                  "The game is not in a valid state for this action."))))))
 
 (defn validate-capture
   "Validate that a piece can be captured by the player.
-   Returns nil if valid, or error message if invalid."
+   Returns nil if valid, or structured error map if invalid."
   [game player-id piece-id]
   (let [board (:board game)
         piece (logic/find-piece-by-id board piece-id)
         over-ice (logic/calculate-over-ice board)]
     (cond
       (nil? piece)
-      "Piece not found"
+      (make-error msg/err-piece-not-found
+                  "Piece not found"
+                  "The piece you tried to capture no longer exists on the board.")
 
       (not (geo/pointing? piece))
-      "Can only capture attacking pieces"
+      (make-error msg/err-not-attacking
+                  "Can only capture attacking pieces"
+                  "Only attacking (pointing) pieces can be captured. Standing (defending) pieces cannot be captured.")
 
       (not (:target-id piece))
-      "Piece has no target"
+      (make-error msg/err-no-target-assigned
+                  "Piece has no target"
+                  "This attacking piece has no valid target assigned, so it cannot be captured.")
 
       (nil? (get over-ice (:target-id piece)))
-      "Target is not over-iced"
+      (make-error msg/err-not-over-iced
+                  "Target is not over-iced"
+                  "A defender must be 'over-iced' (total attacking pips > defender pips) before its attackers can be captured. Current attack strength is insufficient.")
 
       (not= (utils/normalize-player-id (:defender-owner (get over-ice (:target-id piece))))
             (utils/normalize-player-id player-id))
-      "You can only capture attackers targeting your own pieces"
+      (make-error msg/err-not-your-defender
+                  "You can only capture attackers targeting your own pieces"
+                  "You can only capture attacking pieces that are targeting YOUR defenders. You cannot capture pieces attacking other players.")
 
       (> (geo/piece-pips piece) (:excess (get over-ice (:target-id piece))))
-      "Attacker's pip value exceeds remaining excess"
+      (make-error msg/err-exceeds-excess
+                  (str "Attacker's pip value (" (geo/piece-pips piece) ") exceeds capture limit ("
+                       (:excess (get over-ice (:target-id piece))) ")")
+                  "The captured piece's pip value cannot exceed the 'excess' over-ice amount. Excess = total attacking pips - defender pips.")
 
       :else nil)))
 
@@ -555,7 +605,9 @@
                                   :piece-id piece-id
                                   :captured-by player-id
                                   :game updated-game})))
-      (utils/send-msg! channel {:type msg/error :message (or error "Invalid capture")}))))
+      (send-error! channel (or error (make-error msg/err-invalid-game
+                                                  "Invalid capture"
+                                                  "The capture could not be completed."))))))
 
 (defn all-players-finished?
   "Check if all players have pressed finish"
@@ -642,3 +694,121 @@
     (utils/send-msg! channel
                      {:type msg/error
                       :message "Game not found"})))
+
+;; =============================================================================
+;; Move Validation Handlers (for AI agents and pre-flight checks)
+;; =============================================================================
+
+(defn handle-validate-move
+  "Validate a move without executing it. Returns validation result with detailed error info if invalid.
+   Supports both placement and capture validation based on :action field.
+   Request format for placement: {:type 'validate-move' :action 'place' :x :y :size :orientation :angle :captured}
+   Request format for capture: {:type 'validate-move' :action 'capture' :piece-id '...'}"
+  [clients channel msg]
+  (let [room-id (get-in @clients [channel :room-id])
+        player-id (player-id-from-channel channel)
+        game (get @games room-id)
+        action (keyword (or (:action msg) "place"))]
+    (if-not game
+      (utils/send-msg! channel {:type msg/validation-result
+                                :valid false
+                                :error (make-error msg/err-invalid-game
+                                                   "No active game"
+                                                   "You must be in an active game to validate moves.")})
+      (case action
+        :place
+        (let [using-captured? (boolean (:captured msg))
+              piece (construct-piece-for-placement game player-id msg)
+              error (validate-placement game player-id piece using-captured?)]
+          (utils/send-msg! channel {:type msg/validation-result
+                                    :valid (nil? error)
+                                    :action "place"
+                                    :error error
+                                    :piece-preview (when (nil? error)
+                                                     {:id (:id piece)
+                                                      :target-id (:target-id piece)})}))
+        :capture
+        (let [error (validate-capture game player-id (:piece-id msg))]
+          (utils/send-msg! channel {:type msg/validation-result
+                                    :valid (nil? error)
+                                    :action "capture"
+                                    :error error}))
+        ;; Unknown action
+        (utils/send-msg! channel {:type msg/validation-result
+                                  :valid false
+                                  :error (make-error msg/err-invalid-message
+                                                     (str "Unknown action: " action)
+                                                     "Valid actions are 'place' or 'capture'.")})))))
+
+(defn generate-sample-positions
+  "Generate sample positions across the play area for legal move checks.
+   Returns a grid of positions spaced by step-size pixels."
+  [step-size]
+  (for [x (range 0 (inc play-area-width) step-size)
+        y (range 0 (inc play-area-height) step-size)]
+    [x y]))
+
+(defn find-legal-placements
+  "Find legal placement positions for a piece of given size and orientation.
+   For standing pieces, samples a grid of positions.
+   For attacking pieces, also varies the angle to find valid attack positions.
+   Returns a list of valid placement specs."
+  [game player-id size orientation using-captured? sample-step angle-step]
+  (let [positions (generate-sample-positions sample-step)
+        angles (if (= orientation :standing)
+                 [0] ;; Standing pieces don't need angle variation
+                 (range 0 360 angle-step))]
+    (for [[x y] positions
+          angle angles
+          :let [piece {:x x :y y :size size :orientation orientation :angle angle}
+                error (validate-placement game player-id piece using-captured?)]
+          :when (nil? error)]
+      {:x x :y y :angle angle})))
+
+(defn handle-query-legal-moves
+  "Query legal move positions for a given piece type.
+   Returns sample valid positions where the piece could be placed.
+   Request format: {:type 'query-legal-moves' :size 'small'|'medium'|'large'
+                    :orientation 'standing'|'pointing' :captured true|false
+                    :sample-step 50 :angle-step 15}
+   sample-step controls position grid granularity (default 50px).
+   angle-step controls angle variation for attacks (default 15 degrees)."
+  [clients channel msg]
+  (let [room-id (get-in @clients [channel :room-id])
+        player-id (player-id-from-channel channel)
+        game (get @games room-id)
+        size (keyword (or (:size msg) "small"))
+        orientation (keyword (or (:orientation msg) "standing"))
+        using-captured? (boolean (:captured msg))
+        sample-step (or (:sample-step msg) 50)
+        angle-step (or (:angle-step msg) 15)]
+    (if-not game
+      (utils/send-msg! channel {:type msg/legal-moves
+                                :valid-positions []
+                                :error (make-error msg/err-invalid-game
+                                                   "No active game"
+                                                   "You must be in an active game to query legal moves.")})
+      (let [player (get-in game [:players player-id])
+            remaining (if using-captured?
+                        (utils/count-captured-by-size (:captured player) size)
+                        (get-in player [:pieces size] 0))]
+        (if (not (pos? remaining))
+          (utils/send-msg! channel {:type msg/legal-moves
+                                    :valid-positions []
+                                    :error (if using-captured?
+                                             (make-error msg/err-no-captured
+                                                         "No captured pieces of that size"
+                                                         "You have no captured pieces of this size to place.")
+                                             (make-error msg/err-no-pieces
+                                                         (str "No " (name size) " pieces remaining")
+                                                         "You have placed all pieces of this size."))})
+          (let [legal-positions (find-legal-placements game player-id size orientation
+                                                        using-captured? sample-step angle-step)]
+            (utils/send-msg! channel {:type msg/legal-moves
+                                      :size (name size)
+                                      :orientation (name orientation)
+                                      :captured using-captured?
+                                      :valid-positions (vec (take 100 legal-positions)) ;; Limit to 100 samples
+                                      :total-found (count legal-positions)
+                                      :sample-step sample-step
+                                      :angle-step angle-step})))))))

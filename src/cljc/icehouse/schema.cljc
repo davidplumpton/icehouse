@@ -203,6 +203,31 @@
   [:map
    [:type [:enum "finish"]]])
 
+(def ValidateMoveMessage
+  "Client validate-move message - checks move validity without executing"
+  [:map
+   [:type [:enum "validate-move"]]
+   [:action {:optional true} [:enum "place" "capture"]]
+   ;; For placement validation:
+   [:x {:optional true} :int]
+   [:y {:optional true} :int]
+   [:size {:optional true} [:enum "small" "medium" "large"]]
+   [:orientation {:optional true} [:enum "standing" "pointing"]]
+   [:angle {:optional true} [:or :double :int]]
+   [:captured {:optional true} :boolean]
+   ;; For capture validation:
+   [:piece-id {:optional true} id-string]])
+
+(def QueryLegalMovesMessage
+  "Client query-legal-moves message - requests valid placement positions"
+  [:map
+   [:type [:enum "query-legal-moves"]]
+   [:size {:optional true} [:enum "small" "medium" "large"]]
+   [:orientation {:optional true} [:enum "standing" "pointing"]]
+   [:captured {:optional true} :boolean]
+   [:sample-step {:optional true} :int]
+   [:angle-step {:optional true} :int]])
+
 (def ClientMessage
   "Union of all client message types"
   [:or
@@ -215,7 +240,9 @@
    CapturePieceMessage
    FinishMessage
    ListGamesMessage
-   LoadGameMessage])
+   LoadGameMessage
+   ValidateMoveMessage
+   QueryLegalMovesMessage])
 
 ;; Server -> Client
 
@@ -303,10 +330,46 @@
    [:record [:or GameRecord :nil]]])
 
 (def ErrorMessage
-  "Server error message"
+  "Server error message with optional structured error info"
   [:map
    [:type [:enum "error"]]
-   [:message :string]])
+   [:message :string]
+   [:code {:optional true} :string]
+   [:rule {:optional true} :string]])
+
+(def StructuredError
+  "Structured error with code, message, and rule explanation"
+  [:map
+   [:code :string]
+   [:message :string]
+   [:rule :string]])
+
+(def ValidationResultMessage
+  "Server validation result message - response to validate-move"
+  [:map
+   [:type [:enum "validation-result"]]
+   [:valid :boolean]
+   [:action {:optional true} [:enum "place" "capture"]]
+   [:error {:optional true} [:or StructuredError :nil]]
+   [:piece-preview {:optional true} [:map
+                                     [:id id-string]
+                                     [:target-id {:optional true} [:or id-string :nil]]]]])
+
+(def LegalMovesMessage
+  "Server legal-moves message - response to query-legal-moves"
+  [:map
+   [:type [:enum "legal-moves"]]
+   [:valid-positions [:vector [:map
+                               [:x :int]
+                               [:y :int]
+                               [:angle [:or :double :int]]]]]
+   [:size {:optional true} :string]
+   [:orientation {:optional true} :string]
+   [:captured {:optional true} :boolean]
+   [:total-found {:optional true} :int]
+   [:sample-step {:optional true} :int]
+   [:angle-step {:optional true} :int]
+   [:error {:optional true} [:or StructuredError :nil]]])
 
 (def ServerMessage
   "Union of all server message types"
@@ -321,7 +384,9 @@
    GameOverMessage
    GameListMessage
    GameRecordMessage
-   ErrorMessage])
+   ErrorMessage
+   ValidationResultMessage
+   LegalMovesMessage])
 
 ;; =============================================================================
 ;; UI State Schemas

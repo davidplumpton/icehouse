@@ -37,6 +37,8 @@
             msg/place-piece (game/handle-place-piece clients channel message)
             msg/capture-piece (game/handle-capture-piece clients channel message)
             msg/finish (game/handle-finish clients channel message)
+            msg/validate-move (game/handle-validate-move clients channel message)
+            msg/query-legal-moves (game/handle-query-legal-moves clients channel message)
 
             ;; Replay messages
             msg/list-games (game/handle-list-games channel)
