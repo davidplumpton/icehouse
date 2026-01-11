@@ -199,6 +199,76 @@
    :message message
    :rule rule})
 
+(defn- check-piece-availability
+  "Validates that the player has pieces of the requested size available.
+   Returns nil if valid, or an error map if no pieces remain."
+  [remaining size using-captured?]
+  (when-not (pos? remaining)
+    (if using-captured?
+      (make-error msg/err-no-captured
+                  "No captured pieces of that size remaining"
+                  "You can only place captured pieces that you have captured from opponents.")
+      (make-error msg/err-no-pieces
+                  (str "No " (name size) " pieces remaining")
+                  "Each player has a limited stash of pieces (5 small, 5 medium, 5 large). Once placed, pieces cannot be moved."))))
+
+(defn- check-bounds
+  "Validates that the piece is within the play area boundaries.
+   Returns nil if valid, or an error map if out of bounds."
+  [piece]
+  (when-not (within-play-area? piece)
+    (make-error msg/err-out-of-bounds
+                "Piece must be placed within the play area"
+                "All pieces must be placed entirely within the rectangular play area boundaries.")))
+
+(defn- check-overlap
+  "Validates that the piece does not overlap with existing pieces on the board.
+   Returns nil if valid, or an error map if overlap detected."
+  [piece board]
+  (when (intersects-any-piece? piece board)
+    (make-error msg/err-overlap
+                "Piece would overlap with existing piece"
+                "Pieces cannot overlap. Each piece must have its own space on the board.")))
+
+(defn- check-attack-trajectory
+  "Validates that an attacking piece is aimed at a valid target.
+   Returns nil if valid or not attacking, or an error map if no valid target."
+  [piece board is-attacking?]
+  (when (and is-attacking? (not (has-potential-target? piece board)))
+    (make-error msg/err-no-target
+                "Attacking piece must be pointed at an opponent's standing piece"
+                "Attacking (pointing) pieces must be aimed at an opponent's standing (defending) piece. You cannot attack your own pieces or other attacking pieces.")))
+
+(defn- check-attack-range
+  "Validates that the target is within the attacking piece's range.
+   Returns nil if valid or not attacking, or an error map if out of range."
+  [piece board is-attacking?]
+  (when (and is-attacking? (not (has-target-in-range? piece board)))
+    (make-error msg/err-out-of-range
+                "Target is out of range"
+                (str "Attack range depends on piece size: small=60px, medium=75px, large=90px. "
+                     "The target must be within this distance from the attacking piece's tip."))))
+
+(defn- check-line-of-sight
+  "Validates that the attacking piece has a clear line of sight to its target.
+   Returns nil if valid or not attacking, or an error map if blocked."
+  [piece board is-attacking?]
+  (when (and is-attacking? (has-blocked-target? piece board))
+    (make-error msg/err-blocked
+                "Another piece is blocking the line of attack"
+                "Attacking pieces must have a clear line of sight to their target. Other pieces between the attacker and target block the attack.")))
+
+(defn- run-placement-validations
+  "Runs all placement validations in order, returning the first error or nil if all pass.
+   Uses short-circuit evaluation - stops at first validation failure."
+  [remaining size using-captured? piece board is-attacking?]
+  (or (check-piece-availability remaining size using-captured?)
+      (check-bounds piece)
+      (check-overlap piece board)
+      (check-attack-trajectory piece board is-attacking?)
+      (check-attack-range piece board is-attacking?)
+      (check-line-of-sight piece board is-attacking?)))
+
 (defn validate-placement
   "Validate piece placement, returns nil if valid or structured error map if invalid.
    Error map contains :code (for programmatic handling), :message, and :rule (game rule explanation).
@@ -222,43 +292,7 @@
          piece-with-owner (assoc piece
                                  :player-id player-id
                                  :colour (or (:colour piece) piece-colour))]
-     (cond
-       (not (pos? remaining))
-       (if using-captured?
-         (make-error msg/err-no-captured
-                     "No captured pieces of that size remaining"
-                     "You can only place captured pieces that you have captured from opponents.")
-         (make-error msg/err-no-pieces
-                     (str "No " (name size) " pieces remaining")
-                     "Each player has a limited stash of pieces (5 small, 5 medium, 5 large). Once placed, pieces cannot be moved."))
-
-       (not (within-play-area? piece-with-owner))
-       (make-error msg/err-out-of-bounds
-                   "Piece must be placed within the play area"
-                   "All pieces must be placed entirely within the rectangular play area boundaries.")
-
-       (intersects-any-piece? piece-with-owner board)
-       (make-error msg/err-overlap
-                   "Piece would overlap with existing piece"
-                   "Pieces cannot overlap. Each piece must have its own space on the board.")
-
-       (and is-attacking? (not (has-potential-target? piece-with-owner board)))
-       (make-error msg/err-no-target
-                   "Attacking piece must be pointed at an opponent's standing piece"
-                   "Attacking (pointing) pieces must be aimed at an opponent's standing (defending) piece. You cannot attack your own pieces or other attacking pieces.")
-
-       (and is-attacking? (not (has-target-in-range? piece-with-owner board)))
-       (make-error msg/err-out-of-range
-                   "Target is out of range"
-                   (str "Attack range depends on piece size: small=60px, medium=75px, large=90px. "
-                        "The target must be within this distance from the attacking piece's tip."))
-
-       (and is-attacking? (has-blocked-target? piece-with-owner board))
-       (make-error msg/err-blocked
-                   "Another piece is blocking the line of attack"
-                   "Attacking pieces must have a clear line of sight to their target. Other pieces between the attacker and target block the attack.")
-
-       :else nil))))
+     (run-placement-validations remaining size using-captured? piece-with-owner board is-attacking?))))
 
 (defn valid-placement? [game player-id piece]
   (nil? (validate-placement game player-id piece)))
