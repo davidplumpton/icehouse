@@ -360,6 +360,39 @@
      #{}
      stats)))
 
+(defn- piece-scores?
+  "Returns true if a piece should score points.
+   A piece scores if it's either a successful attacker or an un-iced defender."
+  [piece successful-attacks iced]
+  (or (contains? successful-attacks (:id piece))
+      (and (geo/standing? piece)
+           (not (contains? iced (:id piece))))))
+
+(defn- calculate-piece-score
+  "Calculate the score contribution for a single piece.
+   Returns the points to add for this piece (0 if it doesn't score)."
+  [piece player-id icehouse-players successful-attacks iced]
+  (cond
+    ;; Players in the Icehouse get zero for all pieces
+    (contains? icehouse-players player-id)
+    0
+
+    ;; Successful attacks and un-iced defenders score points
+    (piece-scores? piece successful-attacks iced)
+    (geo/piece-pips piece)
+
+    ;; Other pieces don't score
+    :else
+    0))
+
+(defn- init-player-scores
+  "Initialize all players with 0 score."
+  [game]
+  (let [all-players (keys (:players game))]
+    (if (seq all-players)
+      (zipmap (map utils/normalize-player-id all-players) (repeat 0))
+      {})))
+
 (defn calculate-scores
   "Calculate final scores for all players.
    Players score points for:
@@ -371,32 +404,14 @@
         options (get game :options {})
         iced (logic/calculate-iced-pieces board)
         successful-attacks (successful-attackers board)
-        icehouse-players (calculate-icehouse-players board options)
-        ;; Initialize all players with 0 score
-        all-players (keys (:players game))
-        initial-scores (if (seq all-players)
-                         (zipmap (map utils/normalize-player-id all-players) (repeat 0))
-                         {})]
+        icehouse-players (calculate-icehouse-players board options)]
     (reduce
      (fn [scores piece]
-       (let [player-id (utils/normalize-player-id (:player-id piece))]
-         ;; Players in the Icehouse get zero
-         (if (contains? icehouse-players player-id)
-           (assoc scores player-id 0)
-           (cond
-             ;; Successful attacking pieces score points
-             (contains? successful-attacks (:id piece))
-             (update scores player-id (fnil + 0) (geo/piece-pips piece))
-
-             ;; Standing pieces that aren't iced score points
-             (and (geo/standing? piece)
-                  (not (contains? iced (:id piece))))
-             (update scores player-id (fnil + 0) (geo/piece-pips piece))
-
-             ;; Other pieces (failed attacks, iced defenders) don't score
-             :else
-             (update scores player-id (fnil identity 0))))))
-     initial-scores
+       (let [player-id (utils/normalize-player-id (:player-id piece))
+             points (calculate-piece-score piece player-id icehouse-players
+                                           successful-attacks iced)]
+         (update scores player-id (fnil + 0) points)))
+     (init-player-scores game)
      board)))
 
 (defn all-pieces-placed? [game]
