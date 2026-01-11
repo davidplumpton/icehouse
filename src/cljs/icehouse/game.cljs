@@ -825,6 +825,28 @@
                :fill "#000"}
         count])]))
 
+(defn- compute-stash-state
+  "Computes selection state and hotkey mappings for a player's stash.
+   Returns map with :selection, :captured-by-size, and :size-to-hotkey."
+  [is-me captured]
+  (let [selection (when is-me (:selected-piece @state/ui-state))
+        captured-by-size (group-by #(keyword (:size %)) captured)
+        available-sizes (when is-me (vec (distinct (map #(keyword (:size %)) captured))))
+        size-to-hotkey (when is-me (into {} (map-indexed (fn [idx sz] [sz (+ 4 idx)]) available-sizes)))]
+    {:selection selection
+     :captured-by-size captured-by-size
+     :size-to-hotkey size-to-hotkey}))
+
+(defn- make-stash-drag-handler
+  "Creates a handler function for starting a drag from the stash."
+  [is-me]
+  (when is-me
+    (fn [piece-size is-captured?]
+      (swap! state/ui-state update :selected-piece assoc
+             :size piece-size
+             :captured? is-captured?)
+      (reset! stash-drag-pending {:size piece-size :captured? is-captured?}))))
+
 (defn piece-size-row [size label pieces colour & [{:keys [captured? selected? on-start-drag]}]]
   (let [piece-count (get pieces size 0)]
     (when (pos? piece-count)
@@ -842,6 +864,36 @@
        [:span.size-label label]
        [draw-stash-pyramid size colour {:captured? captured? :count piece-count}]])))
 
+(defn- captured-pieces-section
+  "Renders the captured pieces section of a player's stash."
+  [{:keys [is-me selection captured-by-size size-to-hotkey start-stash-drag]}]
+  (let [{:keys [size captured?]} selection]
+    [:div.captured-pieces
+     [:div.captured-header {:style {:color theme/gold :font-size "0.8em" :margin-top "0.5rem"}}
+      "Captured:"]
+     (for [sz [:large :medium :small]
+           :let [caps (get captured-by-size sz)
+                 hotkey (get size-to-hotkey sz)]
+           :when (seq caps)]
+       ^{:key (str "cap-row-" (name sz))}
+       [:div.captured-row {:style (merge {:display "flex" :align-items "center" :gap "4px"}
+                                         (when (and is-me captured? (= size sz))
+                                           {:background "rgba(255, 215, 0, 0.2)"
+                                            :border-radius "4px"
+                                            :box-shadow "0 0 8px rgba(255, 215, 0, 0.4)"})
+                                         (when is-me
+                                           {:cursor "grab"}))
+                           :on-mouse-down (when is-me
+                                            (fn [e]
+                                              (.preventDefault e)
+                                              (start-stash-drag sz true)))}
+        (when hotkey
+          [:span.captured-hotkey {:style {:color theme/gold :font-weight "bold" :min-width "1em"}}
+           (str hotkey)])
+        (for [[idx cap-piece] (map-indexed vector caps)]
+          ^{:key (str "cap-" (name sz) "-" idx)}
+          [draw-stash-pyramid sz (:colour cap-piece) {:captured? true}])])]))
+
 (defn player-stash
   "Renders a single player's stash of unplayed pieces.
    opts can include :read-only? true for replay mode (no interaction)."
@@ -854,20 +906,9 @@
          player-name (or (:name player-data) "Player")
          is-me (and (not read-only?) (= (name player-id) (:id @state/current-player)))
          has-captured? (pos? (count captured))
-         ;; Get selection state for highlighting (only in interactive mode)
-         {:keys [size captured?]} (when is-me (:selected-piece @state/ui-state))
-         ;; Group captured pieces by size for selection highlighting
-         captured-by-size (group-by #(keyword (:size %)) captured)
-         ;; Compute hotkey mapping for captured pieces (4, 5, 6 based on order captured)
-         available-sizes (when is-me (vec (distinct (map #(keyword (:size %)) captured))))
-         size-to-hotkey (when is-me (into {} (map-indexed (fn [idx sz] [sz (+ 4 idx)]) available-sizes)))
-         ;; Handler for starting a drag from stash (only in interactive mode)
-         start-stash-drag (when is-me
-                            (fn [piece-size is-captured?]
-                              (swap! state/ui-state update :selected-piece assoc
-                                     :size piece-size
-                                     :captured? is-captured?)
-                              (reset! stash-drag-pending {:size piece-size :captured? is-captured?})))]
+         {:keys [selection captured-by-size size-to-hotkey]} (compute-stash-state is-me captured)
+         {:keys [size captured?]} selection
+         start-stash-drag (make-stash-drag-handler is-me)]
      [:div.player-stash {:class (when is-me "is-me")}
       [:div.stash-header {:style {:color colour}}
        player-name
@@ -883,32 +924,11 @@
         {:selected? (and is-me (not captured?) (= size :large))
          :on-start-drag start-stash-drag}]]
       (when has-captured?
-        [:div.captured-pieces
-         [:div.captured-header {:style {:color theme/gold :font-size "0.8em" :margin-top "0.5rem"}}
-          "Captured:"]
-         ;; Group captured pieces by size and render with selection indicator
-         (for [sz [:large :medium :small]
-               :let [caps (get captured-by-size sz)
-                     hotkey (get size-to-hotkey sz)]
-               :when (seq caps)]
-           ^{:key (str "cap-row-" (name sz))}
-           [:div.captured-row {:style (merge {:display "flex" :align-items "center" :gap "4px"}
-                                             (when (and is-me captured? (= size sz))
-                                               {:background "rgba(255, 215, 0, 0.2)"
-                                                :border-radius "4px"
-                                                :box-shadow "0 0 8px rgba(255, 215, 0, 0.4)"})
-                                             (when is-me
-                                               {:cursor "grab"}))
-                               :on-mouse-down (when is-me
-                                                (fn [e]
-                                                  (.preventDefault e)
-                                                  (start-stash-drag sz true)))}
-            (when hotkey
-              [:span.captured-hotkey {:style {:color theme/gold :font-weight "bold" :min-width "1em"}}
-               (str hotkey)])
-            (for [[idx cap-piece] (map-indexed vector caps)]
-              ^{:key (str "cap-" (name sz) "-" idx)}
-              [draw-stash-pyramid sz (:colour cap-piece) {:captured? true}])])])])))
+        [captured-pieces-section {:is-me is-me
+                                  :selection selection
+                                  :captured-by-size captured-by-size
+                                  :size-to-hotkey size-to-hotkey
+                                  :start-stash-drag start-stash-drag}])]))))
 
 (defn stash-panel
   "Renders stash panels for players on left or right side.
