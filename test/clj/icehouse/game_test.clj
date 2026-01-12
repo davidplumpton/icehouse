@@ -236,7 +236,51 @@
 
   (testing "single player game over"
     (let [game {:players {"p1" {:pieces {:small 0 :medium 0 :large 0}}}}]
-      (is (game/game-over? game)))))
+      (is (game/game-over? game))))
+
+  (testing "game over when player is in the icehouse"
+    ;; Alice has 8 pieces placed with all defenders iced -> game should end
+    (let [alice-attackers (for [i (range 5)]
+                            {:id (str "alice-a" i) :player-id "alice"
+                             :size :small :orientation :pointing :target-id (str "bob-d" i)})
+          alice-defenders (for [i (range 3)]
+                            {:id (str "alice-d" i) :player-id "alice"
+                             :size :small :orientation :standing})
+          bob-attackers (for [i (range 3)]
+                          {:id (str "bob-a" i) :player-id "bob"
+                           :size :large :orientation :pointing
+                           :target-id (str "alice-d" i)})
+          bob-defenders (for [i (range 5)]
+                          {:id (str "bob-d" i) :player-id "bob"
+                           :size :large :orientation :standing})
+          board (vec (concat alice-attackers alice-defenders bob-attackers bob-defenders))
+          game {:board board
+                :options {:icehouse-rule true}
+                :players {"alice" {:pieces {:small 10 :medium 5 :large 5}}
+                          "bob" {:pieces {:small 10 :medium 5 :large 5}}}}]
+      (is (game/game-over? game))))
+
+  (testing "game not over with icehouse rule disabled"
+    ;; Same scenario but with icehouse rule disabled -> game should NOT end
+    (let [alice-attackers (for [i (range 5)]
+                            {:id (str "alice-a" i) :player-id "alice"
+                             :size :small :orientation :pointing :target-id (str "bob-d" i)})
+          alice-defenders (for [i (range 3)]
+                            {:id (str "alice-d" i) :player-id "alice"
+                             :size :small :orientation :standing})
+          bob-attackers (for [i (range 3)]
+                          {:id (str "bob-a" i) :player-id "bob"
+                           :size :large :orientation :pointing
+                           :target-id (str "alice-d" i)})
+          bob-defenders (for [i (range 5)]
+                          {:id (str "bob-d" i) :player-id "bob"
+                           :size :large :orientation :standing})
+          board (vec (concat alice-attackers alice-defenders bob-attackers bob-defenders))
+          game {:board board
+                :options {:icehouse-rule false}
+                :players {"alice" {:pieces {:small 10 :medium 5 :large 5}}
+                          "bob" {:pieces {:small 10 :medium 5 :large 5}}}}]
+      (is (not (game/game-over? game))))))
 
 ;; Intersection detection tests
 

@@ -425,10 +425,17 @@
   (when-let [ends-at (:ends-at game)]
     (>= (System/currentTimeMillis) ends-at)))
 
+(defn any-player-in-icehouse?
+  "Check if any player has been put in the icehouse (all defenders iced after 8+ pieces)"
+  [game]
+  (let [options (get game :options {})]
+    (seq (calculate-icehouse-players (:board game) options))))
+
 (defn game-over? [game]
-  "Game ends when all pieces are placed OR time runs out"
+  "Game ends when all pieces are placed, time runs out, or a player is in the icehouse"
   (or (all-pieces-placed? game)
-      (time-up? game)))
+      (time-up? game)
+      (any-player-in-icehouse? game)))
 
 (defn build-game-record
   "Build a complete game record from current game state for persistence"
