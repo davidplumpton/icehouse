@@ -238,8 +238,9 @@
     (let [game {:players {"p1" {:pieces {:small 0 :medium 0 :large 0}}}}]
       (is (game/game-over? game))))
 
-  (testing "game over when player is in the icehouse"
-    ;; Alice has 8 pieces placed with all defenders iced -> game should end
+  (testing "game continues when player is in the icehouse (others can still play)"
+    ;; Alice has 8 pieces placed with all defenders iced -> game should NOT end
+    ;; because Bob still has pieces to place
     (let [alice-attackers (for [i (range 5)]
                             {:id (str "alice-a" i) :player-id "alice"
                              :size :small :orientation :pointing :target-id (str "bob-d" i)})
@@ -258,6 +259,31 @@
                 :options {:icehouse-rule true}
                 :players {"alice" {:pieces {:small 10 :medium 5 :large 5}}
                           "bob" {:pieces {:small 10 :medium 5 :large 5}}}}]
+      ;; Alice is icehoused, but Bob still has pieces - game continues
+      (is (not (game/game-over? game)))))
+
+  (testing "game ends when all active players finish (icehoused player excluded)"
+    ;; Alice is icehoused, but Bob has placed all pieces -> game should end
+    (let [alice-attackers (for [i (range 5)]
+                            {:id (str "alice-a" i) :player-id "alice"
+                             :size :small :orientation :pointing :target-id (str "bob-d" i)})
+          alice-defenders (for [i (range 3)]
+                            {:id (str "alice-d" i) :player-id "alice"
+                             :size :small :orientation :standing})
+          bob-attackers (for [i (range 3)]
+                          {:id (str "bob-a" i) :player-id "bob"
+                           :size :large :orientation :pointing
+                           :target-id (str "alice-d" i)})
+          bob-defenders (for [i (range 5)]
+                          {:id (str "bob-d" i) :player-id "bob"
+                           :size :large :orientation :standing})
+          board (vec (concat alice-attackers alice-defenders bob-attackers bob-defenders))
+          game {:board board
+                :options {:icehouse-rule true}
+                ;; Alice has pieces left (but is icehoused), Bob is done
+                :players {"alice" {:pieces {:small 7 :medium 5 :large 5}}
+                          "bob" {:pieces {:small 0 :medium 0 :large 0}}}}]
+      ;; Bob finished, Alice is icehoused and excluded -> game ends
       (is (game/game-over? game))))
 
   (testing "game not over with icehouse rule disabled"
@@ -281,6 +307,103 @@
                 :players {"alice" {:pieces {:small 10 :medium 5 :large 5}}
                           "bob" {:pieces {:small 10 :medium 5 :large 5}}}}]
       (is (not (game/game-over? game))))))
+
+(deftest icehoused-player-placement-test
+  (testing "icehoused player cannot place regular pieces"
+    ;; Alice is in the icehouse (8+ pieces, all defenders iced)
+    ;; Board pieces need x, y coordinates for geometry checks
+    (let [alice-attackers (for [i (range 5)]
+                            {:id (str "alice-a" i) :player-id "alice"
+                             :x (+ 100 (* i 100)) :y 100 :angle 180
+                             :size :small :orientation :pointing :target-id (str "bob-d" i)})
+          alice-defenders (for [i (range 3)]
+                            {:id (str "alice-d" i) :player-id "alice"
+                             :x (+ 100 (* i 100)) :y 300 :angle 0
+                             :size :small :orientation :standing})
+          bob-attackers (for [i (range 3)]
+                          {:id (str "bob-a" i) :player-id "bob"
+                           :x (+ 100 (* i 100)) :y 350 :angle 0
+                           :size :large :orientation :pointing
+                           :target-id (str "alice-d" i)})
+          bob-defenders (for [i (range 5)]
+                          {:id (str "bob-d" i) :player-id "bob"
+                           :x (+ 100 (* i 100)) :y 150 :angle 0
+                           :size :large :orientation :standing})
+          board (vec (concat alice-attackers alice-defenders bob-attackers bob-defenders))
+          game {:board board
+                :options {:icehouse-rule true}
+                :players {"alice" {:pieces {:small 7 :medium 5 :large 5} :captured []}
+                          "bob" {:pieces {:small 10 :medium 5 :large 5} :captured []}}}
+          ;; Alice tries to place a regular piece far from others
+          piece {:x 700 :y 700 :size :small :orientation :standing :angle 0}
+          result (game/validate-placement game "alice" piece false)]
+      ;; Should be rejected with PLAYER_ICEHOUSED error
+      (is (some? result))
+      (is (= (:code result) "PLAYER_ICEHOUSED"))))
+
+  (testing "icehoused player can place captured pieces"
+    ;; Alice is icehoused but has a captured piece
+    (let [alice-attackers (for [i (range 5)]
+                            {:id (str "alice-a" i) :player-id "alice"
+                             :x (+ 100 (* i 100)) :y 100 :angle 180
+                             :size :small :orientation :pointing :target-id (str "bob-d" i)})
+          alice-defenders (for [i (range 3)]
+                            {:id (str "alice-d" i) :player-id "alice"
+                             :x (+ 100 (* i 100)) :y 300 :angle 0
+                             :size :small :orientation :standing})
+          bob-attackers (for [i (range 3)]
+                          {:id (str "bob-a" i) :player-id "bob"
+                           :x (+ 100 (* i 100)) :y 350 :angle 0
+                           :size :large :orientation :pointing
+                           :target-id (str "alice-d" i)})
+          bob-defenders (for [i (range 5)]
+                          {:id (str "bob-d" i) :player-id "bob"
+                           :x (+ 100 (* i 100)) :y 150 :angle 0
+                           :size :large :orientation :standing})
+          board (vec (concat alice-attackers alice-defenders bob-attackers bob-defenders))
+          game {:board board
+                :options {:icehouse-rule true}
+                :players {"alice" {:colour "#ff0000"
+                                   :pieces {:small 7 :medium 5 :large 5}
+                                   :captured [{:size :small :colour "#0000ff"}]}
+                          "bob" {:colour "#0000ff"
+                                 :pieces {:small 10 :medium 5 :large 5}
+                                 :captured []}}}
+          ;; Alice tries to place a captured piece far from others
+          piece {:x 700 :y 700 :size :small :orientation :standing :angle 0}
+          result (game/validate-placement game "alice" piece true)]
+      ;; Should be allowed (nil means valid)
+      (is (nil? result))))
+
+  (testing "non-icehoused player can place regular pieces"
+    ;; Bob is NOT icehoused
+    (let [alice-attackers (for [i (range 5)]
+                            {:id (str "alice-a" i) :player-id "alice"
+                             :x (+ 100 (* i 100)) :y 100 :angle 180
+                             :size :small :orientation :pointing :target-id (str "bob-d" i)})
+          alice-defenders (for [i (range 3)]
+                            {:id (str "alice-d" i) :player-id "alice"
+                             :x (+ 100 (* i 100)) :y 300 :angle 0
+                             :size :small :orientation :standing})
+          bob-attackers (for [i (range 3)]
+                          {:id (str "bob-a" i) :player-id "bob"
+                           :x (+ 100 (* i 100)) :y 350 :angle 0
+                           :size :large :orientation :pointing
+                           :target-id (str "alice-d" i)})
+          bob-defenders (for [i (range 5)]
+                          {:id (str "bob-d" i) :player-id "bob"
+                           :x (+ 100 (* i 100)) :y 150 :angle 0
+                           :size :large :orientation :standing})
+          board (vec (concat alice-attackers alice-defenders bob-attackers bob-defenders))
+          game {:board board
+                :options {:icehouse-rule true}
+                :players {"alice" {:pieces {:small 7 :medium 5 :large 5} :captured []}
+                          "bob" {:pieces {:small 10 :medium 5 :large 5} :captured []}}}
+          ;; Bob tries to place a regular piece far from others
+          piece {:x 700 :y 700 :size :small :orientation :standing :angle 0}
+          result (game/validate-placement game "bob" piece false)]
+      ;; Should be allowed (nil means valid)
+      (is (nil? result)))))
 
 ;; Intersection detection tests
 

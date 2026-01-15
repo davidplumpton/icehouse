@@ -52,6 +52,10 @@
 ;; {:scores {"player-id" score} :icehouse-players ["id"] :over-ice {...}}
 (defonce game-result (r/atom nil))
 
+;; Set of player IDs who are currently icehoused (during gameplay)
+;; Players in this set can only play captured pieces, not regular ones
+(defonce icehoused-players (r/atom #{}))
+
 ;; Current time for game timer (updated every second)
 (defonce current-time (r/atom (js/Date.now)))
 

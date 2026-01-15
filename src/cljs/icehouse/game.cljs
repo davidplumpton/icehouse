@@ -736,9 +736,14 @@
 
 ;; Keyboard handlers for dispatch map pattern
 (defn- select-regular-piece
-  "Handler for selecting regular pieces (keys 1-3)."
+  "Handler for selecting regular pieces (keys 1-3).
+   Does nothing if the player is icehoused."
   [size]
-  (fn [] (swap! state/ui-state update :selected-piece assoc :size size :captured? false)))
+  (fn []
+    (let [my-id (:id @state/current-player)
+          is-icehoused? (and my-id (contains? @state/icehoused-players my-id))]
+      (when-not is-icehoused?
+        (swap! state/ui-state update :selected-piece assoc :size size :captured? false)))))
 
 (defn- select-captured-piece
   "Handler for selecting captured pieces (keys 4-6)."
@@ -833,6 +838,8 @@
 (defn piece-selector []
   (let [ui @state/ui-state
         {:keys [size orientation captured?]} (:selected-piece ui)
+        my-id (:id @state/current-player)
+        is-icehoused? (and my-id (contains? @state/icehoused-players my-id))
         attack-allowed (can-attack?)
         has-captured (has-captured-pieces?)
         zoom? (:zoom-active ui)
@@ -844,13 +851,17 @@
        (if captured?
          (case size :small "Small (4)" :medium "Medium (5)" :large "Large (6)" "Small (4)")
          (case size :small "Small (1)" :medium "Medium (2)" :large "Large (3)" "Small (1)"))
-       (when-not has-size? " [NONE]")]
+       (when-not has-size? " [NONE]")
+       (when (and (not captured?) is-icehoused?) " [LOCKED]")]
       [:span.separator " | "]
       [:span.current-mode
        (if (geo/standing? (:selected-piece ui)) "Defend (D)" "Attack (A)")]
       (when captured?
         [:span.captured-indicator {:style {:color theme/gold :margin-left "0.5rem"}}
          "[Captured]"])
+      (when is-icehoused?
+        [:span.icehoused-indicator {:style {:color theme/red :margin-left "0.5rem"}}
+         "[ICEHOUSE]"])
       (when zoom?
         [:span.zoom-indicator {:style {:color "#00ff00" :margin-left "0.5rem"}}
          (str "[ZOOM " zoom-scale "x]")])
@@ -859,6 +870,12 @@
          "[MOVE]"])]
      [:div.hotkey-hint
       (cond
+        ;; Icehoused players can only use captured pieces
+        is-icehoused?
+        (if has-captured
+          "4/5/6 captured pieces only, A/D mode, Z zoom | ? help (ICEHOUSED)"
+          "No captured pieces! Capture opponents to get pieces | ? help (ICEHOUSED)")
+
         (and (not attack-allowed) has-captured)
         "1/2/3 stash, 4/5/6 captured, D defend, Z zoom, M move | ? help"
 
@@ -970,29 +987,47 @@
          player-name (or (:name player-data) "Player")
          is-me (and (not read-only?) (= (name player-id) (:id @state/current-player)))
          has-captured? (pos? (count captured))
+         ;; Check if this player is icehoused
+         is-icehoused? (contains? @state/icehoused-players (name player-id))
          {:keys [selection captured-by-size size-to-hotkey]} (compute-stash-state is-me captured)
          {:keys [size captured?]} selection
-         start-stash-drag (make-stash-drag-handler is-me)]
-     [:div.player-stash {:class (when is-me "is-me")}
+         ;; Disable regular piece drag if player is icehoused
+         start-stash-drag (if is-icehoused?
+                            (fn [_ _] nil)  ;; No-op for icehoused players
+                            (make-stash-drag-handler is-me))]
+     [:div.player-stash {:class (str (when is-me "is-me")
+                                     (when is-icehoused? " icehoused"))}
       [:div.stash-header {:style {:color colour}}
        player-name
-       (when is-me " (you)")]
-      [:div.stash-pieces
+       (when is-me " (you)")
+       (when is-icehoused?
+         [:span {:style {:color theme/red :margin-left "0.5rem" :font-size "0.8em"}}
+          "(Icehouse!)"])]
+      ;; Regular pieces - greyed out if icehoused
+      [:div.stash-pieces {:style (when is-icehoused?
+                                   {:opacity 0.4
+                                    :pointer-events "none"})}
        [piece-size-row :small "1" pieces colour
-        {:selected? (and is-me (not captured?) (= size :small))
-         :on-start-drag start-stash-drag}]
+        {:selected? (and is-me (not is-icehoused?) (not captured?) (= size :small))
+         :on-start-drag (when-not is-icehoused? start-stash-drag)}]
        [piece-size-row :medium "2" pieces colour
-        {:selected? (and is-me (not captured?) (= size :medium))
-         :on-start-drag start-stash-drag}]
+        {:selected? (and is-me (not is-icehoused?) (not captured?) (= size :medium))
+         :on-start-drag (when-not is-icehoused? start-stash-drag)}]
        [piece-size-row :large "3" pieces colour
-        {:selected? (and is-me (not captured?) (= size :large))
-         :on-start-drag start-stash-drag}]]
+        {:selected? (and is-me (not is-icehoused?) (not captured?) (= size :large))
+         :on-start-drag (when-not is-icehoused? start-stash-drag)}]]
+      ;; Captured pieces - always available, highlighted more if icehoused
       (when has-captured?
-        [captured-pieces-section {:is-me is-me
-                                  :selection selection
-                                  :captured-by-size captured-by-size
-                                  :size-to-hotkey size-to-hotkey
-                                  :start-stash-drag start-stash-drag}])]))))
+        [:div {:style (when (and is-me is-icehoused?)
+                        {:background "rgba(255, 215, 0, 0.1)"
+                         :border-radius "4px"
+                         :padding "4px"
+                         :margin-top "4px"})}
+         [captured-pieces-section {:is-me is-me
+                                   :selection selection
+                                   :captured-by-size captured-by-size
+                                   :size-to-hotkey size-to-hotkey
+                                   :start-stash-drag (make-stash-drag-handler is-me)}]])])))
 
 (defn stash-panel
   "Renders stash panels for players on left or right side.
@@ -1031,6 +1066,25 @@
               :margin-bottom "0.5rem"
               :font-weight "bold"}}
      error]))
+
+(defn icehouse-banner []
+  "Displays a prominent banner when the current player is icehoused."
+  (let [my-id (:id @state/current-player)
+        is-icehoused? (and my-id (contains? @state/icehoused-players my-id))]
+    (when is-icehoused?
+      [:div.icehouse-banner
+       {:style {:background "linear-gradient(135deg, #1a237e 0%, #311b92 100%)"
+                :color "#fff"
+                :padding "0.75rem 1rem"
+                :border-radius "4px"
+                :margin-bottom "0.5rem"
+                :text-align "center"
+                :border "2px solid #5c6bc0"
+                :box-shadow "0 2px 8px rgba(0, 0, 0, 0.3)"}}
+       [:span {:style {:font-weight "bold" :font-size "1.1em"}}
+        "You're in the Icehouse!"]
+       [:span {:style {:margin-left "1rem" :opacity 0.9}}
+        "Only captured pieces can be played. Capture opponents to continue!"]])))
 
 (defn placement-cooldown-indicator []
   "Subtle circular cooldown indicator with smooth animation"
@@ -1330,6 +1384,7 @@
            [finish-button]
            [game-timer]]]
          [error-display]
+         [icehouse-banner]
          [game-results-overlay]
          [help-overlay]
          [piece-selector]

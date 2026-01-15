@@ -42,6 +42,7 @@
   [data]
   (reset! state/game-state (:game data))
   (reset! state/game-result nil)
+  (reset! state/icehoused-players #{})  ;; Clear icehoused players for new game
   (swap! state/ui-state assoc :selected-piece {:size :small :orientation :standing :captured? false})
   (reset! state/current-view :game))
 
@@ -73,6 +74,14 @@
   "Handle player finished signal"
   [data]
   (reset! state/game-state (:game data)))
+
+(defn- handle-player-icehoused
+  "Handle player icehoused notification.
+   Adds the player to the icehoused set - they can only play captured pieces."
+  [data]
+  (let [player-id (:player-id data)]
+    (swap! state/icehoused-players conj player-id)
+    (reset! state/game-state (:game data))))
 
 (defn- handle-game-over
   "Handle game over with final scores"
@@ -146,6 +155,7 @@
    msg/piece-placed      handle-piece-placed
    msg/piece-captured    handle-piece-captured
    msg/player-finished   handle-player-finished
+   msg/player-icehoused  handle-player-icehoused
    msg/game-over         handle-game-over
    msg/game-list         handle-game-list
    msg/game-record       handle-game-record

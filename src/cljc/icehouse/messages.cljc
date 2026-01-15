@@ -38,6 +38,7 @@
 (def piece-placed "piece-placed")
 (def piece-captured "piece-captured")
 (def player-finished "player-finished")
+(def player-icehoused "player-icehoused")
 (def game-over "game-over")
 
 ;; Replay
@@ -76,3 +77,4 @@
 (def err-invalid-game "INVALID_GAME_STATE")
 (def err-invalid-message "INVALID_MESSAGE")
 (def err-internal-state "INTERNAL_STATE_ERROR")
+(def err-player-icehoused "PLAYER_ICEHOUSED")

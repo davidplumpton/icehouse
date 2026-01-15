@@ -10,6 +10,9 @@
 
 (defonce games (atom {}))
 
+;; Forward declaration for functions used before they're defined
+(declare calculate-icehouse-players)
+
 ;; =============================================================================
 ;; Validation Functions
 ;; =============================================================================
@@ -258,6 +261,18 @@
                 "Another piece is blocking the line of attack"
                 "Attacking pieces must have a clear line of sight to their target. Other pieces between the attacker and target block the attack.")))
 
+(defn- check-player-icehoused
+  "Validates that an icehoused player is not trying to place regular pieces.
+   Returns nil if valid (player not icehoused or using captured), or an error map."
+  [game player-id using-captured?]
+  (when-not using-captured?
+    (let [options (get game :options {})
+          icehouse-players (calculate-icehouse-players (:board game) options)]
+      (when (contains? icehouse-players player-id)
+        (make-error msg/err-player-icehoused
+                    "You are in the Icehouse - can only play captured pieces"
+                    "When all your defenders are iced, you cannot place regular pieces. You can still capture opponent pieces and play captured pieces.")))))
+
 (defn- run-placement-validations
   "Runs all placement validations in order, returning the first error or nil if all pass.
    Uses short-circuit evaluation - stops at first validation failure."
@@ -276,23 +291,25 @@
   ([game player-id piece]
    (validate-placement game player-id piece false))
   ([game player-id piece using-captured?]
-   (let [player (get-in game [:players player-id])
-         size (:size piece)
-         remaining (if using-captured?
-                     (utils/count-captured-by-size (:captured player) size)
-                     (get-in player [:pieces size] 0))
-         board (:board game)
-         is-attacking? (geo/pointing? piece)
-         ;; Ensure piece has player-id and colour for validation
-         ;; For captured pieces, get the original colour; otherwise use player's colour
-         piece-colour (if using-captured?
-                        (let [cap-piece (utils/get-captured-piece (:captured player) size)]
-                          (or (:colour cap-piece) (:colour player)))
-                        (:colour player))
-         piece-with-owner (assoc piece
-                                 :player-id player-id
-                                 :colour (or (:colour piece) piece-colour))]
-     (run-placement-validations remaining size using-captured? piece-with-owner board is-attacking?))))
+   ;; First check if player is icehoused and trying to place regular pieces
+   (or (check-player-icehoused game player-id using-captured?)
+       (let [player (get-in game [:players player-id])
+             size (:size piece)
+             remaining (if using-captured?
+                         (utils/count-captured-by-size (:captured player) size)
+                         (get-in player [:pieces size] 0))
+             board (:board game)
+             is-attacking? (geo/pointing? piece)
+             ;; Ensure piece has player-id and colour for validation
+             ;; For captured pieces, get the original colour; otherwise use player's colour
+             piece-colour (if using-captured?
+                            (let [cap-piece (utils/get-captured-piece (:captured player) size)]
+                              (or (:colour cap-piece) (:colour player)))
+                            (:colour player))
+             piece-with-owner (assoc piece
+                                     :player-id player-id
+                                     :colour (or (:colour piece) piece-colour))]
+         (run-placement-validations remaining size using-captured? piece-with-owner board is-attacking?)))))
 
 (defn valid-placement? [game player-id piece]
   (nil? (validate-placement game player-id piece)))
@@ -414,11 +431,26 @@
      (init-player-scores game)
      board)))
 
+(defn player-pieces-placed?
+  "Check if a specific player has placed all their regular pieces"
+  [game player-id]
+  (let [player (get-in game [:players player-id])]
+    (every? zero? (vals (:pieces player)))))
+
 (defn all-pieces-placed? [game]
   "Check if all players have placed all their pieces"
   (every? (fn [[_ player]]
             (every? zero? (vals (:pieces player))))
           (:players game)))
+
+(defn all-active-players-finished?
+  "Check if all non-icehoused players have placed all their regular pieces.
+   Icehoused players are excluded since they can't place regular pieces."
+  [game]
+  (let [options (get game :options {})
+        icehouse-players (calculate-icehouse-players (:board game) options)
+        active-player-ids (remove #(contains? icehouse-players %) (keys (:players game)))]
+    (every? #(player-pieces-placed? game %) active-player-ids)))
 
 (defn time-up? [game]
   "Check if the game time has expired"
@@ -432,10 +464,10 @@
     (seq (calculate-icehouse-players (:board game) options))))
 
 (defn game-over? [game]
-  "Game ends when all pieces are placed, time runs out, or a player is in the icehouse"
-  (or (all-pieces-placed? game)
-      (time-up? game)
-      (any-player-in-icehouse? game)))
+  "Game ends when all active (non-icehoused) players have placed their pieces, or time runs out.
+   Icehoused players can continue capturing but can't place regular pieces."
+  (or (all-active-players-finished? game)
+      (time-up? game)))
 
 (defn build-game-record
   "Build a complete game record from current game state for persistence"
@@ -528,26 +560,37 @@
     @result))
 
 (defn handle-post-placement!
-  "Handle side effects after placement: recording, broadcasting, game over check"
-  [clients room-id player-id piece using-captured?]
+  "Handle side effects after placement: recording, broadcasting, icehouse detection, game over check.
+   prev-icehouse-players is the set of players who were already icehoused before this placement."
+  [clients room-id player-id piece using-captured? prev-icehouse-players]
   ;; Record the move for replay
   (record-move! room-id {:type :place-piece
                          :player-id player-id
                          :piece piece
                          :using-captured? using-captured?})
-  (let [updated-game (get @games room-id)]
+  (let [updated-game (get @games room-id)
+        board (:board updated-game)
+        options (get updated-game :options {})
+        current-icehouse-players (calculate-icehouse-players board options)
+        newly-icehoused (clojure.set/difference current-icehouse-players prev-icehouse-players)]
+    ;; Broadcast the piece placement
     (utils/broadcast-room! clients room-id
                            {:type msg/piece-placed
                             :piece piece
                             :game updated-game})
+    ;; Broadcast newly icehoused players
+    (doseq [icehoused-player newly-icehoused]
+      (utils/broadcast-room! clients room-id
+                             {:type msg/player-icehoused
+                              :player-id icehoused-player
+                              :game updated-game}))
+    ;; Check for game over
     (when (game-over? updated-game)
-      (let [board (:board updated-game)
-            options (get updated-game :options {})
-            over-ice (logic/calculate-over-ice board)
-            icehouse-players (calculate-icehouse-players board options)
-            end-reason (if (all-pieces-placed? updated-game)
-                         :all-pieces-placed
-                         :time-up)
+      (let [over-ice (logic/calculate-over-ice board)
+            end-reason (cond
+                         (all-active-players-finished? updated-game) :all-active-finished
+                         (time-up? updated-game) :time-up
+                         :else :unknown)
             record (build-game-record updated-game end-reason)]
         ;; Save the game record
         (storage/save-game-record! record)
@@ -556,7 +599,7 @@
                                 :game-id (:game-id updated-game)
                                 :scores (calculate-scores updated-game)
                                 :over-ice over-ice
-                                :icehouse-players (vec icehouse-players)})))))
+                                :icehouse-players (vec current-icehouse-players)})))))
 
 (defn send-error!
   "Send a structured error to the client. Handles both old string errors and new structured errors."
@@ -573,6 +616,9 @@
         player-id (player-id-from-channel channel)
         game (get @games room-id)
         using-captured? (boolean (:captured msg))
+        ;; Track icehouse players BEFORE placement to detect new ones
+        prev-icehouse-players (when game
+                                (calculate-icehouse-players (:board game) (get game :options {})))
         piece (when game (construct-piece-for-placement game player-id msg))
         validation-error (when piece (validate-placement game player-id piece using-captured?))]
     (if (and piece (nil? validation-error))
@@ -582,7 +628,8 @@
           (let [updated-game (get @games room-id)
                 final-piece (logic/find-piece-by-id (:board updated-game) (:id piece))]
             (if final-piece
-              (handle-post-placement! clients room-id player-id final-piece using-captured?)
+              (handle-post-placement! clients room-id player-id final-piece using-captured?
+                                      (or prev-icehouse-players #{}))
               ;; This shouldn't happen if apply-placement! succeeded, but handle it anyway
               (send-error! channel (make-error msg/err-internal-state
                                                "Internal error: piece not found after placement"
