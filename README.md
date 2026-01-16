@@ -6,7 +6,7 @@ This project is a personal experiment to understand the current state and capabi
 
 ## Overview
 
-A real-time multiplayer implementation of Classic Icehouse for 3-4 players. Players connect via browser, join a lobby, and compete by placing pyramids to attack and defend. Requires only Java and a single jar file to play on a local network. However even a single player can start a game and place defensive pieces. Two players would be needed for attacks and captures. Three players for any real kind of strategy.
+A real-time multiplayer implementation of Classic Icehouse for 3-4 players. Players connect via browser, join a lobby, and compete by placing pyramids to attack and defend. Requires only Java and a single jar file to play on a local network. However even a single player can start a game and place defensive pieces. Two players would be needed for attacks and captures. Three players for any real kind of strategy. The icehouse rule is not completely implemented yet because I have trouble convincing myself that giving a bunch of pieces to another player wouldn't just be instant game over anyway.
 
 ## Running the Standalone Game
 `java -jar icehouse-game.jar`
