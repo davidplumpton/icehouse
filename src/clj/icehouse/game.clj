@@ -182,27 +182,6 @@
     [(+ (:x piece) (* dx tip-offset))
      (+ (:y piece) (* dy tip-offset))]))
 
-(defn ray-segment-intersection?
-  "Check if a ray from origin in direction dir intersects line segment [p1 p2].
-   Uses parametric line intersection."
-  [[ox oy] [dx dy] [[p1x p1y] [p2x p2y]]]
-  (let [;; Segment direction
-        sx (- p2x p1x)
-        sy (- p2y p1y)
-        ;; Cross product of directions
-        denom (- (* dx sy) (* dy sx))]
-    (if (< (Math/abs denom) parallel-threshold)
-      false  ;; Parallel lines
-      (let [;; Vector from ray origin to segment start
-            ox-p1x (- p1x ox)
-            oy-p1y (- p1y oy)
-            ;; Parameter t for ray (distance along ray direction)
-            t (/ (- (* ox-p1x sy) (* oy-p1y sx)) denom)
-            ;; Parameter u for segment (0-1 means on segment)
-            u (/ (- (* ox-p1x dy) (* oy-p1y dx)) denom)]
-        ;; Ray hits segment if t >= 0 (forward direction) and 0 <= u <= 1 (on segment)
-        (and (>= t 0) (>= u 0) (<= u 1))))))
-
 (defn ray-segment-intersection-distance
   "Get the distance (parameter t) at which a ray from origin in direction dir
    intersects line segment [p1 p2]. Returns nil if no intersection."
@@ -217,6 +196,11 @@
             u (/ (- (* ox-p1x dy) (* oy-p1y dx)) denom)]
         (when (and (>= t 0) (>= u 0) (<= u 1))
           t)))))
+
+(defn ray-segment-intersection?
+  "Check if a ray from origin in direction dir intersects line segment [p1 p2]."
+  [origin direction segment]
+  (some? (ray-segment-intersection-distance origin direction segment)))
 
 (defn ray-polygon-intersection-distance
   "Get the minimum distance at which a ray hits any edge of a polygon.
