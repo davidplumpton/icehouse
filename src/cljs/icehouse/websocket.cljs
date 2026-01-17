@@ -1,10 +1,11 @@
 (ns icehouse.websocket
-  (:require [icehouse.messages :as msg]
-             [icehouse.state :as state]
-             [icehouse.schema :as schema]
-             [icehouse.constants :as const]
-             [icehouse.utils :as utils]
-             [malli.core :as m]))
+  (:require [icehouse.audio :as audio]
+            [icehouse.messages :as msg]
+            [icehouse.state :as state]
+            [icehouse.schema :as schema]
+            [icehouse.constants :as const]
+            [icehouse.utils :as utils]
+            [malli.core :as m]))
 
 (defonce ws (atom nil))
 
@@ -55,6 +56,8 @@
   (let [piece (:piece data)
         current-player-id (:id @state/current-player)
         piece-player-id (utils/normalize-player-id (:player-id piece))]
+    (when piece
+      (audio/play-placement-sound (:size piece)))
     (when (and current-player-id
                (= (utils/normalize-player-id current-player-id) piece-player-id))
       (let [throttle-sec (get-in (:game data) [:options :placement-throttle] const/default-placement-throttle-sec)
