@@ -1,7 +1,7 @@
 (ns icehouse.audio)
 
 (def ^:private placement-sounds
-  {:big "/assets/audio/piece-big.mp3"
+  {:large "/assets/audio/piece-big.mp3"
    :medium "/assets/audio/piece-medium.mp3"
    :small "/assets/audio/piece-small.mp3"})
 
@@ -12,10 +12,13 @@
                   (set! -preload "auto"))])))
 
 (defn- normalize-size [size]
-  (cond
-    (keyword? size) size
-    (string? size) (keyword size)
-    :else nil))
+  (let [size-kw (cond
+                  (keyword? size) size
+                  (string? size) (keyword size)
+                  :else nil)]
+    (case size-kw
+      :big :large
+      size-kw)))
 
 (defn play-placement-sound
   "Play the placement sound for the given piece size."
