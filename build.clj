@@ -8,11 +8,17 @@
 
 (def basis (delay (b/create-basis {:project "deps.edn"})))
 
+(defn build-frontend [_]
+  ;; Build the release JS bundle so prod runs without shadow-cljs dev tooling.
+  (println "Building frontend (shadow-cljs release app)...")
+  (b/process {:command-args ["npx" "shadow-cljs" "release" "app"]}))
+
 (defn clean [_]
   (b/delete {:path "target"}))
 
 (defn uberjar [_]
   (clean nil)
+  (build-frontend nil)
   (b/copy-dir {:src-dirs ["src/clj" "src/cljc" "resources"]
                :target-dir class-dir})
   (b/compile-clj {:basis @basis

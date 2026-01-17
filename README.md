@@ -13,6 +13,15 @@ A real-time multiplayer implementation of Classic Icehouse for 3-4 players. Play
 
 Then connect to http://localhost:3000, other players connect to http://SERVER-IP-ADDRESS:3000
 
+## Building the Standalone JAR
+
+```bash
+make uberjar
+```
+
+This runs `npx shadow-cljs release app` to generate a production JS bundle without dev tooling,
+then packages everything into the JAR.
+
 ## Features
 
 - Real-time multiplayer via WebSockets
