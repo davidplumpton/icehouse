@@ -2,7 +2,7 @@
   (:require [clojure.tools.build.api :as b]))
 
 (def lib 'icehouse/icehouse)
-(def version "0.1.0")
+(def version "0.1.1")
 (def class-dir "target/classes")
 (def uber-file (format "target/%s-%s.jar" (name lib) version))
 
