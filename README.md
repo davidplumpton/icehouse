@@ -1,14 +1,14 @@
 # Icehouse Game
 
-Multiplayer browser-based Icehouse (Looney Pyramids) game. [Icehouse](https://www.looneylabs.com/content/icehouse) is a tabletop game using plastic pyramid pieces from [Looney Labs](https://store.looneylabs.com/). The notable feature of this game is that players do not take turns; they just play a move when they are ready. The pieces can also be used to play all sorts of other fun games.
+Multiplayer browser-based Icehouse (Looney Pyramids) game. [Icehouse](https://www.looneylabs.com/content/icehouse) is a tabletop game using plastic pyramid pieces from [Looney Labs](https://store.looneylabs.com/). The notable feature of this game is that players do not take turns; they just play a move when they are ready. The pieces can also be used to play all sorts of other fun games; buying a set of them opens up all sorts of interesting game ideas.
 
-This project is a personal experiment to understand the current state and capability of vibe coding by asking AIs to write the all the code with myself guiding the process. My intention is to write zero lines of code and see what the result is, and maybe get a fun game out of it. I chose Clojure and ClojureScript just because I think they are fun and interesting to work with. It may be that other languages would be a better choice in terms of the agent compentency for coding.
+This project is a personal experiment to understand the current state and capability of vibe coding by asking AIs to write the all the code with myself guiding the process. My intention is to write zero lines of code and see what the result is, and maybe get a fun game out of it. I chose Clojure and ClojureScript just because I think they are fun and interesting to work with. It may be that other languages would be a better choice in terms of the agent competency for coding.
 
 ![Example Game](resources/public/assets/images/example-game.png "Example Game")
 
 ## Overview
 
-A real-time multiplayer implementation of Classic Icehouse for 3-4 players. Players connect via browser, join a lobby, and compete by placing pyramids to attack and defend. Requires only Java and a single jar file to play on a local network. However even a single player can start a game and place defensive pieces. Two players would be needed for attacks and captures. Three players for any real kind of strategy. The icehouse rule is not completely implemented yet because I have trouble convincing myself that giving a bunch of pieces to another player wouldn't just be instant game over anyway.
+A real-time multiplayer implementation of Classic Icehouse for 3-4 players. Players connect via browser, join a lobby, and compete by placing pyramids to attack and defend. Requires only Java and a single jar file to play on a local network. However even a single player can start a game and place defensive pieces. Two players would be needed for attacks and captures. Three players for any real kind of strategy. The icehouse rule is not completely implemented yet because I have trouble convincing myself that giving a bunch of pieces to another player wouldn't just be instant game over anyway. I need to find some people for some trial games... I've never played a single game of it yet.
 
 ## Running the Standalone Game
 `java -jar icehouse-game.jar`
