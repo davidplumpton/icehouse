@@ -11,11 +11,7 @@
   (let [status @state/ws-status]
     (when (not= status :connected)
       [:div.connection-warning
-       {:style {:background (if (= status :connecting) "#ffc107" "#dc3545")
-                :color (if (= status :connecting) "#000" "#fff")
-                :padding "0.5rem 1rem"
-                :text-align "center"
-                :font-weight "bold"}}
+       {:class (if (= status :connecting) "connecting" "disconnected")}
        (if (= status :connecting)
          "Connecting to server..."
          "Disconnected from server. Reconnecting...")])))

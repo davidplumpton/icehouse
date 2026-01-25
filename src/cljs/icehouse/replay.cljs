@@ -164,9 +164,7 @@
         [:canvas {:ref #(reset! canvas-ref %)
                   :width game/canvas-width
                   :height game/canvas-height
-                  :style {:display "block"
-                          :margin "0 auto"
-                          :border "2px solid #444"}}])})))
+                  :class "replay-canvas"}])})))
 
 ;; =============================================================================
 ;; Replay Controls Component
@@ -185,26 +183,23 @@
             current-time (if (neg? current-move)
                            0
                            (get-in record [:moves current-move :elapsed-ms] 0))]
-        [:div.replay-controls {:style {:text-align "center" :padding "20px"}}
+        [:div.replay-controls
          ;; Progress info
-         [:div {:style {:margin-bottom "10px" :color "#aaa"}}
+         [:div.replay-info
           "Move " (inc current-move) " / " total-moves
           " - " (utils/format-time current-time) " / " (utils/format-time (:duration-ms record))]
 
          ;; Time slider
-         [:div {:style {:margin "15px auto" :width "80%" :max-width "600px"}}
+         [:div.replay-slider-container
           [:input {:type "range"
                    :min -1
                    :max (dec total-moves)
                    :value current-move
                    :on-change #(go-to-move! (js/parseInt (.. % -target -value)))
-                   :style {:width "100%"
-                           :height "8px"
-                           :cursor "pointer"
-                           :accent-color theme/green}}]]
+                   :class "replay-slider"}]]
 
          ;; Control buttons
-         [:div {:style {:display "flex" :justify-content "center" :gap "10px"}}
+         [:div.replay-buttons
           [:button.replay-btn {:on-click #(go-to-start!)} "|<"]
           [:button.replay-btn {:on-click #(step-back!)} "<"]
           [:button.replay-btn {:on-click #(toggle-play!)}
@@ -213,17 +208,17 @@
           [:button.replay-btn {:on-click #(go-to-end!)} ">|"]]
 
          ;; Speed controls
-         [:div {:style {:margin-top "10px"}}
-          [:span {:style {:color "#aaa" :margin-right "10px"}} "Speed:"]
+         [:div.speed-controls
+          [:span.speed-label "Speed:"]
           (for [s replay-speeds]
             ^{:key s}
             [:button.speed-btn {:on-click #(set-speed! s)
-                                :style {:background (if (= speed s) theme/green theme/button-inactive)
-                                        :margin "0 5px"}}
+                                :style {:background (if (= speed s) theme/green theme/button-inactive)}
+                                :class "speed-btn"}
              (str s "x")])]
 
          ;; Game info
-         [:div {:style {:margin-top "20px" :color "#888"}}
+         [:div.game-info
           [:div "Winner: " (if-let [winner-id (:winner record)]
                             (or (get-in record [:players winner-id :name])
                                 (get-in record [:players (keyword winner-id) :name])
@@ -232,14 +227,7 @@
           [:div "End reason: " (name (or (:end-reason record) :unknown))]]
 
          ;; Close button
-         [:button {:on-click close-replay!
-                   :style {:margin-top "20px"
-                           :background "#e53935"
-                           :color "white"
-                           :padding "10px 20px"
-                           :border "none"
-                           :border-radius "4px"
-                           :cursor "pointer"}}
+         [:button.close-replay-btn {:on-click close-replay!}
           "Close Replay"]]))))
 
 ;; =============================================================================
@@ -256,43 +244,21 @@
   "Panel showing list of saved games"
   []
   (let [games @state/game-list]
-    [:div.game-list-panel {:style {:padding "20px"
-                                    :background "#1a1a2e"
-                                    :min-height "100vh"
-                                    :color "white"}}
+    [:div.game-list-panel
      [:h2 "Saved Games"]
-     [:div {:style {:margin-bottom "20px"}}
-      [:button {:on-click ws/list-games!
-                :style {:margin-right "10px"
-                        :padding "8px 16px"
-                        :background theme/green
-                        :color "white"
-                        :border "none"
-                        :border-radius "4px"
-                        :cursor "pointer"}}
+     [:div.game-list-actions
+      [:button.btn-primary {:on-click ws/list-games!}
        "Refresh List"]
-      [:button {:on-click close-game-list!
-                :style {:padding "8px 16px"
-                        :background "#666"
-                        :color "white"
-                        :border "none"
-                        :border-radius "4px"
-                        :cursor "pointer"}}
+      [:button.btn-secondary {:on-click close-game-list!}
        "Back to Lobby"]]
      (if (seq games)
-       [:ul {:style {:list-style "none" :padding 0}}
+       [:ul.game-list
         (for [game-id games]
           ^{:key game-id}
-          [:li {:style {:margin "10px 0"}}
-           [:button {:on-click #(ws/load-game! game-id)
-                     :style {:padding "10px 20px"
-                             :background "#333"
-                             :color "white"
-                             :border "1px solid #555"
-                             :border-radius "4px"
-                             :cursor "pointer"}}
+          [:li.game-list-item
+           [:button.game-list-btn {:on-click #(ws/load-game! game-id)}
             game-id]])]
-       [:p {:style {:color "#888"}}
+       [:p.info
         "No saved games found"])]))
 
 ;; =============================================================================
@@ -333,12 +299,10 @@
     (let [replay @state/replay-state
           game-state (when replay
                        (game-state-at-move (:record replay) (:current-move replay)))]
-      [:div.replay-view {:style {:background "#1a1a2e"
-                                  :min-height "100vh"
-                                  :padding "20px"}}
+      [:div.replay-view
        (if replay
          [:div
-          [:h2 {:style {:color "white" :text-align "center"}} "Game Replay"]
+          [:h2 "Game Replay"]
           [:div.game-area
            [game/stash-panel :left {:game-state game-state :read-only? true}]
            [replay-canvas]

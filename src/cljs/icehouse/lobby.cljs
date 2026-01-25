@@ -22,12 +22,9 @@
                selected? (= colour (:colour current-player))]
            ^{:key colour}
            [:div.colour-option
-            {:style {:background-color colour
-                     :border (if selected?
-                               "3px solid white"
-                               "3px solid transparent")
-                     :opacity (if (and taken? (not selected?)) 0.3 1)
-                     :cursor (if taken? "default" "pointer")}
+            {:class [(when selected? "selected")
+                     (when (and taken? (not selected?)) "taken")]
+             :style {:background-color colour}
              :on-click #(when-not taken?
                           (swap! state/current-player assoc :colour colour)
                           (ws/set-colour! colour))}])))]]))
@@ -78,40 +75,35 @@
                              (when-not (js/isNaN parsed)
                                (ws/set-option! :placement-throttle parsed))
                              (reset! local-value nil))
-                 :style {:width "50px" :margin-right "5px" :text-align "center"}}]))))
+                 :class "throttle-input"}]))))
 
 (defn game-options-panel []
   (let [options @state/game-options]
     (when options
-      [:div.game-options {:style {:margin-top "20px"
-                                   :padding "15px"
-                                   :background theme/board-background
-                                   :border-radius "8px"}}
-       [:h3 {:style {:margin-top 0 :color "#aaa"}} "Game Options"]
-       [:div.option {:style {:margin "10px 0"}}
-        [:label {:style {:display "flex" :align-items "center" :cursor "pointer"}}
+      [:div.game-options
+       [:h3 "Game Options"]
+       [:div.option
+        [:label.clickable
          [:input {:type "checkbox"
                   :checked (:icehouse-rule options)
-                  :on-change #(ws/set-option! :icehouse-rule (.. % -target -checked))
-                  :style {:margin-right "10px"}}]
+                  :on-change #(ws/set-option! :icehouse-rule (.. % -target -checked))}]
          [:span "Icehouse Rule"]
-         [:span {:style {:color "#888" :font-size "0.85em" :margin-left "10px"}}
+         [:span.option-hint
           "(0 pts if all defenders iced after 8+ pieces)"]]]
-       [:div.option {:style {:margin "10px 0"}}
-        [:label {:style {:display "flex" :align-items "center" :cursor "pointer"}}
+       [:div.option
+        [:label.clickable
          [:input {:type "checkbox"
                   :checked (:timer-enabled options)
-                  :on-change #(ws/set-option! :timer-enabled (.. % -target -checked))
-                  :style {:margin-right "10px"}}]
+                  :on-change #(ws/set-option! :timer-enabled (.. % -target -checked))}]
          [:span "Game Timer"]
-         [:span {:style {:color "#888" :font-size "0.85em" :margin-left "10px"}}
+         [:span.option-hint
           "(random 2-5 min)"]]]
-       [:div.option {:style {:margin "10px 0"}}
-        [:label {:style {:display "flex" :align-items "center"}}
-         [:span {:style {:margin-right "10px"}} "Placement Throttle"]
+       [:div.option
+        [:label
+         [:span.label-text "Placement Throttle"]
          [throttle-input]
          [:span "sec"]
-         [:span {:style {:color "#888" :font-size "0.85em" :margin-left "10px"}}
+         [:span.option-hint
           "(cooldown between placements)"]]]])))
 
 (defn lobby-view []

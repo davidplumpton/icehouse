@@ -38,17 +38,14 @@
       [:span.current-mode
        (if (geo/standing? (:selected-piece ui)) "Defend (D)" "Attack (A)")]
       (when captured?
-        [:span.captured-indicator {:style {:color theme/gold :margin-left "0.5rem"}}
-         "[Captured]"])
+        [:span.captured-indicator "[Captured]"])
       (when is-icehoused?
-        [:span.icehoused-indicator {:style {:color theme/red :margin-left "0.5rem"}}
-         "[ICEHOUSE]"])
+        [:span.icehoused-indicator "[ICEHOUSE]"])
       (when zoom?
-        [:span.zoom-indicator {:style {:color "#00ff00" :margin-left "0.5rem"}}
+        [:span.zoom-indicator
          (str "[ZOOM " const/zoom-scale "x]")])
       (when move-mode?
-        [:span.move-mode-indicator {:style {:color "#ff9800" :margin-left "0.5rem"}}
-         "[MOVE]"])]
+        [:span.move-mode-indicator "[MOVE]"])]
      [:div.hotkey-hint
       (cond
         ;; Icehoused players can only use captured pieces
@@ -117,15 +114,13 @@
   [{:keys [is-me selection captured-by-size size-to-hotkey start-stash-drag]}]
   (let [{:keys [size captured?]} selection]
     [:div.captured-pieces
-     [:div.captured-header {:style {:color theme/gold :font-size "0.8em" :margin-top "0.5rem"}}
-      "Captured:"]
+     [:div.captured-header "Captured:"]
      (for [sz [:large :medium :small]
            :let [caps (get captured-by-size sz)
                  hotkey (get size-to-hotkey sz)]
            :when (seq caps)]
        ^{:key (str "cap-row-" (name sz))}
-       [:div.captured-row {:style (merge {:display "flex" :align-items "center" :gap "4px"}
-                                         (when (and is-me captured? (= size sz))
+       [:div.captured-row {:style (merge (when (and is-me captured? (= size sz))
                                            {:background "rgba(255, 215, 0, 0.2)"
                                             :border-radius "4px"
                                             :box-shadow "0 0 8px rgba(255, 215, 0, 0.4)"})
@@ -136,8 +131,7 @@
                                               (.preventDefault e)
                                               (start-stash-drag sz true)))}
         (when hotkey
-          [:span.captured-hotkey {:style {:color theme/gold :font-weight "bold" :min-width "1em"}}
-           (str hotkey)])
+          [:span.captured-hotkey (str hotkey)])
         (for [[idx cap-piece] (map-indexed vector caps)]
           ^{:key (str "cap-" (name sz) "-" idx)}
           [render/draw-stash-pyramid sz (:colour cap-piece) {:captured? true}])])]))
@@ -168,8 +162,7 @@
        player-name
        (when is-me " (you)")
        (when is-icehoused?
-         [:span {:style {:color theme/red :margin-left "0.5rem" :font-size "0.8em"}}
-          "(Icehouse!)"])]
+         [:span.icehoused-indicator "(Icehouse!)"])]
       ;; Regular pieces - greyed out if icehoused
       [:div.stash-pieces {:style (when is-icehoused?
                                    {:opacity 0.4
@@ -231,14 +224,7 @@
   "Displays the current error message from the state atom, if any."
   []
   (when-let [error @state/error-message]
-    [:div.error-message
-     {:style {:background "#ff6b6b"
-              :color "#fff"
-              :padding "0.5rem 1rem"
-              :border-radius "4px"
-              :margin-bottom "0.5rem"
-              :font-weight "bold"}}
-     error]))
+    [:div.error-message error]))
 
 (defn icehouse-banner
   "Displays a prominent banner when the current player is icehoused, 
@@ -248,18 +234,8 @@
         is-icehoused? (and my-id (contains? @state/icehoused-players my-id))]
     (when is-icehoused?
       [:div.icehouse-banner
-       {:style {:background "linear-gradient(135deg, #1a237e 0%, #311b92 100%)"
-                :color "#fff"
-                :padding "0.75rem 1rem"
-                :border-radius "4px"
-                :margin-bottom "0.5rem"
-                :text-align "center"
-                :border "2px solid #5c6bc0"
-                :box-shadow "0 2px 8px rgba(0, 0, 0, 0.3)"}}
-       [:span {:style {:font-weight "bold" :font-size "1.1em"}}
-        "You're in the Icehouse!"]
-       [:span {:style {:margin-left "1rem" :opacity 0.9}}
-        "Only captured pieces can be played. Capture opponents to continue!"]])))
+       [:span.title "You're in the Icehouse!"]
+       [:span.subtitle "Only captured pieces can be played. Capture opponents to continue!"]])))
 
 (defn placement-cooldown-indicator
   "Subtle circular cooldown indicator with smooth animation that depletes 
@@ -345,14 +321,7 @@
       (let [remaining (max 0 (- ends-at current))
             urgent? (< remaining const/timer-urgent-threshold-ms)]
         [:div.game-timer
-         {:style {:font-family "monospace"
-                  :font-size "1.2rem"
-                  :padding "0.25rem 0.5rem"
-                  :background (if urgent? theme/red theme/button-inactive)
-                  :color "#fff"
-                  :border-radius "4px"
-                  :display "inline-block"
-                  :animation (when urgent? "pulse 1s infinite")}}
+         {:class (if urgent? "urgent" "normal")}
          (utils/format-time remaining)]))))
 
 (defn finish-button
@@ -367,26 +336,14 @@
         finished-count (count finished-set)
         i-finished? (contains? finished-set player-id)]
     [:div.finish-controls
-     {:style {:display "flex"
-              :align-items "center"
-              :gap "0.5rem"}}
      [:button.finish-btn
-      {:style {:padding "0.5rem 1rem"
-               :font-size "1rem"
-               :font-weight "bold"
-               :cursor (if i-finished? "default" "pointer")
-               :background (if i-finished? theme/green "#4a4a5e")
-               :color "#fff"
-               :border "2px solid #6a6a7e"
-               :border-radius "6px"
+      {:style {:background (if i-finished? theme/green "#4a4a5e")
                :opacity (if i-finished? 0.8 1)}
        :disabled i-finished?
        :on-click #(ws/finish!)}
       (if i-finished? "✓ Finished" "End Game")]
      (when (pos? finished-count)
        [:span.finish-status
-        {:style {:font-size "0.8rem"
-                 :color "#aaa"}}
         (str finished-count "/" player-count)])]))
 
 ;; =============================================================================
@@ -468,20 +425,8 @@
           sorted-scores (sort-by (fn [entry] (- (second entry))) scores)
           max-score (apply max (vals scores))]
       [:div.game-results-overlay
-       {:style {:position "fixed"
-                :top 0 :left 0 :right 0 :bottom 0
-                :background "rgba(0,0,0,0.8)"
-                :display "flex"
-                :align-items "center"
-                :justify-content "center"
-                :z-index 1000}}
        [:div.game-results
-        {:style {:background "#fff"
-                 :padding "2rem"
-                 :border-radius "8px"
-                 :min-width "300px"
-                 :text-align "center"}}
-        [:h2 {:style {:margin-top 0}} "Game Over!"]
+        [:h2 "Game Over!"]
         [scores-table {:sorted-scores sorted-scores
                        :players-map players-map
                        :icehouse-players icehouse-players
@@ -494,51 +439,39 @@
   []
   (when (:show-help @state/ui-state)
     [:div.help-overlay
-     {:style {:position "fixed"
-              :top 0 :left 0 :right 0 :bottom 0
-              :background "rgba(0,0,0,0.85)"
-              :display "flex"
-              :justify-content "center"
-              :align-items "center"
-              :z-index 1000}
-      :on-click #(swap! state/ui-state assoc :show-help false)}
+     {:on-click #(swap! state/ui-state assoc :show-help false)}
      [:div.help-content
-      {:style {:background theme/board-background
-               :padding "2rem"
-               :border-radius "8px"
-               :max-width "500px"
-               :color "white"}
-       :on-click #(.stopPropagation %)}
-      [:h2 {:style {:margin-top 0 :text-align "center"}} "Keyboard Controls"]
-      [:table {:style {:width "100%" :border-collapse "collapse"}}
+      {:on-click #(.stopPropagation %)}
+      [:h2 "Keyboard Controls"]
+      [:table
        [:tbody
-        [:tr [:td {:style {:padding "0.5rem" :color theme/gold}} "1 / 2 / 3"]
-         [:td {:style {:padding "0.5rem"}} "Select piece size (Small / Medium / Large)"]]
-        [:tr [:td {:style {:padding "0.5rem" :color theme/gold}} "4 / 5 / 6"]
-         [:td {:style {:padding "0.5rem"}} "Select captured piece (Small / Medium / Large)"]]
-        [:tr [:td {:style {:padding "0.5rem" :color theme/gold}} "D"]
-         [:td {:style {:padding "0.5rem"}} "Defend mode (standing piece)"]]
-        [:tr [:td {:style {:padding "0.5rem" :color theme/gold}} "A"]
-         [:td {:style {:padding "0.5rem"}} "Attack mode (pointing piece)"]]
-        [:tr [:td {:style {:padding "0.5rem" :color theme/gold}} "C"]
-         [:td {:style {:padding "0.5rem"}} "Capture piece / Toggle captured mode"]]
-        [:tr [:td {:style {:padding "0.5rem" :color theme/gold}} "Z"]
-         [:td {:style {:padding "0.5rem"}} (str "Toggle " const/zoom-scale "x zoom for fine placement")]]
-        [:tr [:td {:style {:padding "0.5rem" :color theme/gold}} "M"]
-         [:td {:style {:padding "0.5rem"}} "Toggle move mode (adjust position, keep angle)"]]
-        [:tr [:td {:style {:padding "0.5rem" :color theme/gold}} "Shift"]
-         [:td {:style {:padding "0.5rem"}} "Hold while dragging for move mode"]]
-        [:tr [:td {:style {:padding "0.5rem" :color theme/gold}} "Escape"]
-         [:td {:style {:padding "0.5rem"}} "Cancel placement / Close help"]]
-        [:tr [:td {:style {:padding "0.5rem" :color theme/gold}} "?"]
-         [:td {:style {:padding "0.5rem"}} "Toggle this help"]]]]
-      [:h3 {:style {:margin-top "1.5rem"}} "Gameplay Tips"]
-      [:ul {:style {:padding-left "1.5rem" :line-height "1.6"}}
+        [:tr [:td {:style {:color theme/gold}} "1 / 2 / 3"]
+         [:td "Select piece size (Small / Medium / Large)"]]
+        [:tr [:td {:style {:color theme/gold}} "4 / 5 / 6"]
+         [:td "Select captured piece (Small / Medium / Large)"]]
+        [:tr [:td {:style {:color theme/gold}} "D"]
+         [:td "Defend mode (standing piece)"]]
+        [:tr [:td {:style {:color theme/gold}} "A"]
+         [:td "Attack mode (pointing piece)"]]
+        [:tr [:td {:style {:color theme/gold}} "C"]
+         [:td "Capture piece / Toggle captured mode"]]
+        [:tr [:td {:style {:color theme/gold}} "Z"]
+         [:td (str "Toggle " const/zoom-scale "x zoom for fine placement")]]
+        [:tr [:td {:style {:color theme/gold}} "M"]
+         [:td "Toggle move mode (adjust position, keep angle)"]]
+        [:tr [:td {:style {:color theme/gold}} "Shift"]
+         [:td "Hold while dragging for move mode"]]
+        [:tr [:td {:style {:color theme/gold}} "Escape"]
+         [:td "Cancel placement / Close help"]]
+        [:tr [:td {:style {:color theme/gold}} "?"]
+         [:td "Toggle this help"]]]]
+      [:h3 "Gameplay Tips"]
+      [:ul
        [:li "Click and drag to place a piece with rotation"]
        [:li "Attack mode unlocks after placing 2 pieces"]
        [:li "Attackers must point at an opponent's defender within range"]
        [:li "Over-ice: When attack pips exceed defense, capture excess attackers"]]
-      [:div {:style {:text-align "center" :margin-top "1.5rem" :color "#888"}}
+      [:div.help-footer
        "Click anywhere or press Escape to close"]]]))
 
 ;; =============================================================================

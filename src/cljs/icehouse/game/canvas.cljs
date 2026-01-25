@@ -54,7 +54,7 @@
            {:ref #(reset! canvas-ref %)
             :width const/canvas-width
             :height const/canvas-height
-            :style {:border "2px solid #4ecdc4" :cursor "crosshair"}
+            :class "game-canvas"
             :on-mouse-down interact/handle-canvas-mousedown
             :on-mouse-enter interact/handle-canvas-mouseenter
             :on-mouse-move interact/handle-canvas-mousemove
