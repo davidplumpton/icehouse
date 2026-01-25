@@ -103,6 +103,17 @@
                 "Another piece is blocking the line of attack"
                 "Attacking pieces must have a clear line of sight to their target. Other pieces between the attacker and target block the attack.")))
 
+(defn- check-first-two-defensive
+  "Validates that the player's first two pieces are defensive (standing).
+   Returns nil if valid, or an error map if trying to attack too early."
+  [player-id board is-attacking? using-captured?]
+  (when (and is-attacking? (not using-captured?))
+    (let [placed-count (rules/pieces-placed-by-player board player-id)]
+      (when (< placed-count 2)
+        (make-error msg/err-first-defensive
+                    "First two pieces must be defensive (standing up)"
+                    "In Icehouse, your first two pieces must be placed as defenders. This ensures everyone has a base to defend before attacks begin.")))))
+
 (defn- check-player-icehoused
   "Validates that an icehoused player is not trying to place regular pieces.
    Returns nil if valid (player not icehoused or using captured), or an error map."
@@ -122,6 +133,7 @@
   (or (check-piece-availability remaining size using-captured?)
       (check-bounds piece)
       (check-overlap piece board)
+      (check-first-two-defensive (:player-id piece) board is-attacking? using-captured?)
       (check-attack-trajectory piece board is-attacking?)
       (check-attack-range piece board is-attacking?)
       (check-line-of-sight piece board is-attacking?)))

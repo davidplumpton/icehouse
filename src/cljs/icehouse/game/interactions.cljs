@@ -14,12 +14,14 @@
 ;; =============================================================================
 
 (defn can-attack?
-  "Returns true if attacking is allowed (after first few moves).
-   Attacking is unlocked once the attack-unlock-threshold of pieces is reached."
+  "Returns true if attacking is allowed (after first two defensive pieces).
+   Attacking is unlocked once the current player has placed at least 2 pieces."
   []
   (let [game @state/game-state
-        board-count (count (:board game))]
-    (>= board-count const/attack-unlock-threshold)))
+        player-id (utils/normalize-player-id (:id @state/current-player))
+        board (:board game)
+        player-pieces (filter #(= (utils/normalize-player-id (:player-id %)) player-id) board)]
+    (>= (count player-pieces) const/attack-unlock-threshold)))
 
 (defn has-captured-pieces?
   "Returns true if the current player has any captured pieces available to play."

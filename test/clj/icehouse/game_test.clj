@@ -528,8 +528,11 @@
     ;; Attacker pointing away from the defender (angle = PI, pointing left)
     ;; Defender is to the right at x=200
     (let [defender {:id "d1" :player-id "p2" :x 200 :y 100 :size :small :orientation :standing :angle 0}
+          ;; Add two defenders for p1 to allow attacking
+          d_p1_1 {:id "dp1_1" :player-id "p1" :x 0 :y 0 :size :small :orientation :standing :angle 0}
+          d_p1_2 {:id "dp1_2" :player-id "p1" :x 40 :y 0 :size :small :orientation :standing :angle 0}
           game {:players {"p1" {:pieces {:small 5 :medium 5 :large 5}}}
-                :board [defender]}
+                :board [defender d_p1_1 d_p1_2]}
           ;; Attacker at x=100, pointing left (angle = PI), defender is to the right
           attacker {:x 100 :y 100 :size :small :orientation :pointing :angle Math/PI}
           error (game/validate-placement game "p1" attacker)]
@@ -541,8 +544,11 @@
     ;; Small attacker tip at x=130 (100 + 30), max reach x=190
     ;; Place defender at x=220 (left edge at 200), distance = 70px > 60px
     (let [defender {:id "d1" :player-id "p2" :x 220 :y 100 :size :small :orientation :standing :angle 0}
+          ;; Add two defenders for p1 to allow attacking
+          d_p1_1 {:id "dp1_1" :player-id "p1" :x 0 :y 0 :size :small :orientation :standing :angle 0}
+          d_p1_2 {:id "dp1_2" :player-id "p1" :x 40 :y 0 :size :small :orientation :standing :angle 0}
           game {:players {"p1" {:pieces {:small 5 :medium 5 :large 5}}}
-                :board [defender]}
+                :board [defender d_p1_1 d_p1_2]}
           ;; Attacker at x=100, pointing right (angle = 0) at defender out of range
           attacker {:x 100 :y 100 :size :small :orientation :pointing :angle 0}
           error (game/validate-placement game "p1" attacker)]
@@ -553,8 +559,11 @@
     ;; Large piece has range of 90px (height), tip extends 45px from center
     ;; Position attacker so tip doesn't overlap defender but is in range
     (let [defender {:id "d1" :player-id "p2" :x 200 :y 100 :size :small :orientation :standing :angle 0}
+          ;; Add two defenders for p1 to allow attacking
+          d_p1_1 {:id "dp1_1" :player-id "p1" :x 0 :y 0 :size :small :orientation :standing :angle 0}
+          d_p1_2 {:id "dp1_2" :player-id "p1" :x 40 :y 0 :size :small :orientation :standing :angle 0}
           game {:players {"p1" {:pieces {:small 5 :medium 5 :large 5}}}
-                :board [defender]}
+                :board [defender d_p1_1 d_p1_2]}
           ;; Large attacker at x=138, tip at x=183 (before defender left edge at 180)
           ;; Distance to defender edge = 180 - 183 = -3 (tip past edge actually)
           ;; Let's use x=130: tip at 175, defender edge at 180, distance = 5px < 60px range
@@ -565,8 +574,10 @@
     ;; Attacker pointing at own piece should fail with trajectory error
     ;; Use large attacker positioned so it doesn't overlap
     (let [own-piece {:id "d1" :player-id "p1" :x 200 :y 100 :size :small :orientation :standing :angle 0}
+          ;; Add two defenders for p1 (one is already there as own-piece)
+          d_p1_2 {:id "dp1_2" :player-id "p1" :x 40 :y 0 :size :small :orientation :standing :angle 0}
           game {:players {"p1" {:pieces {:small 5 :medium 5 :large 5}}}
-                :board [own-piece]}
+                :board [own-piece d_p1_2]}
           attacker {:x 130 :y 100 :size :large :orientation :pointing :angle 0}
           error (game/validate-placement game "p1" attacker)]
       (is (= "NO_ATTACK_TARGET" (:code error)))))
@@ -575,8 +586,11 @@
     ;; Attacker pointing at enemy's attacking piece should fail
     ;; Enemy pointing up (angle = -PI/2) so its back doesn't face attacker
     (let [enemy-attacker {:id "d1" :player-id "p2" :x 200 :y 100 :size :small :orientation :pointing :angle (- (/ Math/PI 2))}
+          ;; Add two defenders for p1 to allow attacking
+          d_p1_1 {:id "dp1_1" :player-id "p1" :x 0 :y 0 :size :small :orientation :standing :angle 0}
+          d_p1_2 {:id "dp1_2" :player-id "p1" :x 40 :y 0 :size :small :orientation :standing :angle 0}
           game {:players {"p1" {:pieces {:small 5 :medium 5 :large 5}}}
-                :board [enemy-attacker]}
+                :board [enemy-attacker d_p1_1 d_p1_2]}
           attacker {:x 130 :y 100 :size :large :orientation :pointing :angle 0}
           error (game/validate-placement game "p1" attacker)]
       (is (= "NO_ATTACK_TARGET" (:code error))))))
@@ -720,16 +734,21 @@
     ;; Both in range, but blocker is hit first
     (let [defender {:id "d1" :player-id "bob" :x 160 :y 100 :size :small :orientation :standing :angle 0}
           blocker {:id "b1" :player-id "alice" :x 120 :y 100 :size :small :orientation :standing :angle 0}
+          ;; Add one more defender for alice (blocker counts as one)
+          d_alice_2 {:id "da2" :player-id "alice" :x 0 :y 0 :size :small :orientation :standing :angle 0}
           game {:players {"alice" {:pieces {:small 5 :medium 5 :large 5}}}
-                :board [defender blocker]}
+                :board [defender blocker d_alice_2]}
           attacker {:x 50 :y 100 :size :large :orientation :pointing :angle 0}
           error (game/validate-placement game "alice" attacker)]
       (is (= "LINE_OF_SIGHT_BLOCKED" (:code error)))))
 
   (testing "valid attack with no blockers succeeds"
     (let [defender {:id "d1" :player-id "bob" :x 200 :y 100 :size :small :orientation :standing :angle 0}
+          ;; Add two defenders for alice
+          d_alice_1 {:id "da1" :player-id "alice" :x 0 :y 0 :size :small :orientation :standing :angle 0}
+          d_alice_2 {:id "da2" :player-id "alice" :x 40 :y 0 :size :small :orientation :standing :angle 0}
           game {:players {"alice" {:pieces {:small 5 :medium 5 :large 5}}}
-                :board [defender]}
+                :board [defender d_alice_1 d_alice_2]}
           attacker {:x 100 :y 100 :size :large :orientation :pointing :angle 0}]
       (is (nil? (game/validate-placement game "alice" attacker))))))
 
@@ -742,8 +761,11 @@
           ;; Alice also has a piece on board (required for attack to be enabled)
           alice-piece {:id "alice-d1" :player-id "alice" :x 500 :y 400
                        :size :small :orientation :standing :angle 0}
+          ;; Add one more defender for alice
+          alice-piece-2 {:id "alice-d2" :player-id "alice" :x 540 :y 400
+                         :size :small :orientation :standing :angle 0}
           game {:players {"alice" {:pieces {:small 5 :medium 5 :large 5}}}
-                :board [defender alice-piece]}
+                :board [defender alice-piece alice-piece-2]}
           ;; Alice attacks Bob's defender from the right, pointing left
           ;; Angle = PI (pointing left)
           ;; Large attacker: tip-offset = 45, range = 90 (height)
@@ -758,8 +780,11 @@
                     :size :small :orientation :standing :angle 0}
           alice-piece {:id "alice-d1" :player-id "alice" :x 500 :y 400
                        :size :small :orientation :standing :angle 0}
+          ;; Add one more defender for alice
+          alice-piece-2 {:id "alice-d2" :player-id "alice" :x 540 :y 400
+                         :size :small :orientation :standing :angle 0}
           game {:players {"alice" {:pieces {:small 5 :medium 5 :large 5}}}
-                :board [defender alice-piece]}
+                :board [defender alice-piece alice-piece-2]}
           ;; Place attacker so close that pieces overlap
           ;; Large piece: half-width = 45 (tip side), half-base = 30
           ;; At x=340, large piece extends from x=295 to x=385 (pointing left)
@@ -774,8 +799,11 @@
                     :size :small :orientation :standing :angle 0}
           alice-piece {:id "alice-d1" :player-id "alice" :x 500 :y 400
                        :size :small :orientation :standing :angle 0}
+          ;; Add one more defender for alice
+          alice-piece-2 {:id "alice-d2" :player-id "alice" :x 540 :y 400
+                         :size :small :orientation :standing :angle 0}
           game {:players {"alice" {:pieces {:small 5 :medium 5 :large 5}}}
-                :board [defender alice-piece]}
+                :board [defender alice-piece alice-piece-2]}
           ;; Large attacker far from defender
           ;; Tip at x=455, defender at x=200, distance=255 >> 90
           attacker {:x 500 :y 200 :size :large :orientation :pointing :angle Math/PI}
@@ -789,8 +817,11 @@
           ;; Place Alice's own piece far from the attacker to avoid overlap
           alice-piece {:id "alice-d1" :player-id "alice" :x 700 :y 500
                        :size :small :orientation :standing :angle 0}
+          ;; Add one more defender for alice
+          alice-piece-2 {:id "alice-d2" :player-id "alice" :x 740 :y 500
+                         :size :small :orientation :standing :angle 0}
           game {:players {"alice" {:pieces {:small 5 :medium 5 :large 5}}}
-                :board [defender alice-piece]}
+                :board [defender alice-piece alice-piece-2]}
           ;; Attack from below-right, pointing up-left at -135 degrees
           ;; For large piece: tip-offset = 45, range = 90
           ;; To be in range, tip must be within 90px of defender edge (center at 300, 200)

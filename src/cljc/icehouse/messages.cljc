@@ -64,6 +64,7 @@
 (def err-no-target "NO_ATTACK_TARGET")
 (def err-out-of-range "TARGET_OUT_OF_RANGE")
 (def err-blocked "LINE_OF_SIGHT_BLOCKED")
+(def err-first-defensive "FIRST_PIECES_MUST_BE_DEFENSIVE")
 
 ;; Capture errors
 (def err-piece-not-found "PIECE_NOT_FOUND")
