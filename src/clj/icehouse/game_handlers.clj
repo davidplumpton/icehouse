@@ -84,10 +84,15 @@
    Returns nil if valid or not attacking, or an error map if out of range."
   [piece board is-attacking?]
   (when (and is-attacking? (not (targeting/has-target-in-range? piece board)))
-    (make-error msg/err-out-of-range
-                "Target is out of range"
-                (str "Attack range depends on piece size: small=60px, medium=75px, large=90px. "
-                     "The target must be within this distance from the attacking piece's tip."))))
+    (let [ranges (into {} (for [size [:small :medium :large]]
+                            [size (* 2 const/tip-offset-ratio (get const/piece-sizes size))]))]
+      (make-error msg/err-out-of-range
+                  "Target is out of range"
+                  (str "Attack range depends on piece size: "
+                       "small=" (int (:small ranges)) "px, "
+                       "medium=" (int (:medium ranges)) "px, "
+                       "large=" (int (:large ranges)) "px. "
+                       "The target must be within this distance from the attacking piece's tip.")))))
 
 (defn- check-line-of-sight
   "Validates that the attacking piece has a clear line of sight to its target.

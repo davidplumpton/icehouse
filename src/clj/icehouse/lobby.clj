@@ -22,15 +22,7 @@
 (def default-names
   ["Alice" "Bob" "Charles" "Dave" "Eve" "Frank" "Grace" "Henry"])
 
-(def colours
-  ["#e53935"   ; red (Rainbow)
-   "#fdd835"   ; yellow (Rainbow)
-   "#43a047"   ; green (Rainbow)
-   "#1e88e5"   ; blue (Rainbow)
-   "#7b1fa2"   ; purple (Xeno)
-   "#00acc1"   ; cyan (Xeno)
-   "#fb8c00"   ; orange (Xeno)
-   "#212121"]) ; black (Rainbow)
+(def colours const/colours)
 
 (defn get-taken-names [clients-map room-id]
   "Returns set of names already taken in the room"

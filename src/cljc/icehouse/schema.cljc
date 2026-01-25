@@ -1,5 +1,6 @@
 (ns icehouse.schema
-  (:require [malli.core :as m]))
+  (:require [icehouse.constants :as const]
+            [malli.core :as m]))
 
 ;; =============================================================================
 ;; Primitive Schemas
@@ -55,9 +56,9 @@
 (def PieceCounts
   "Remaining pieces for a player"
   [:map
-   [:small [:int {:min 0 :max 5}]]
-   [:medium [:int {:min 0 :max 5}]]
-   [:large [:int {:min 0 :max 5}]]])
+   [:small [:int {:min 0 :max const/max-pieces-per-size}]]
+   [:medium [:int {:min 0 :max const/max-pieces-per-size}]]
+   [:large [:int {:min 0 :max const/max-pieces-per-size}]]])
 
 (def Player
   "Player state within a game"
@@ -94,7 +95,7 @@
    [:timer-enabled {:optional true} :boolean]
    [:timer-duration {:optional true} [:or
                                       [:enum :random "random"]
-                                      [:int {:min 1000}]]]
+                                      [:int {:min const/min-timer-duration-ms}]]]
    [:placement-throttle {:optional true} [:or :double :int]]])
 
 ;; =============================================================================

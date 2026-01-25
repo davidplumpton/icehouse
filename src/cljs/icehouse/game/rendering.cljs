@@ -1,6 +1,7 @@
 (ns icehouse.game.rendering
   "Canvas drawing functions for the game board and pieces."
   (:require [icehouse.game.constants :as const]
+            [icehouse.constants :as shared-const]
             [icehouse.state :as state]
             [icehouse.theme :as theme]
             [icehouse.geometry :as geo]
@@ -134,7 +135,7 @@
 (defn draw-pyramid [ctx x y size colour orientation angle & [{:keys [iced? zoom-state]}]]
   (let [size-kw (keyword size)
         orient-kw (keyword orientation)
-        base-size (get geo/piece-sizes size-kw geo/default-piece-size)
+        base-size (get shared-const/piece-sizes size-kw shared-const/default-piece-size)
         half-size (/ base-size 2)
         rotation (or angle 0)
         final-colour (if iced? (lighten-color colour) colour)]
@@ -162,7 +163,7 @@
         (.lineTo ctx (- half-size) half-size)
         (.stroke ctx))
       ;; Pointing/attacking: side view triangle pointing right (3:2 length:base ratio like stash)
-      (let [half-width (* base-size geo/tip-offset-ratio)]
+      (let [half-width (* base-size shared-const/tip-offset-ratio)]
         (.beginPath ctx)
         (.moveTo ctx half-width 0)                    ; tip pointing right
         (.lineTo ctx (- half-width) (- half-size))    ; top-left corner
@@ -299,12 +300,12 @@
 (defn draw-attack-preview
   "Draw attack range indicator and target highlights for an attacking piece being placed"
   [ctx game x y angle size player-id zoom-state]
-  (let [base-size (get geo/piece-sizes size geo/default-piece-size)
-        tip-offset (* base-size geo/tip-offset-ratio)
+  (let [base-size (get shared-const/piece-sizes size shared-const/default-piece-size)
+        tip-offset (* base-size shared-const/tip-offset-ratio)
         tip-x (+ x (* (js/Math.cos angle) tip-offset))
         tip-y (+ y (* (js/Math.sin angle) tip-offset))
-        ;; Attack range extends piece height from tip (height = 2 * geo/tip-offset-ratio * base-size)
-        piece-height (* 2 geo/tip-offset-ratio base-size)
+        ;; Attack range extends piece height from tip (height = 2 * shared-const/tip-offset-ratio * base-size)
+        piece-height (* 2 shared-const/tip-offset-ratio base-size)
         range-end-x (+ tip-x (* (js/Math.cos angle) piece-height))
         range-end-y (+ tip-y (* (js/Math.sin angle) piece-height))
         ;; Create preview attacker to find targets (use world coords)

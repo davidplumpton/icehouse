@@ -3,6 +3,7 @@
             [icehouse.game :as game]
             [icehouse.game-logic :as logic]
             [icehouse.geometry :as geo]
+            [icehouse.constants :as const]
             [icehouse.utils :as utils]))
 
 (deftest initial-pieces-test
@@ -959,14 +960,14 @@
 
 (deftest constants-test
   (testing "pips values are correct"
-    (is (= 1 (:small geo/pips)))
-    (is (= 2 (:medium geo/pips)))
-    (is (= 3 (:large geo/pips))))
+    (is (= 1 (:small const/pips)))
+    (is (= 2 (:medium const/pips)))
+    (is (= 3 (:large const/pips))))
 
   (testing "piece sizes maintain 3:2 ratio progression"
-    (is (= 40 (:small geo/piece-sizes)))
-    (is (= 50 (:medium geo/piece-sizes)))
-    (is (= 60 (:large geo/piece-sizes))))
+    (is (= 40 (:small const/piece-sizes)))
+    (is (= 50 (:medium const/piece-sizes)))
+    (is (= 60 (:large const/piece-sizes))))
 
   (testing "play area dimensions"
     (is (= 1000 game/play-area-width))

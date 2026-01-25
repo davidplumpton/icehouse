@@ -3,6 +3,34 @@
    Used by both backend (Clojure) and frontend (ClojureScript).")
 
 ;; =============================================================================
+;; Piece Definitions
+;; =============================================================================
+
+(def pips
+  "Points per piece size (pip values)"
+  {:small 1 :medium 2 :large 3})
+
+(def piece-sizes
+  "Piece base width in pixels. Used for collision and rendering."
+  {:small 40 :medium 50 :large 60})
+
+(def default-piece-size
+  "Fallback for unknown piece sizes"
+  40)
+
+(def tip-offset-ratio
+  "Triangle tip extends this ratio * base-size from center"
+  0.75)
+
+(def initial-piece-counts
+  "Starting pieces per player by size"
+  {:small 5 :medium 5 :large 5})
+
+(def max-pieces-per-size
+  "Maximum number of pieces of a single size a player can have"
+  5)
+
+;; =============================================================================
 ;; Game Options Defaults
 ;; =============================================================================
 
@@ -21,6 +49,10 @@
 (def game-duration-max-ms
   "Maximum game duration in milliseconds (5 minutes)"
   (* 5 60 1000))
+
+(def min-timer-duration-ms
+  "Minimum allowed custom timer duration"
+  1000)
 
 ;; =============================================================================
 ;; Play Area Dimensions
@@ -42,6 +74,21 @@
   "Minimum pieces placed before icehouse rule can trigger"
   8)
 
-(def initial-piece-counts
-  "Starting pieces per player by size"
-  {:small 5 :medium 5 :large 5})
+(def parallel-threshold
+  "Threshold for detecting parallel lines in ray casting"
+  0.0001)
+
+;; =============================================================================
+;; UI & Visuals
+;; =============================================================================
+
+(def colours
+  "Traditional Looney Labs pyramid stash colours"
+  ["#e53935"   ; red (Rainbow)
+   "#fdd835"   ; yellow (Rainbow)
+   "#43a047"   ; green (Rainbow)
+   "#1e88e5"   ; blue (Rainbow)
+   "#7b1fa2"   ; purple (Xeno)
+   "#00acc1"   ; cyan (Xeno)
+   "#fb8c00"   ; orange (Xeno)
+   "#212121"]) ; black (Rainbow)

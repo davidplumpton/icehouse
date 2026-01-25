@@ -1,6 +1,7 @@
 (ns icehouse.state
   (:require [reagent.core :as r]
             [icehouse.schema :as schema]
+            [icehouse.constants :as const]
             [malli.core :as m]))
 
 ;; =============================================================================
@@ -11,7 +12,7 @@
 ;; {:id nil :name "" :colour "#e53935"}
 (defonce current-player (r/atom {:id nil
                                   :name ""
-                                  :colour "#e53935"}))  ;; Default to red
+                                  :colour (first const/colours)}))  ;; Default to first colour
 
 ;; =============================================================================
 ;; Session State
@@ -130,12 +131,4 @@
 ;; Traditional Looney Labs pyramid stash colours
 ;; Rainbow stash: red, yellow, green, blue, black
 ;; Xeno stash: purple, cyan, orange, white
-(def colours
-  ["#e53935"   ; red (Rainbow)
-   "#fdd835"   ; yellow (Rainbow)
-   "#43a047"   ; green (Rainbow)
-   "#1e88e5"   ; blue (Rainbow)
-   "#7b1fa2"   ; purple (Xeno)
-   "#00acc1"   ; cyan (Xeno)
-   "#fb8c00"   ; orange (Xeno)
-   "#212121"]) ; black (Rainbow)
+(def colours const/colours)

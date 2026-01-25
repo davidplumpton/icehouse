@@ -1,6 +1,7 @@
 (ns icehouse.geometry
   "Shared geometry functions for Icehouse game.
-   Used by both backend (Clojure) and frontend (ClojureScript).")
+   Used by both backend (Clojure) and frontend (ClojureScript)."
+  (:require [icehouse.constants :as const]))
 
 ;; =============================================================================
 ;; Math Helpers (platform-specific)
@@ -27,30 +28,6 @@
      :cljs (js/Math.atan2 y x)))
 
 ;; =============================================================================
-;; Constants
-;; =============================================================================
-
-(def pips
-  "Points per piece size (pip values)"
-  {:small 1 :medium 2 :large 3})
-
-(def piece-sizes
-  "Piece sizes in pixels (base width). Small height = large base."
-  {:small 40 :medium 50 :large 60})
-
-(def default-piece-size
-  "Fallback for unknown piece sizes"
-  40)
-
-(def tip-offset-ratio
-  "Triangle tip extends this ratio * base-size from center"
-  0.75)
-
-(def parallel-threshold
-  "Threshold for detecting parallel lines in ray casting"
-  0.0001)
-
-;; =============================================================================
 ;; Piece Helpers
 ;; =============================================================================
 
@@ -59,7 +36,7 @@
    Returns 0 if piece is nil."
   [piece]
   (if piece
-    (get pips (keyword (:size piece)) 0)
+    (get const/pips (keyword (:size piece)) 0)
     0))
 
 (defn standing?
@@ -89,7 +66,7 @@
    Returns nil if piece is nil or missing required coordinates."
   [{:keys [x y size orientation angle] :as piece}]
   (when (and piece x y)
-    (let [base-size (get piece-sizes (keyword size) default-piece-size)
+    (let [base-size (get const/piece-sizes (keyword size) const/default-piece-size)
           half (/ base-size 2)
           ;; All pieces can rotate - the angle affects collision detection
           effective-angle (or angle 0)
@@ -100,7 +77,7 @@
                          [half half]
                          [(- half) half]]
                         ;; Pointing: triangle (3:2 length:base ratio)
-                        (let [half-width (* base-size tip-offset-ratio)]
+                        (let [half-width (* base-size const/tip-offset-ratio)]
                           [[half-width 0]
                            [(- half-width) (- half)]
                            [(- half-width) half]]))]
@@ -229,8 +206,8 @@
    Returns nil if piece is nil or missing required coordinates."
   [piece]
   (when (and piece (:x piece) (:y piece))
-    (let [base-size (get piece-sizes (keyword (:size piece)) default-piece-size)
-          tip-offset (* base-size tip-offset-ratio)
+    (let [base-size (get const/piece-sizes (keyword (:size piece)) const/default-piece-size)
+          tip-offset (* base-size const/tip-offset-ratio)
           angle (or (:angle piece) 0)
           [dx dy] [(cos angle) (sin angle)]]
       [(+ (:x piece) (* dx tip-offset))
@@ -241,8 +218,8 @@
    Returns 0 if piece is nil."
   [piece]
   (if piece
-    (let [base-size (get piece-sizes (keyword (:size piece)) default-piece-size)]
-      (* 2 tip-offset-ratio base-size))
+    (let [base-size (get const/piece-sizes (keyword (:size piece)) const/default-piece-size)]
+      (* 2 const/tip-offset-ratio base-size))
     0))
 
 ;; =============================================================================
@@ -256,7 +233,7 @@
   (let [sx (- p2x p1x)
         sy (- p2y p1y)
         denom (- (* dx sy) (* dy sx))]
-    (when (>= (math-abs denom) parallel-threshold)
+    (when (>= (math-abs denom) const/parallel-threshold)
       (let [ox-p1x (- p1x ox)
             oy-p1y (- p1y oy)
             t (/ (- (* ox-p1x sy) (* oy-p1y sx)) denom)
