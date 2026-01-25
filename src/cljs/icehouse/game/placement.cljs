@@ -115,8 +115,10 @@
 ;; Piece Availability
 ;; =============================================================================
 
-(defn has-pieces-of-size? [size use-captured?]
-  "Returns true if current player has pieces of the given size to place"
+(defn has-pieces-of-size?
+  "Returns true if the current player has pieces of the given size available to 
+   place. Checks either regular stash or captured pieces based on use-captured?."
+  [size use-captured?]
   (let [game @state/game-state
         player-id (utils/normalize-player-id (:id @state/current-player))
         player-data (get-in game [:players player-id])]
@@ -128,8 +130,10 @@
       (let [pieces (or (:pieces player-data) {})]
         (pos? (get pieces size 0))))))
 
-(defn available-captured-sizes []
-  "Returns a vector of distinct sizes of captured pieces in order they appear"
+(defn available-captured-sizes
+  "Returns a vector of distinct sizes of pieces currently in the player's 
+   captured stash, in the order they were captured."
+  []
   (let [game @state/game-state
         player-id (utils/normalize-player-id (:id @state/current-player))
         player-data (get-in game [:players player-id])

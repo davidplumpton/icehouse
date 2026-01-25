@@ -13,14 +13,17 @@
 ;; Game Queries
 ;; =============================================================================
 
-(defn can-attack? []
-  "Returns true if attacking is allowed (after first few moves)"
+(defn can-attack?
+  "Returns true if attacking is allowed (after first few moves).
+   Attacking is unlocked once the attack-unlock-threshold of pieces is reached."
+  []
   (let [game @state/game-state
         board-count (count (:board game))]
     (>= board-count const/attack-unlock-threshold)))
 
-(defn has-captured-pieces? []
-  "Returns true if current player has any captured pieces"
+(defn has-captured-pieces?
+  "Returns true if the current player has any captured pieces available to play."
+  []
   (let [game @state/game-state
         player-id (utils/normalize-player-id (:id @state/current-player))
         player-data (get-in game [:players player-id])
@@ -28,14 +31,15 @@
     (pos? (count captured))))
 
 (defn get-hovered-piece
-  "Get the piece currently under the mouse cursor, if any"
+  "Get the piece currently under the mouse cursor, if any."
   []
   (when-let [{:keys [x y]} (:hover-pos @state/ui-state)]
     (when-let [game @state/game-state]
       (render/find-piece-at x y (:board game)))))
 
 (defn try-capture-hovered-piece!
-  "Attempt to capture the piece under the cursor"
+  "Attempt to capture the piece under the cursor if it is currently capturable 
+   by the player."
   []
   (when-let [hovered (get-hovered-piece)]
     (when-let [game @state/game-state]
@@ -49,8 +53,10 @@
 ;; Canvas Event Utilities
 ;; =============================================================================
 
-(defn get-canvas-coords [e]
-  "Get coordinates relative to canvas from mouse event"
+(defn get-canvas-coords
+  "Get coordinates relative to the canvas from a mouse event.
+   Returns {:x :y}."
+  [e]
   (let [rect (.getBoundingClientRect (.-target e))]
     {:x (- (.-clientX e) (.-left rect))
      :y (- (.-clientY e) (.-top rect))}))

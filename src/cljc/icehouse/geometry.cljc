@@ -7,23 +7,33 @@
 ;; Math Helpers (platform-specific)
 ;; =============================================================================
 
-(defn cos [angle]
+(defn cos
+  "Calculate cosine of angle (radians)"
+  [angle]
   #?(:clj (Math/cos angle)
      :cljs (js/Math.cos angle)))
 
-(defn sin [angle]
+(defn sin
+  "Calculate sine of angle (radians)"
+  [angle]
   #?(:clj (Math/sin angle)
      :cljs (js/Math.sin angle)))
 
-(defn sqrt [x]
+(defn sqrt
+  "Calculate square root of x"
+  [x]
   #?(:clj (Math/sqrt x)
      :cljs (js/Math.sqrt x)))
 
-(defn math-abs [x]
+(defn math-abs
+  "Calculate absolute value of x"
+  [x]
   #?(:clj (Math/abs x)
      :cljs (js/Math.abs x)))
 
-(defn atan2 [y x]
+(defn atan2
+  "Calculate arc tangent of y/x"
+  [y x]
   #?(:clj (Math/atan2 y x)
      :cljs (js/Math.atan2 y x)))
 
@@ -87,7 +97,8 @@
             local-verts))))
 
 (defn edge-normal
-  "Get perpendicular normal vector for edge from v1 to v2"
+  "Get perpendicular normal vector for edge from v1 to v2.
+   Used in Separating Axis Theorem (SAT) for collision detection."
   [[x1 y1] [x2 y2]]
   (let [dx (- x2 x1)
         dy (- y2 y1)
@@ -97,7 +108,8 @@
       [(/ (- dy) len) (/ dx len)])))
 
 (defn polygon-axes
-  "Get all edge normals for a polygon (for SAT collision)"
+  "Get all edge normals for a polygon. These are the potential separating axes
+   used in SAT collision detection."
   [vertices]
   (let [n (count vertices)]
     (mapv (fn [i]
@@ -106,7 +118,8 @@
           (range n))))
 
 (defn project-polygon
-  "Project polygon vertices onto an axis, return [min max]"
+  "Project polygon vertices onto an axis, returning the interval [min max].
+   Part of the SAT collision detection algorithm."
   [vertices [ax ay]]
   (let [dots (map (fn [[x y]] (+ (* x ax) (* y ay))) vertices)]
     [(apply min dots) (apply max dots)]))
@@ -118,7 +131,8 @@
   (and (< min1 max2) (< min2 max1)))
 
 (defn polygons-intersect?
-  "Check if two convex polygons intersect using SAT"
+  "Check if two convex polygons intersect using the Separating Axis Theorem (SAT).
+   Returns true if the polygons overlap."
   [verts1 verts2]
   (let [axes (concat (polygon-axes verts1) (polygon-axes verts2))]
     (every? (fn [axis]
@@ -128,14 +142,16 @@
             axes)))
 
 (defn pieces-intersect?
-  "Check if two pieces intersect"
+  "Check if two pieces intersect. Works for both standing (squares) and 
+   pointing (triangles) pieces."
   [piece1 piece2]
   (polygons-intersect?
    (piece-vertices piece1)
    (piece-vertices piece2)))
 
 (defn point-in-polygon?
-  "Check if point [px py] is inside polygon (ray casting algorithm)"
+  "Check if point [px py] is inside polygon using the ray casting algorithm.
+   Works for any convex or concave polygon."
   [[px py] vertices]
   (let [n (count vertices)]
     (loop [i 0
@@ -168,7 +184,7 @@
     [(:x piece) (:y piece)]))
 
 (defn point-to-segment-distance
-  "Calculate minimum distance from point p to line segment [a b]"
+  "Calculate the minimum Euclidean distance from point p to line segment [a b]."
   [[px py] [[ax ay] [bx by]]]
   (let [abx (- bx ax)
         aby (- by ay)
@@ -184,7 +200,8 @@
              (* (- py cy) (- py cy))))))
 
 (defn point-to-polygon-distance
-  "Calculate minimum distance from point to polygon (nearest edge)"
+  "Calculate the minimum Euclidean distance from a point to the nearest edge 
+   of a polygon."
   [point vertices]
   (let [n (count vertices)
         edges (map (fn [i] [(nth vertices i) (nth vertices (mod (inc i) n))])
@@ -196,7 +213,7 @@
 ;; =============================================================================
 
 (defn attack-direction
-  "Get the unit direction vector for an attacking piece"
+  "Get the unit direction vector for an attacking piece based on its angle."
   [piece]
   (let [angle (or (:angle piece) 0)]
     [(cos angle) (sin angle)]))
@@ -215,6 +232,7 @@
 
 (defn attack-range
   "Get the attack range for a piece (its height/length, not base width).
+   Attack range is twice the tip offset ratio times the base size.
    Returns 0 if piece is nil."
   [piece]
   (if piece
@@ -242,13 +260,14 @@
           t)))))
 
 (defn ray-segment-intersection?
-  "Check if a ray from origin in direction dir intersects line segment [p1 p2]."
+  "Check if a ray from origin in direction dir intersects line segment [p1 p2].
+   Returns true if the ray hits the segment."
   [origin direction segment]
   (some? (ray-segment-intersection-distance origin direction segment)))
 
 (defn ray-polygon-intersection-distance
   "Get the minimum distance at which a ray hits any edge of a polygon.
-   Returns nil if no intersection."
+   Returns nil if the ray does not intersect the polygon."
   [origin direction vertices]
   (let [n (count vertices)
         edges (map (fn [i] [(nth vertices i) (nth vertices (mod (inc i) n))])
@@ -258,7 +277,7 @@
       (apply min distances))))
 
 (defn ray-intersects-polygon?
-  "Check if a ray from origin in direction dir intersects any edge of polygon"
+  "Check if a ray from origin in direction dir intersects any edge of a polygon."
   [origin direction vertices]
   (let [n (count vertices)
         edges (map (fn [i] [(nth vertices i) (nth vertices (mod (inc i) n))])
@@ -270,7 +289,8 @@
 ;; =============================================================================
 
 (defn in-front-of?
-  "Check if attacker's pointing direction ray intersects the target piece"
+  "Check if an attacker's pointing direction ray intersects the target piece.
+   This determines if the target is within the attacker's trajectory."
   [attacker target]
   (let [tip (attacker-tip attacker)
         dir (attack-direction attacker)
@@ -280,7 +300,7 @@
 (defn within-range?
   "Check if target is within attack range of attacker.
    Per Icehouse rules, range is measured from the attacker's tip to the nearest
-   point on the target piece."
+   point on the target piece (the nearest edge)."
   [attacker target]
   (let [tip (attacker-tip attacker)
         target-verts (piece-vertices target)
@@ -290,7 +310,8 @@
 
 (defn clear-line-of-sight?
   "Check if there are no pieces blocking the line between attacker and target.
-   The target must be the first piece hit by the attack ray."
+   The target must be the first piece hit by the attack ray. Any piece between
+   the attacker's tip and the target's nearest edge blocks the attack."
   [attacker target board]
   (let [tip (attacker-tip attacker)
         dir (attack-direction attacker)
@@ -308,6 +329,7 @@
                 other-pieces))))
 
 (defn calculate-angle
-  "Calculate angle in radians from point (x1,y1) to (x2,y2)"
+  "Calculate the angle in radians from point (x1,y1) to (x2,y2).
+   Returns values in the range [-PI, PI]."
   [x1 y1 x2 y2]
   (atan2 (- y2 y1) (- x2 x1)))

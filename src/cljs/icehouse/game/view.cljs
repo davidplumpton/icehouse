@@ -227,7 +227,9 @@
 ;; Status Components
 ;; =============================================================================
 
-(defn error-display []
+(defn error-display
+  "Displays the current error message from the state atom, if any."
+  []
   (when-let [error @state/error-message]
     [:div.error-message
      {:style {:background "#ff6b6b"
@@ -238,8 +240,10 @@
               :font-weight "bold"}}
      error]))
 
-(defn icehouse-banner []
-  "Displays a prominent banner when the current player is icehoused."
+(defn icehouse-banner
+  "Displays a prominent banner when the current player is icehoused, 
+   explaining that they can only play captured pieces."
+  []
   (let [my-id (:id @state/current-player)
         is-icehoused? (and my-id (contains? @state/icehoused-players my-id))]
     (when is-icehoused?
@@ -257,8 +261,10 @@
        [:span {:style {:margin-left "1rem" :opacity 0.9}}
         "Only captured pieces can be played. Capture opponents to continue!"]])))
 
-(defn placement-cooldown-indicator []
-  "Subtle circular cooldown indicator with smooth animation"
+(defn placement-cooldown-indicator
+  "Subtle circular cooldown indicator with smooth animation that depletes 
+   as the placement throttle cooldown progresses."
+  []
   (let [animation-frame (atom nil)
         local-progress (r/atom 1)
         start-animation
@@ -330,8 +336,9 @@
                         :stroke-dasharray circumference
                         :stroke-dashoffset dash-offset}]]])))})))
 
-(defn game-timer []
-  "Display remaining game time"
+(defn game-timer
+  "Display the remaining game time in a formatted string (MM:SS)."
+  []
   (let [game @state/game-state
         current @state/current-time]
     (when-let [ends-at (:ends-at game)]
@@ -348,8 +355,10 @@
                   :animation (when urgent? "pulse 1s infinite")}}
          (utils/format-time remaining)]))))
 
-(defn finish-button []
-  "Button for players to signal they want to end the game"
+(defn finish-button
+  "Button for players to signal they want to end the game. Shows how many 
+   players have already finished."
+  []
   (let [game @state/game-state
         player-id (:id @state/current-player)
         finished-set (set (or (:finished game) []))
@@ -393,8 +402,9 @@
      [:th {:style {:text-align "left" :padding "0.5rem"}} "Player"]
      [:th {:style {:text-align "right" :padding "0.5rem"}} "Score"]]]
    [:tbody
-    (for [[player-id score] sorted-scores]
-      (let [player-data (get players-map (keyword player-id))
+    (for [score-entry sorted-scores]
+      (let [[player-id score] score-entry
+            player-data (get players-map (keyword player-id))
             player-name (or (:name player-data) player-id)
             player-colour (or (:colour player-data) "#888")
             in-icehouse? (contains? icehouse-players player-id)
@@ -448,13 +458,14 @@
      :on-click #(ws/list-games!)}
     "Watch All Replays"]])
 
-(defn game-results-overlay []
-  "Display final scores when game ends"
+(defn game-results-overlay
+  "Display the final scores and winner(s) when the game ends."
+  []
   (when-let [result @state/game-result]
     (let [scores (:scores result)
           icehouse-players (set (:icehouse-players result))
           players-map (:players @state/game-state)
-          sorted-scores (sort-by (fn [[_ score]] (- score)) scores)
+          sorted-scores (sort-by (fn [entry] (- (second entry))) scores)
           max-score (apply max (vals scores))]
       [:div.game-results-overlay
        {:style {:position "fixed"
@@ -477,8 +488,10 @@
                        :max-score max-score}]
         [results-action-buttons {:game-id (:game-id result)}]]])))
 
-(defn help-overlay []
-  "Display help overlay with hotkey descriptions"
+(defn help-overlay
+  "Display a full-screen help overlay with keyboard shortcut descriptions 
+   and gameplay tips."
+  []
   (when (:show-help @state/ui-state)
     [:div.help-overlay
      {:style {:position "fixed"

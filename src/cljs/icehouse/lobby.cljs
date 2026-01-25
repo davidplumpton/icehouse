@@ -61,8 +61,10 @@
       :class (when (:ready me) "is-ready")}
      (if (:ready me) "Not Ready" "Ready!")]))
 
-(defn throttle-input []
-  "Input for placement throttle with local state, syncs on blur"
+(defn throttle-input
+  "Input component for the placement throttle option. Uses local state for typing 
+   and syncs with the server on blur."
+  []
   (let [local-value (r/atom nil)]
     (fn []
       (let [options @state/game-options

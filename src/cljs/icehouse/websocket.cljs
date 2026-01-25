@@ -245,16 +245,24 @@
           (fn [e]
             (js/console.error "WebSocket error:" e)))))
 
-(defn set-name! [name]
+(defn set-name!
+  "Send a set-name message to the server."
+  [name]
   (send! {:type msg/set-name :name name}))
 
-(defn set-colour! [colour]
+(defn set-colour!
+  "Send a set-colour message to the server."
+  [colour]
   (send! {:type msg/set-colour :colour colour}))
 
-(defn toggle-ready! []
+(defn toggle-ready!
+  "Send a toggle-ready message to the server."
+  []
   (send! {:type msg/ready}))
 
-(defn place-piece! [x y size orientation angle target-id captured?]
+(defn place-piece!
+  "Send a place-piece message to the server."
+  [x y size orientation angle target-id captured?]
   (send! {:type msg/place-piece
           :x x
           :y y
@@ -264,28 +272,29 @@
           :target-id target-id
           :captured captured?}))
 
-(defn capture-piece! [piece-id]
-  "Capture an over-iced attacker piece"
+(defn capture-piece!
+  "Send a capture-piece message to the server to capture an over-iced attacker piece."
+  [piece-id]
   (send! {:type msg/capture-piece
           :piece-id piece-id}))
 
 (defn list-games!
-  "Request list of saved game records"
+  "Request a list of saved game records from the server."
   []
   (send! {:type msg/list-games}))
 
 (defn load-game!
-  "Load a saved game record for replay"
+  "Send a load-game message to the server to retrieve a saved game record for replay."
   [game-id]
   (send! {:type msg/load-game :game-id game-id}))
 
 (defn set-option!
-  "Set a game option for the room"
+  "Set a game option for the room on the server."
   [key value]
   (send! {:type msg/set-option :key (name key) :value value}))
 
 (defn finish!
-  "Signal that the player wants to end the game"
+  "Signal to the server that the player wants to end the game."
   []
   (send! {:type msg/finish}))
 

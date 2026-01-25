@@ -132,7 +132,12 @@
 ;; Piece Drawing
 ;; =============================================================================
 
-(defn draw-pyramid [ctx x y size colour orientation angle & [{:keys [iced? zoom-state]}]]
+(defn draw-pyramid
+  "Draw a single pyramid piece on the canvas.
+   Supports both standing (square with X) and pointing (triangle) orientations.
+   Optional :iced? flag lightens the colour to indicate it has been successfully attacked.
+   Optional :zoom-state adjusts line widths for zoomed rendering."
+  [ctx x y size colour orientation angle & [{:keys [iced? zoom-state]}]]
   (let [size-kw (keyword size)
         orient-kw (keyword orientation)
         base-size (get shared-const/piece-sizes size-kw shared-const/default-piece-size)
@@ -330,7 +335,8 @@
     (.stroke ctx)))
 
 (defn- get-preview-colour
-  "Get the colour for a preview piece, handling captured pieces."
+  "Get the colour for a preview piece, handling captured pieces correctly by 
+   looking up the original piece colour in the player's captured stash."
   [game player-id size captured? default-colour]
   (if captured?
     (let [player-data (get-in game [:players (keyword player-id)])
@@ -340,7 +346,8 @@
     default-colour))
 
 (defn- calculate-preview-angle
-  "Calculate the angle for the preview piece based on drag state."
+  "Calculate the angle for the preview piece based on the current drag state.
+   If in 'shift' mode (zero distance drag), uses the locked-angle."
   [drag-state]
   (let [{:keys [start-x start-y current-x current-y locked-angle]} drag-state
         in-shift-mode? (and (= start-x current-x) (= start-y current-y))]
@@ -351,7 +358,8 @@
         0))))
 
 (defn- draw-direction-line
-  "Draw the direction indicator line from start to current position."
+  "Draw the white direction indicator line from the placement start point 
+   to the current mouse position."
   [ctx draw-start-x draw-start-y draw-current-x draw-current-y zoom-state]
   (set! (.-strokeStyle ctx) "rgba(255,255,255,0.5)")
   (set-line-width ctx 2 zoom-state)
@@ -361,7 +369,8 @@
   (.stroke ctx))
 
 (defn- draw-preview-piece
-  "Draw the preview piece with appropriate colour based on overlap state."
+  "Draw the semi-transparent preview piece with appropriate colour. 
+   Red indicates an invalid overlap state."
   [ctx x y size colour orientation angle has-overlap? zoom-state]
   (.save ctx)
   (set! (.-globalAlpha ctx) const/preview-alpha)
@@ -377,7 +386,8 @@
     [(* x scale) (* y scale)]))
 
 (defn draw-drag-preview
-  "Draw the preview of the piece being dragged/placed"
+  "Draw the preview of the piece being dragged/placed, including attack range 
+   indicators and overlap highlights."
   [ctx game drag-state selected-piece player-colour player-id zoom-state]
   (let [{:keys [start-x start-y current-x current-y]} drag-state
         {:keys [size orientation captured?]} selected-piece
@@ -401,8 +411,10 @@
     (draw-preview-piece ctx draw-start-x draw-start-y size preview-colour
                         orientation angle (seq overlapping) zoom-state)))
 
-(defn draw-with-preview [ctx game drag-state selected-piece player-colour hover-pos player-id zoom-state]
-  "Draw the board and optionally a preview of the piece being placed"
+(defn draw-with-preview
+  "Draw the board and optionally a preview of the piece being placed.
+   This is the main entry point for the game canvas rendering loop."
+  [ctx game drag-state selected-piece player-colour hover-pos player-id zoom-state]
   (apply-zoom ctx zoom-state)
   (draw-board ctx game hover-pos player-id {:zoom-state zoom-state})
   ;; Draw preview if dragging
@@ -414,8 +426,10 @@
 ;; Stash SVG Drawing
 ;; =============================================================================
 
-(defn draw-stash-pyramid [size colour & [{:keys [captured? count]}]]
-  "Returns SVG element for a pyramid in the stash, optionally with count inside"
+(defn draw-stash-pyramid
+  "Returns a Hiccup SVG element for a pyramid in the stash, optionally with 
+   a count overlay. Used in the player's stash panel UI."
+  [size colour & [{:keys [captured? count]}]]
   (let [[width height] (get const/stash-sizes size [24 36])]
     [:svg {:width width :height height :style {:display "inline-block" :margin "1px"}}
      [:polygon {:points (str (/ width 2) ",0 0," height " " width "," height)

@@ -26,16 +26,27 @@
 ;; Filter Helpers
 ;; =============================================================================
 
-(defn by-field [field value]
+(defn by-field
+  "Returns a predicate function that checks if a map field equals a value."
+  [field value]
   (fn [item] (= (get item field) value)))
 
-(defn by-id [id]
+(defn by-id
+  "Returns a predicate function that checks if a map's :id field equals the 
+   given id."
+  [id]
   (by-field :id id))
 
-(defn by-size [size]
+(defn by-size
+  "Returns a predicate function that checks if a map's :size field (as a keyword) 
+   equals the given size."
+  [size]
   (fn [item] (= (keyword (:size item)) (keyword size))))
 
-(defn by-player-id [player-id]
+(defn by-player-id
+  "Returns a predicate function that checks if a map's :player-id field matches 
+   the given player-id (after normalization)."
+  [player-id]
   (let [normalized (normalize-player-id player-id)]
     (fn [item] (= (normalize-player-id (:player-id item)) normalized))))
 
