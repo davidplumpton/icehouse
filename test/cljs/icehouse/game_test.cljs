@@ -1,6 +1,7 @@
 (ns icehouse.game-test
   (:require [cljs.test :refer-macros [deftest is testing]]
             [icehouse.game :as game]
+            [icehouse.game.rendering :as render]
             [icehouse.game-logic :as logic]
             [icehouse.utils :as utils]
             [icehouse.geometry :as geo]))
@@ -9,17 +10,17 @@
   (testing "potential-target? correctly identifies opponent standing pieces in trajectory"
     (let [attacker {:id "a1" :player-id "p1" :x 100 :y 100 :size :large :orientation :pointing :angle 0}
           target {:id "t1" :player-id "p2" :x 200 :y 100 :size :small :orientation :standing}]
-      (is (game/potential-target? attacker target "p1") "Should hit opponent standing piece directly ahead"))
+      (is (render/potential-target? attacker target "p1") "Should hit opponent standing piece directly ahead"))
 
     (testing "potential-target? rejects own pieces"
       (let [attacker {:id "a1" :player-id "p1" :x 100 :y 100 :size :large :orientation :pointing :angle 0}
             target {:id "t1" :player-id "p1" :x 200 :y 100 :size :small :orientation :standing}]
-        (is (not (game/potential-target? attacker target "p1")) "Should not target own pieces")))
+        (is (not (render/potential-target? attacker target "p1")) "Should not target own pieces")))
 
     (testing "potential-target? rejects pointing pieces"
       (let [attacker {:id "a1" :player-id "p1" :x 100 :y 100 :size :large :orientation :pointing :angle 0}
             target {:id "t1" :player-id "p2" :x 200 :y 100 :size :small :orientation :pointing :angle js/Math.PI}]
-        (is (not (game/potential-target? attacker target "p1")) "Should only target standing pieces")))))
+        (is (not (render/potential-target? attacker target "p1")) "Should only target standing pieces")))))
 
 (deftest calculate-iced-pieces-test
   (testing "calculate-iced-pieces identifies pieces with enough attack pips"
