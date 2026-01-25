@@ -35,12 +35,18 @@
 ;; =============================================================================
 
 (defn potential-target?
-  "Check if target could be attacked (in trajectory, ignoring range)"
+  "Check if target could be attacked (in trajectory, ignoring range).
+   Uses colour-based validation to handle captured pieces correctly."
   [attacker target attacker-player-id]
-  (and (not= (utils/normalize-player-id (:player-id target))
-             (utils/normalize-player-id attacker-player-id))
-       (geo/standing? target)
-       (geo/in-front-of? attacker target)))
+  (let [attacker-colour (:colour attacker)
+        target-colour (:colour target)
+        is-opponent (if (and attacker-colour target-colour)
+                      (not= attacker-colour target-colour)
+                      (not= (utils/normalize-player-id (:player-id target))
+                            (utils/normalize-player-id attacker-player-id)))]
+    (and is-opponent
+         (geo/standing? target)
+         (geo/in-front-of? attacker target))))
 
 (defn- valid-target?
   "Check if target is a valid attack target (in trajectory AND in range)"
@@ -49,9 +55,13 @@
        (geo/within-range? attacker target)))
 
 (defn find-targets-for-attack
-  "Find all potential targets and categorize them as valid (in range) or invalid (out of range)"
+  "Find all potential targets and categorize them as valid (in range) or invalid (out of range).
+   Only returns targets that have a clear line of sight (no intervening pieces)."
   [attacker player-id board]
-  (let [potential (filter #(potential-target? attacker % player-id) board)]
+  (let [potential (filter (fn [target]
+                            (and (potential-target? attacker target player-id)
+                                 (geo/clear-line-of-sight? attacker target board)))
+                          board)]
     {:valid (filter #(geo/within-range? attacker %) potential)
      :invalid (remove #(geo/within-range? attacker %) potential)}))
 
@@ -304,7 +314,7 @@
 
 (defn draw-attack-preview
   "Draw attack range indicator and target highlights for an attacking piece being placed"
-  [ctx game x y angle size player-id zoom-state]
+  [ctx game x y angle size colour player-id zoom-state]
   (let [base-size (get shared-const/piece-sizes size shared-const/default-piece-size)
         tip-offset (* base-size shared-const/tip-offset-ratio)
         tip-x (+ x (* (js/Math.cos angle) tip-offset))
@@ -314,7 +324,7 @@
         range-end-x (+ tip-x (* (js/Math.cos angle) piece-height))
         range-end-y (+ tip-y (* (js/Math.sin angle) piece-height))
         ;; Create preview attacker to find targets (use world coords)
-        preview-attacker {:x x :y y :size size :orientation :pointing :angle angle}
+        preview-attacker {:x x :y y :size size :orientation :pointing :angle angle :colour colour}
         board (:board game)
         ;; Only highlight the closest target (per Icehouse rules)
         closest-target (find-closest-target preview-attacker player-id board)]
@@ -403,7 +413,7 @@
       (draw-direction-line ctx draw-start-x draw-start-y draw-current-x draw-current-y zoom-state))
     ;; Draw attack preview for attacking pieces
     (when (and (geo/pointing? selected-piece) current-x current-y)
-      (draw-attack-preview ctx game draw-start-x draw-start-y angle size player-id zoom-state))
+      (draw-attack-preview ctx game draw-start-x draw-start-y angle size preview-colour player-id zoom-state))
     ;; Highlight overlapping pieces
     (doseq [piece overlapping]
       (draw-overlap-highlight ctx piece zoom-state))
