@@ -33,6 +33,10 @@
     (s :timeout 100)
     (reset! server nil)))
 
+(defn reset-all! []
+  (reset! ws/clients {})
+  (reset! icehouse.game/games {}))
+
 (defn -main [& args]
   (let [port (Integer/parseInt (or (first args) "3000"))]
     (start! port)))

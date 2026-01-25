@@ -61,8 +61,7 @@
 
     (http/on-close channel
       (fn [_status]
-        (lobby/handle-disconnect clients channel)
-        (swap! clients dissoc channel)))
+        (lobby/handle-disconnect clients channel)))
 
     (http/on-receive channel
       (fn [data]

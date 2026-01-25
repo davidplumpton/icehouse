@@ -95,7 +95,11 @@
     (broadcast-players! clients room-id)
     ;; Send current game options to the new player
     (utils/send-msg! channel {:type msg/options
-                              :options (get-room-options room-id)})))
+                              :options (get-room-options room-id)})
+    ;; If game is already in progress, send it to the new player
+    (when-let [game (get @game/games room-id)]
+      (utils/send-msg! channel {:type msg/game-start
+                                :game game}))))
 
 (defn handle-set-name [clients channel msg]
   (let [room-id (get-in @clients [channel :room-id])]
@@ -138,6 +142,7 @@
 
 (defn handle-disconnect [clients channel]
   (let [room-id (get-in @clients [channel :room-id])]
+    (swap! clients dissoc channel)
     (when room-id
       (broadcast-players! clients room-id))))
 

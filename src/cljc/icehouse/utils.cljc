@@ -105,9 +105,9 @@
      [msg]
      (if (m/validate schema/ServerMessage msg)
        msg
-       (do
-         (println "Invalid outgoing message:" msg)
-         (println "Validation errors:" (m/explain schema/ServerMessage msg))
+       (let [explanation (m/explain schema/ServerMessage msg)]
+         (println "Invalid outgoing message:" (pr-str msg))
+         (println "Validation errors:" (pr-str explanation))
          nil))))
 
 #?(:clj
@@ -124,6 +124,6 @@
    (defn broadcast-room!
      "Broadcast a JSON message to all clients in a room"
      [clients room-id msg]
-     (doseq [[ch client] @clients
-             :when (= (:room-id client) room-id)]
-       (send-msg! ch msg))))
+     (doseq [[ch client] @clients]
+       (when (= (:room-id client) room-id)
+         (send-msg! ch msg)))))
