@@ -350,6 +350,32 @@
 ;; Post-Action Side Effects
 ;; =============================================================================
 
+(defn end-game!
+  "End the game, calculate scores, save record, and broadcast game-over.
+   If end-reason is not provided, it will be determined from game state."
+  ([games clients room-id]
+   (when-let [game (get @games room-id)]
+     (let [end-reason (cond
+                        (rules/all-players-finished? game) :all-players-finished
+                        (rules/all-active-players-finished? game) :all-pieces-placed
+                        (rules/time-up? game) :time-up
+                        :else :unknown)]
+       (end-game! games clients room-id end-reason))))
+  ([games clients room-id end-reason]
+   (when-let [game (get @games room-id)]
+     (let [board (:board game)
+           options (get game :options {})
+           over-ice (logic/calculate-over-ice board)
+           icehouse-players (rules/calculate-icehouse-players board options)
+           record (rules/build-game-record game end-reason)]
+       (storage/save-game-record! record)
+       (utils/broadcast-room! clients room-id
+                              {:type msg/game-over
+                               :game-id (:game-id game)
+                               :scores (rules/calculate-scores game)
+                               :over-ice over-ice
+                               :icehouse-players (vec icehouse-players)})))))
+
 (defn handle-post-placement!
   "Handle side effects after placement: recording, broadcasting, icehouse detection, game over check.
    prev-icehouse-players is the set of players who were already icehoused before this placement."
@@ -375,39 +401,10 @@
                              {:type msg/player-icehoused
                               :player-id icehoused-player
                               :game updated-game}))
-    ;; Check for game over
-    (when (rules/game-over? updated-game)
-      (let [over-ice (logic/calculate-over-ice board)
-            end-reason (cond
-                         (rules/all-active-players-finished? updated-game) :all-pieces-placed
-                         (rules/time-up? updated-game) :time-up
-                         :else :unknown)
-            record (rules/build-game-record updated-game end-reason)]
-        ;; Save the game record
-        (storage/save-game-record! record)
-        (utils/broadcast-room! clients room-id
-                               {:type msg/game-over
-                                :game-id (:game-id updated-game)
-                                :scores (rules/calculate-scores updated-game)
-                                :over-ice over-ice
-                                :icehouse-players (vec current-icehouse-players)})))))
-
-(defn end-game!
-  "End the game, calculate scores, save record, and broadcast game-over"
-  [games clients room-id end-reason]
-  (when-let [game (get @games room-id)]
-    (let [board (:board game)
-          options (get game :options {})
-          over-ice (logic/calculate-over-ice board)
-          icehouse-players (rules/calculate-icehouse-players board options)
-          record (rules/build-game-record game end-reason)]
-      (storage/save-game-record! record)
-      (utils/broadcast-room! clients room-id
-                             {:type msg/game-over
-                              :game-id (:game-id game)
-                              :scores (rules/calculate-scores game)
-                              :over-ice over-ice
-                              :icehouse-players (vec icehouse-players)}))))
+     ;; Check for game over (excluding all-players-finished since that's handled in handle-finish)
+    (when (and (rules/game-over? updated-game)
+               (not (rules/all-players-finished? updated-game)))
+      (end-game! games clients room-id))))
 
 ;; =============================================================================
 ;; WebSocket Handlers
@@ -505,7 +502,7 @@
                                         :player-id player-id
                                         :game updated-game})
                 (when (rules/all-players-finished? updated-game)
-                  (end-game! games clients room-id :all-players-finished)))
+                  (end-game! games clients room-id)))
               ;; Finish failed - send the error
               (send-error! channel (:error finish-result))))
           ;; No game found

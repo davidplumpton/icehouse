@@ -86,5 +86,30 @@
                     {:size "small" :orientation "standing"}))]
       (is (= 1 (count msgs)))
       (is (= msg/legal-moves (:type (first msgs))))
-      (is (= [] (:valid-positions (first msgs))))
-      (is (= msg/err-invalid-game (get-in (first msgs) [:error :code]))))))
+       (is (= [] (:valid-positions (first msgs))))
+       (is (= msg/err-invalid-game (get-in (first msgs) [:error :code]))))))
+
+;; =============================================================================
+;; End-game consolidation tests
+;; =============================================================================
+
+(deftest end-game-consolidation-test
+  (testing "post-placement does not end game when all players finished"
+    (let [end-game-calls (atom [])
+          games (atom {"test-room" {:game-id "game1"
+                                   :players {"player1" {:name "Alice"}
+                                            "player2" {:name "Bob"}}
+                                   :finished ["player1" "player2"]
+                                   :board {}
+                                   :options {}
+                                   :started-at (System/currentTimeMillis)
+                                   :moves []}})]
+      ;; Mock end-game! to capture calls and prevent broadcasting
+      (with-redefs [gh/end-game! (fn [games-clients clients-arg room-id-arg end-reason-arg]
+                                   (swap! end-game-calls conj {:room-id room-id-arg :end-reason end-reason-arg}))
+                    utils/broadcast-room! (fn [_ _ _] nil)]
+        ;; Simulate post-placement after all players finished
+        (gh/handle-post-placement! games (atom {}) "test-room" "player1" 
+                                 {:size "small" :x 100 :y 100} false #{})
+        ;; Should NOT call end-game! since all-players-finished? should be handled by handle-finish
+        (is (= 0 (count @end-game-calls)) "Should not call end-game! when all players finished in post-placement")))))
