@@ -379,7 +379,7 @@
     (when (rules/game-over? updated-game)
       (let [over-ice (logic/calculate-over-ice board)
             end-reason (cond
-                         (rules/all-active-players-finished? updated-game) :all-active-finished
+                         (rules/all-active-players-finished? updated-game) :all-pieces-placed
                          (rules/time-up? updated-game) :time-up
                          :else :unknown)
             record (rules/build-game-record updated-game end-reason)]

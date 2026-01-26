@@ -1059,6 +1059,32 @@
       (is (= "p1" (:winner record)))
       (is (= :all-pieces-placed (:end-reason record))))))
 
+(deftest build-game-record-all-players-finished-test
+  (testing "build-game-record accepts :all-players-finished end-reason"
+    (let [game {:game-id "test-game"
+                :room-id "room-1"
+                :players {"p1" {:name "Alice" :colour "#ff0000" :pieces {:small 5 :medium 5 :large 5} :captured []}
+                          "p2" {:name "Bob" :colour "#0000ff" :pieces {:small 5 :medium 5 :large 5} :captured []}}
+                :board [{:id "1" :player-id "p1" :colour "#ff0000" :x 100 :y 100 :angle 0 :orientation :standing :size :large}]
+                :moves []
+                :started-at 1000000
+                :ends-at 1300000}
+          record (game/build-game-record game :all-players-finished)]
+      (is (= :all-players-finished (:end-reason record))))))
+
+(deftest build-game-record-invalid-end-reason-test
+  (testing "build-game-record rejects invalid end-reason values"
+    (let [game {:game-id "test-game"
+                :room-id "room-1"
+                :players {"p1" {:name "Alice" :colour "#ff0000" :pieces {:small 5 :medium 5 :large 5} :captured []}}
+                :board []
+                :moves []
+                :started-at 1000000
+                :ends-at 1300000}]
+      ;; :all-active-finished is the old invalid value that was used before the fix
+      (is (thrown? AssertionError (game/build-game-record game :all-active-finished)))
+      (is (thrown? AssertionError (game/build-game-record game :unknown))))))
+
 (deftest refresh-all-targets-test
   (testing "targets are updated when a closer defender is added"
     (let [d1 {:id "d1" :player-id "p2" :x 200 :y 100 :size :small :orientation :standing :angle 0}
