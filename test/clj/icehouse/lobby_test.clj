@@ -109,3 +109,62 @@
   (testing "default placement throttle is 2.0 seconds"
     (is (= 2.0 (:placement-throttle lobby/default-options)))
     (is (= 2.0 (:placement-throttle (lobby/get-room-options "any-room"))))))
+
+(deftest handle-disconnect-no-game-test
+  (testing "disconnect from lobby (no active game) removes client and broadcasts players"
+    (let [clients (atom {"ch1" {:room-id "room1" :name "Alice" :colour "#e53935" :ready false}
+                         "ch2" {:room-id "room1" :name "Bob" :colour "#fdd835" :ready false}})
+          broadcast-calls (atom [])]
+      (with-redefs [icehouse.utils/send-msg! (fn [& _] nil)
+                    icehouse.utils/broadcast-room! (fn [_ room-id msg]
+                                                     (swap! broadcast-calls conj {:room-id room-id :msg msg}))]
+        (lobby/handle-disconnect clients "ch1")
+        (is (nil? (get @clients "ch1")) "Disconnected client should be removed")
+        (is (some? (get @clients "ch2")) "Other client should remain")
+        ;; Should broadcast players update but NOT player-disconnected
+        (is (= 1 (count @broadcast-calls)) "Should broadcast once (players update)")
+        (is (= msg/players (get-in (first @broadcast-calls) [:msg :type])))))))
+
+(deftest handle-disconnect-with-active-game-test
+  (testing "disconnect during active game notifies remaining players and ends game"
+    (let [clients (atom {"ch1" {:room-id "room1" :name "Alice" :colour "#e53935" :ready true}
+                         "ch2" {:room-id "room1" :name "Bob" :colour "#fdd835" :ready true}})
+          broadcast-calls (atom [])
+          end-game-called (atom nil)]
+      ;; Set up an active game for the room
+      (reset! game/games {"room1" {:game-id "test-game" :room-id "room1"
+                                   :players {} :board [] :moves []
+                                   :options {} :started-at 1000 :ends-at nil}})
+      (with-redefs [icehouse.utils/send-msg! (fn [& _] nil)
+                    icehouse.utils/broadcast-room! (fn [_ room-id msg]
+                                                     (swap! broadcast-calls conj {:room-id room-id :msg msg}))
+                    icehouse.game/end-game! (fn [_ room-id end-reason]
+                                              (reset! end-game-called {:room-id room-id :end-reason end-reason}))]
+        (lobby/handle-disconnect clients "ch1")
+        (is (nil? (get @clients "ch1")) "Disconnected client should be removed")
+        ;; Should broadcast both players update and player-disconnected
+        (let [msg-types (mapv #(get-in % [:msg :type]) @broadcast-calls)]
+          (is (some #{msg/players} msg-types) "Should broadcast players update")
+          (is (some #{msg/player-disconnected} msg-types) "Should broadcast player-disconnected"))
+        ;; Check player-disconnected message content
+        (let [disconnect-msg (->> @broadcast-calls
+                                  (filter #(= msg/player-disconnected (get-in % [:msg :type])))
+                                  first
+                                  :msg)]
+          (is (= "Alice" (:player-name disconnect-msg)) "Should include disconnected player's name"))
+        ;; Should end the game
+        (is (some? @end-game-called) "Should call end-game!")
+        (is (= :player-disconnected (:end-reason @end-game-called)))))
+    ;; Clean up
+    (reset! game/games {})))
+
+(deftest handle-disconnect-no-room-test
+  (testing "disconnect without a room does nothing"
+    (let [clients (atom {"ch1" {:room-id nil :name nil :colour nil :ready false}})
+          broadcast-calls (atom [])]
+      (with-redefs [icehouse.utils/send-msg! (fn [& _] nil)
+                    icehouse.utils/broadcast-room! (fn [_ room-id msg]
+                                                     (swap! broadcast-calls conj {:room-id room-id :msg msg}))]
+        (lobby/handle-disconnect clients "ch1")
+        (is (nil? (get @clients "ch1")) "Client should be removed")
+        (is (empty? @broadcast-calls) "No broadcasts when client had no room")))))

@@ -151,11 +151,25 @@
                                 m m)))
             (broadcast-players! clients room-id)))))))
 
-(defn handle-disconnect [clients channel]
-  (let [room-id (get-in @clients [channel :room-id])]
+(defn handle-disconnect
+  "Handle a client disconnecting. Removes the client, broadcasts the updated
+   player list, and if the client was in an active game, notifies remaining
+   players and ends the game so it doesn't get stuck."
+  [clients channel]
+  (let [client-data (get @clients channel)
+        room-id (:room-id client-data)
+        player-name (:name client-data)
+        player-id (game/player-id-from-channel channel)]
     (swap! clients dissoc channel)
     (when room-id
-      (broadcast-players! clients room-id))))
+      (broadcast-players! clients room-id)
+      ;; If an active game exists for this room, notify remaining players and end it
+      (when (get @game/games room-id)
+        (utils/broadcast-room! clients room-id
+                               {:type msg/player-disconnected
+                                :player-id player-id
+                                :player-name (or player-name "Unknown")})
+        (game/end-game! clients room-id :player-disconnected)))))
 
 (defn handle-set-option [clients channel msg]
   "Set a game option for the room. Any player can change options before game starts."

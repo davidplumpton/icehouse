@@ -128,3 +128,8 @@
   "Query legal move positions for a given piece type."
   [clients channel msg]
   (handlers/handle-query-legal-moves games clients channel msg))
+
+(defn end-game!
+  "End the game, calculate scores, save record, and broadcast game-over"
+  [clients room-id end-reason]
+  (handlers/end-game! games clients room-id end-reason))

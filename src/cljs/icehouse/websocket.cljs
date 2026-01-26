@@ -86,6 +86,14 @@
     (swap! state/icehoused-players conj player-id)
     (reset! state/game-state (:game data))))
 
+(defn- handle-player-disconnected
+  "Handle notification that a player disconnected during an active game.
+   Displays a message so remaining players know why the game ended."
+  [data]
+  (let [player-name (:player-name data)]
+    (reset! state/error-message (str player-name " disconnected from the game"))
+    (js/setTimeout #(reset! state/error-message nil) error-message-timeout-ms)))
+
 (defn- handle-game-over
   "Handle game over with final scores"
   [data]
@@ -158,8 +166,9 @@
    msg/piece-placed      handle-piece-placed
    msg/piece-captured    handle-piece-captured
    msg/player-finished   handle-player-finished
-   msg/player-icehoused  handle-player-icehoused
-   msg/game-over         handle-game-over
+   msg/player-icehoused     handle-player-icehoused
+   msg/player-disconnected  handle-player-disconnected
+   msg/game-over            handle-game-over
    msg/game-list         handle-game-list
    msg/game-record       handle-game-record
    msg/error             handle-error

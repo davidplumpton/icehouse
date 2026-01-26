@@ -39,6 +39,7 @@
 (def piece-captured "piece-captured")
 (def player-finished "player-finished")
 (def player-icehoused "player-icehoused")
+(def player-disconnected "player-disconnected")
 (def game-over "game-over")
 
 ;; Replay

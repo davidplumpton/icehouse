@@ -293,6 +293,13 @@
    [:player-id id-string]
    [:game GameState]])
 
+(def PlayerDisconnectedMessage
+  "Server notification that a player disconnected during an active game"
+  [:map
+   [:type [:enum "player-disconnected"]]
+   [:player-id id-string]
+   [:player-name :string]])
+
 (def GameOverMessage
   "Server game over message"
   [:map
@@ -317,7 +324,7 @@
    [:started-at :int]
    [:ended-at :int]
    [:duration-ms :int]
-   [:end-reason [:enum :all-pieces-placed :time-up :all-players-finished]]
+   [:end-reason [:enum :all-pieces-placed :time-up :all-players-finished :player-disconnected]]
    [:moves [:vector Move]]
    [:final-board [:vector Piece]]
    [:final-scores Scores]
@@ -382,6 +389,7 @@
    PiecePlacedMessage
    PieceCapturedMessage
    PlayerFinishedMessage
+   PlayerDisconnectedMessage
    GameOverMessage
    GameListMessage
    GameRecordMessage
