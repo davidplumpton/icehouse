@@ -22,7 +22,11 @@
                 {:type "joined" :player-id "p1" :room-id "r1"
                  :name "Alice" :colour "#ff6b6b"})))
     (is (some? (ws/validate-incoming-message
-                {:type "error" :message "Something went wrong"}))))
+                {:type "error" :message "Something went wrong"})))
+    (is (some? (ws/validate-incoming-message
+                {:type "game-list" :games ["game-1" "game-2"]})))
+    (is (some? (ws/validate-incoming-message
+                {:type "game-list" :games []}))))
 
   (testing "returns nil for invalid server messages"
     (is (nil? (ws/validate-incoming-message {})))

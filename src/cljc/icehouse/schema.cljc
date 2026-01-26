@@ -278,12 +278,15 @@
   "Server piece placed message"
   [:map
    [:type [:enum "piece-placed"]]
+   [:piece Piece]
    [:game GameState]])
 
 (def PieceCapturedMessage
   "Server piece captured message"
   [:map
    [:type [:enum "piece-captured"]]
+   [:piece-id id-string]
+   [:captured-by id-string]
    [:game GameState]])
 
 (def PlayerFinishedMessage
@@ -304,6 +307,7 @@
   "Server game over message"
   [:map
    [:type [:enum "game-over"]]
+   [:game-id id-string]
    [:scores Scores]
    [:icehouse-players [:vector id-string]]
    [:over-ice [:map-of id-string :any]]])
@@ -324,7 +328,10 @@
    [:started-at :int]
    [:ended-at :int]
    [:duration-ms :int]
-   [:end-reason [:enum :all-pieces-placed :time-up :all-players-finished :player-disconnected]]
+   [:end-reason [:enum :all-pieces-placed "all-pieces-placed"
+                      :time-up "time-up"
+                      :all-players-finished "all-players-finished"
+                      :player-disconnected "player-disconnected"]]
    [:moves [:vector Move]]
    [:final-board [:vector Piece]]
    [:final-scores Scores]
