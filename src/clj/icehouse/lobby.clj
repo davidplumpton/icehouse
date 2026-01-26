@@ -70,8 +70,11 @@
                          {:type msg/options
                           :options (get-room-options room-id)}))
 
-(defn all-ready? [clients room-id]
-  (let [players (->> @clients
+(defn all-ready?
+  "Check if all players in a room are ready. Takes a clients map (not atom)
+   to ensure the check uses a consistent snapshot of state."
+  [clients-map room-id]
+  (let [players (->> clients-map
                      (filter (fn [[_ c]] (= (:room-id c) room-id))))]
     ;; DEV MODE: Start game when first player is ready (normally requires 3-4 players all ready)
     (and (>= (count players) 1)
@@ -116,28 +119,36 @@
         (swap! clients assoc-in [channel :colour] new-colour)
         (broadcast-players! clients room-id)))))
 
-(defn handle-ready [clients channel]
-  (let [room-id (get-in @clients [channel :room-id])]
-    (swap! clients update-in [channel :ready] not)
+(defn handle-ready
+  "Toggle a player's ready status and start the game if all players are ready.
+   Uses the swap! return value as a consistent snapshot to avoid race conditions
+   between the ready check and game start."
+  [clients channel]
+  (let [updated-clients (swap! clients update-in [channel :ready] not)
+        room-id (get-in updated-clients [channel :room-id])]
     (broadcast-players! clients room-id)
-    (when (all-ready? clients room-id)
-      (let [players (get-room-players @clients room-id)
+    (when (all-ready? updated-clients room-id)
+      (let [players (get-room-players updated-clients room-id)
             options (get-room-options room-id)
             result (game/start-game! room-id players options)]
         (if (:success result)
           ;; Game started successfully - broadcast to all players
           (utils/broadcast-room! clients room-id {:type msg/game-start
                                                   :game (:game result)})
-          ;; Game failed to start - broadcast error to all players and reset ready status
+          ;; Game failed to start - broadcast error and atomically reset ready status
           (do
             (utils/broadcast-room! clients room-id {:type msg/error
                                                     :code (:code (:error result))
                                                     :message (:message (:error result))
                                                     :rule (:rule (:error result))})
-            ;; Reset all players' ready status so they can try again
-            (doseq [[ch client-data] @clients]
-              (when (= room-id (:room-id client-data))
-                (swap! clients assoc-in [ch :ready] false)))
+            ;; Reset all players' ready status atomically in a single swap
+            (swap! clients
+                   (fn [m]
+                     (reduce-kv (fn [acc ch client-data]
+                                  (if (= room-id (:room-id client-data))
+                                    (assoc-in acc [ch :ready] false)
+                                    acc))
+                                m m)))
             (broadcast-players! clients room-id)))))))
 
 (defn handle-disconnect [clients channel]
