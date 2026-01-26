@@ -197,26 +197,26 @@
     ;; Always use port 3000 for backend WebSocket
     (str protocol "//" host ":3000/ws")))
 
-(defn send! [msg]
-  ;; Validation is non-blocking - log warnings but send anyway
-  (when-not (validate-outgoing-message msg)
-    (js/console.warn "Message validation warning:" msg))
-  (when-let [socket @ws]
-    (when (= 1 (.-readyState socket))
-      (.send socket (js/JSON.stringify (clj->js msg))))))
+(defn send!
+  "Send a message over the WebSocket. Blocks invalid messages from being sent."
+  [msg]
+  (when (validate-outgoing-message msg)
+    (when-let [socket @ws]
+      (when (= 1 (.-readyState socket))
+        (.send socket (js/JSON.stringify (clj->js msg)))))))
 
-(defn handle-message [event]
+(defn handle-message
+  "Handle an incoming WebSocket message. Blocks invalid messages from being processed."
+  [event]
   (try
     (let [raw-data (js->clj (js/JSON.parse (.-data event)) :keywordize-keys true)]
-      ;; Log validation errors but still process the message
-      (when-not (validate-incoming-message raw-data)
-        (js/console.warn "Message validation warning:" raw-data))
-      (let [msg-type (:type raw-data)]
-        (if-let [handler (get message-handlers msg-type)]
-          (handler raw-data)
-          (if msg-type
-            (js/console.log "Unknown message:" msg-type)
-            (js/console.warn "Received message without type:" raw-data)))))
+      (when (validate-incoming-message raw-data)
+        (let [msg-type (:type raw-data)]
+          (if-let [handler (get message-handlers msg-type)]
+            (handler raw-data)
+            (if msg-type
+              (js/console.log "Unknown message:" msg-type)
+              (js/console.warn "Received message without type:" raw-data))))))
     (catch js/Error e
       (js/console.error "Failed to parse WebSocket message:" e)
       (js/console.error "Raw data:" (.-data event)))))
