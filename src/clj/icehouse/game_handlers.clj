@@ -416,92 +416,104 @@
 (defn handle-place-piece
   "Handle a place-piece message from a client"
   [games clients channel msg]
-  (let [room-id (get-in @clients [channel :room-id])
-        player-id (state/player-id-from-channel channel)
-        game (get @games room-id)
-        using-captured? (boolean (:captured msg))
-        ;; Track icehouse players BEFORE placement to detect new ones
-        prev-icehouse-players (when game
-                                (rules/calculate-icehouse-players (:board game) (get game :options {})))
-        piece (when game (construct-piece-for-placement game player-id msg))
-        validation-error (when piece (validate-placement game player-id piece using-captured?))]
-    (if (and piece (nil? validation-error))
-      (let [placement-result (apply-placement! games room-id player-id piece using-captured?)]
-        (if (:success placement-result)
-          ;; Placement succeeded - proceed with side effects
-          (let [updated-game (get @games room-id)
-                final-piece (logic/find-piece-by-id (:board updated-game) (:id piece))]
-            (if final-piece
-              (handle-post-placement! games clients room-id player-id final-piece using-captured?
-                                      (or prev-icehouse-players #{}))
-              ;; This shouldn't happen if apply-placement! succeeded, but handle it anyway
-              (send-error! channel (make-error msg/err-internal-state
-                                               "Internal error: piece not found after placement"
-                                               "An unexpected error occurred. Please try again."))))
-          ;; Placement failed - send the error from apply-placement!
-          (send-error! channel (:error placement-result))))
-      ;; Validation failed - send the validation error
-      (send-error! channel (or validation-error (make-error msg/err-invalid-game
-                                                             "Invalid game state"
-                                                             "The game is not in a valid state for this action."))))))
+  (let [room-id (get-in @clients [channel :room-id])]
+    (if-not room-id
+      (send-error! channel (make-error msg/err-invalid-game
+                                        "Not in a room"
+                                        "You must be in a game room to place pieces."))
+      (let [player-id (state/player-id-from-channel channel)
+            game (get @games room-id)
+            using-captured? (boolean (:captured msg))
+            ;; Track icehouse players BEFORE placement to detect new ones
+            prev-icehouse-players (when game
+                                    (rules/calculate-icehouse-players (:board game) (get game :options {})))
+            piece (when game (construct-piece-for-placement game player-id msg))
+            validation-error (when piece (validate-placement game player-id piece using-captured?))]
+        (if (and piece (nil? validation-error))
+          (let [placement-result (apply-placement! games room-id player-id piece using-captured?)]
+            (if (:success placement-result)
+              ;; Placement succeeded - proceed with side effects
+              (let [updated-game (get @games room-id)
+                    final-piece (logic/find-piece-by-id (:board updated-game) (:id piece))]
+                (if final-piece
+                  (handle-post-placement! games clients room-id player-id final-piece using-captured?
+                                          (or prev-icehouse-players #{}))
+                  ;; This shouldn't happen if apply-placement! succeeded, but handle it anyway
+                  (send-error! channel (make-error msg/err-internal-state
+                                                   "Internal error: piece not found after placement"
+                                                   "An unexpected error occurred. Please try again."))))
+              ;; Placement failed - send the error from apply-placement!
+              (send-error! channel (:error placement-result))))
+          ;; Validation failed - send the validation error
+          (send-error! channel (or validation-error (make-error msg/err-invalid-game
+                                                                 "Invalid game state"
+                                                                 "The game is not in a valid state for this action."))))))))
 
 (defn handle-capture-piece
   "Handle a capture-piece message from a client"
   [games clients channel msg]
-  (let [room-id (get-in @clients [channel :room-id])
-        player-id (state/player-id-from-channel channel)
-        game (get @games room-id)
-        piece-id (:piece-id msg)
-        validation-error (when game (validate-capture game player-id piece-id))]
-    (if (and game (nil? validation-error))
-      (let [piece (logic/find-piece-by-id (:board game) piece-id)
-            piece-size (:size piece)
-            original-owner (:player-id piece)
-            original-colour (get-in game [:players original-owner :colour])
-            capture-result (apply-capture! games room-id player-id piece-id piece-size original-colour)]
-        (if (:success capture-result)
-          ;; Capture succeeded - proceed with side effects
-          (do
-            (state/record-move! games room-id {:type :capture-piece
-                                               :player-id player-id
-                                               :piece-id piece-id
-                                               :captured-piece {:size piece-size :colour original-colour}})
-            (let [updated-game (get @games room-id)]
-              (utils/broadcast-room! clients room-id
-                                     {:type msg/piece-captured
-                                      :piece-id piece-id
-                                      :captured-by player-id
-                                      :game updated-game})))
-          ;; Capture failed - send the error
-          (send-error! channel (:error capture-result))))
-      ;; Validation failed - send the validation error
-      (send-error! channel (or validation-error (make-error msg/err-invalid-game
-                                                             "Invalid capture"
-                                                             "The capture could not be completed."))))))
+  (let [room-id (get-in @clients [channel :room-id])]
+    (if-not room-id
+      (send-error! channel (make-error msg/err-invalid-game
+                                        "Not in a room"
+                                        "You must be in a game room to capture pieces."))
+      (let [player-id (state/player-id-from-channel channel)
+            game (get @games room-id)
+            piece-id (:piece-id msg)
+            validation-error (when game (validate-capture game player-id piece-id))]
+        (if (and game (nil? validation-error))
+          (let [piece (logic/find-piece-by-id (:board game) piece-id)
+                piece-size (:size piece)
+                original-owner (:player-id piece)
+                original-colour (get-in game [:players original-owner :colour])
+                capture-result (apply-capture! games room-id player-id piece-id piece-size original-colour)]
+            (if (:success capture-result)
+              ;; Capture succeeded - proceed with side effects
+              (do
+                (state/record-move! games room-id {:type :capture-piece
+                                                   :player-id player-id
+                                                   :piece-id piece-id
+                                                   :captured-piece {:size piece-size :colour original-colour}})
+                (let [updated-game (get @games room-id)]
+                  (utils/broadcast-room! clients room-id
+                                         {:type msg/piece-captured
+                                          :piece-id piece-id
+                                          :captured-by player-id
+                                          :game updated-game})))
+              ;; Capture failed - send the error
+              (send-error! channel (:error capture-result))))
+          ;; Validation failed - send the validation error
+          (send-error! channel (or validation-error (make-error msg/err-invalid-game
+                                                                 "Invalid capture"
+                                                                 "The capture could not be completed."))))))))
 
 (defn handle-finish
   "Handle a player pressing the finish button"
   [games clients channel _msg]
-  (let [room-id (get-in @clients [channel :room-id])
-        player-id (state/player-id-from-channel channel)
-        game (get @games room-id)]
-    (if game
-      (let [finish-result (apply-finish! games room-id player-id)]
-        (if (:success finish-result)
-          ;; Finish succeeded - broadcast and check for game end
-          (let [updated-game (get @games room-id)]
-            (utils/broadcast-room! clients room-id
-                                   {:type msg/player-finished
-                                    :player-id player-id
-                                    :game updated-game})
-            (when (rules/all-players-finished? updated-game)
-              (end-game! games clients room-id :all-players-finished)))
-          ;; Finish failed - send the error
-          (send-error! channel (:error finish-result))))
-      ;; No game found
+  (let [room-id (get-in @clients [channel :room-id])]
+    (if-not room-id
       (send-error! channel (make-error msg/err-invalid-game
-                                        "No active game"
-                                        "You must be in an active game to finish.")))))
+                                        "Not in a room"
+                                        "You must be in a game room to finish."))
+      (let [player-id (state/player-id-from-channel channel)
+            game (get @games room-id)]
+        (if game
+          (let [finish-result (apply-finish! games room-id player-id)]
+            (if (:success finish-result)
+              ;; Finish succeeded - broadcast and check for game end
+              (let [updated-game (get @games room-id)]
+                (utils/broadcast-room! clients room-id
+                                       {:type msg/player-finished
+                                        :player-id player-id
+                                        :game updated-game})
+                (when (rules/all-players-finished? updated-game)
+                  (end-game! games clients room-id :all-players-finished)))
+              ;; Finish failed - send the error
+              (send-error! channel (:error finish-result))))
+          ;; No game found
+          (send-error! channel (make-error msg/err-invalid-game
+                                            "No active game"
+                                            "You must be in an active game to finish.")))))))
 
 (defn start-game!
   "Start a new game with the given players and options.
@@ -554,40 +566,46 @@
    Request format for placement: {:type 'validate-move' :action 'place' :x :y :size :orientation :angle :captured}
    Request format for capture: {:type 'validate-move' :action 'capture' :piece-id '...'}"
   [games clients channel msg]
-  (let [room-id (get-in @clients [channel :room-id])
-        player-id (state/player-id-from-channel channel)
-        game (get @games room-id)
-        action (keyword (or (:action msg) "place"))]
-    (if-not game
+  (let [room-id (get-in @clients [channel :room-id])]
+    (if-not room-id
       (utils/send-msg! channel {:type msg/validation-result
                                 :valid false
                                 :error (make-error msg/err-invalid-game
-                                                   "No active game"
-                                                   "You must be in an active game to validate moves.")})
-      (case action
-        :place
-        (let [using-captured? (boolean (:captured msg))
-              piece (construct-piece-for-placement game player-id msg)
-              error (validate-placement game player-id piece using-captured?)]
+                                                   "Not in a room"
+                                                   "You must be in a game room to validate moves.")})
+      (let [player-id (state/player-id-from-channel channel)
+            game (get @games room-id)
+            action (keyword (or (:action msg) "place"))]
+        (if-not game
           (utils/send-msg! channel {:type msg/validation-result
-                                    :valid (nil? error)
-                                    :action "place"
-                                    :error error
-                                    :piece-preview (when (nil? error)
-                                                     {:id (:id piece)
-                                                      :target-id (:target-id piece)})}))
-        :capture
-        (let [error (validate-capture game player-id (:piece-id msg))]
-          (utils/send-msg! channel {:type msg/validation-result
-                                    :valid (nil? error)
-                                    :action "capture"
-                                    :error error}))
-        ;; Unknown action
-        (utils/send-msg! channel {:type msg/validation-result
-                                  :valid false
-                                  :error (make-error msg/err-invalid-message
-                                                     (str "Unknown action: " action)
-                                                     "Valid actions are 'place' or 'capture'.")})))))
+                                    :valid false
+                                    :error (make-error msg/err-invalid-game
+                                                       "No active game"
+                                                       "You must be in an active game to validate moves.")})
+          (case action
+            :place
+            (let [using-captured? (boolean (:captured msg))
+                  piece (construct-piece-for-placement game player-id msg)
+                  error (validate-placement game player-id piece using-captured?)]
+              (utils/send-msg! channel {:type msg/validation-result
+                                        :valid (nil? error)
+                                        :action "place"
+                                        :error error
+                                        :piece-preview (when (nil? error)
+                                                         {:id (:id piece)
+                                                          :target-id (:target-id piece)})}))
+            :capture
+            (let [error (validate-capture game player-id (:piece-id msg))]
+              (utils/send-msg! channel {:type msg/validation-result
+                                        :valid (nil? error)
+                                        :action "capture"
+                                        :error error}))
+            ;; Unknown action
+            (utils/send-msg! channel {:type msg/validation-result
+                                      :valid false
+                                      :error (make-error msg/err-invalid-message
+                                                         (str "Unknown action: " action)
+                                                         "Valid actions are 'place' or 'capture'.")})))))))
 
 ;; =============================================================================
 ;; Legal Moves Query
@@ -627,41 +645,47 @@
    sample-step controls position grid granularity (default 50px).
    angle-step controls angle variation for attacks (default 15 degrees)."
   [games clients channel msg]
-  (let [room-id (get-in @clients [channel :room-id])
-        player-id (state/player-id-from-channel channel)
-        game (get @games room-id)
-        size (keyword (or (:size msg) "small"))
-        orientation (keyword (or (:orientation msg) "standing"))
-        using-captured? (boolean (:captured msg))
-        sample-step (or (:sample-step msg) 50)
-        angle-step (or (:angle-step msg) 15)]
-    (if-not game
+  (let [room-id (get-in @clients [channel :room-id])]
+    (if-not room-id
       (utils/send-msg! channel {:type msg/legal-moves
                                 :valid-positions []
                                 :error (make-error msg/err-invalid-game
-                                                   "No active game"
-                                                   "You must be in an active game to query legal moves.")})
-      (let [player (get-in game [:players player-id])
-            remaining (if using-captured?
-                        (utils/count-captured-by-size (:captured player) size)
-                        (get-in player [:pieces size] 0))]
-        (if (not (pos? remaining))
+                                                   "Not in a room"
+                                                   "You must be in a game room to query legal moves.")})
+      (let [player-id (state/player-id-from-channel channel)
+            game (get @games room-id)
+            size (keyword (or (:size msg) "small"))
+            orientation (keyword (or (:orientation msg) "standing"))
+            using-captured? (boolean (:captured msg))
+            sample-step (or (:sample-step msg) 50)
+            angle-step (or (:angle-step msg) 15)]
+        (if-not game
           (utils/send-msg! channel {:type msg/legal-moves
                                     :valid-positions []
-                                    :error (if using-captured?
-                                             (make-error msg/err-no-captured
-                                                         "No captured pieces of that size"
-                                                         "You have no captured pieces of this size to place.")
-                                             (make-error msg/err-no-pieces
-                                                         (str "No " (name size) " pieces remaining")
-                                                         "You have placed all pieces of this size."))})
-          (let [legal-positions (find-legal-placements game player-id size orientation
-                                                        using-captured? sample-step angle-step)]
-            (utils/send-msg! channel {:type msg/legal-moves
-                                      :size (name size)
-                                      :orientation (name orientation)
-                                      :captured using-captured?
-                                      :valid-positions (vec (take 100 legal-positions)) ;; Limit to 100 samples
-                                      :total-found (count legal-positions)
-                                      :sample-step sample-step
-                                      :angle-step angle-step})))))))
+                                    :error (make-error msg/err-invalid-game
+                                                       "No active game"
+                                                       "You must be in an active game to query legal moves.")})
+          (let [player (get-in game [:players player-id])
+                remaining (if using-captured?
+                            (utils/count-captured-by-size (:captured player) size)
+                            (get-in player [:pieces size] 0))]
+            (if (not (pos? remaining))
+              (utils/send-msg! channel {:type msg/legal-moves
+                                        :valid-positions []
+                                        :error (if using-captured?
+                                                 (make-error msg/err-no-captured
+                                                             "No captured pieces of that size"
+                                                             "You have no captured pieces of this size to place.")
+                                                 (make-error msg/err-no-pieces
+                                                             (str "No " (name size) " pieces remaining")
+                                                             "You have placed all pieces of this size."))})
+              (let [legal-positions (find-legal-placements game player-id size orientation
+                                                            using-captured? sample-step angle-step)]
+                (utils/send-msg! channel {:type msg/legal-moves
+                                          :size (name size)
+                                          :orientation (name orientation)
+                                          :captured using-captured?
+                                          :valid-positions (vec (take 100 legal-positions)) ;; Limit to 100 samples
+                                          :total-found (count legal-positions)
+                                          :sample-step sample-step
+                                          :angle-step angle-step})))))))))
