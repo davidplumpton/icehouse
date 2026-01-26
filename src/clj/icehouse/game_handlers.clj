@@ -416,13 +416,12 @@
 (defn handle-place-piece
   "Handle a place-piece message from a client"
   [games clients channel msg]
-  (let [room-id (get-in @clients [channel :room-id])]
+  (let [{:keys [room-id game]} (utils/get-game-for-channel clients games channel)]
     (if-not room-id
       (send-error! channel (make-error msg/err-invalid-game
                                         "Not in a room"
                                         "You must be in a game room to place pieces."))
       (let [player-id (state/player-id-from-channel channel)
-            game (get @games room-id)
             using-captured? (boolean (:captured msg))
             ;; Track icehouse players BEFORE placement to detect new ones
             prev-icehouse-players (when game
@@ -452,13 +451,12 @@
 (defn handle-capture-piece
   "Handle a capture-piece message from a client"
   [games clients channel msg]
-  (let [room-id (get-in @clients [channel :room-id])]
+  (let [{:keys [room-id game]} (utils/get-game-for-channel clients games channel)]
     (if-not room-id
       (send-error! channel (make-error msg/err-invalid-game
                                         "Not in a room"
                                         "You must be in a game room to capture pieces."))
       (let [player-id (state/player-id-from-channel channel)
-            game (get @games room-id)
             piece-id (:piece-id msg)
             validation-error (when game (validate-capture game player-id piece-id))]
         (if (and game (nil? validation-error))
@@ -490,14 +488,14 @@
 (defn handle-finish
   "Handle a player pressing the finish button"
   [games clients channel _msg]
-  (let [room-id (get-in @clients [channel :room-id])]
+  (let [{:keys [room-id game]} (utils/get-game-for-channel clients games channel)]
     (if-not room-id
       (send-error! channel (make-error msg/err-invalid-game
                                         "Not in a room"
                                         "You must be in a game room to finish."))
       (let [player-id (state/player-id-from-channel channel)
-            game (get @games room-id)]
-        (if game
+            current-game game]
+        (if current-game
           (let [finish-result (apply-finish! games room-id player-id)]
             (if (:success finish-result)
               ;; Finish succeeded - broadcast and check for game end
@@ -566,7 +564,7 @@
    Request format for placement: {:type 'validate-move' :action 'place' :x :y :size :orientation :angle :captured}
    Request format for capture: {:type 'validate-move' :action 'capture' :piece-id '...'}"
   [games clients channel msg]
-  (let [room-id (get-in @clients [channel :room-id])]
+  (let [{:keys [room-id game]} (utils/get-game-for-channel clients games channel)]
     (if-not room-id
       (utils/send-msg! channel {:type msg/validation-result
                                 :valid false
@@ -574,7 +572,6 @@
                                                    "Not in a room"
                                                    "You must be in a game room to validate moves.")})
       (let [player-id (state/player-id-from-channel channel)
-            game (get @games room-id)
             action (keyword (or (:action msg) "place"))]
         (if-not game
           (utils/send-msg! channel {:type msg/validation-result
@@ -645,7 +642,7 @@
    sample-step controls position grid granularity (default 50px).
    angle-step controls angle variation for attacks (default 15 degrees)."
   [games clients channel msg]
-  (let [room-id (get-in @clients [channel :room-id])]
+  (let [{:keys [room-id game]} (utils/get-game-for-channel clients games channel)]
     (if-not room-id
       (utils/send-msg! channel {:type msg/legal-moves
                                 :valid-positions []
@@ -653,7 +650,6 @@
                                                    "Not in a room"
                                                    "You must be in a game room to query legal moves.")})
       (let [player-id (state/player-id-from-channel channel)
-            game (get @games room-id)
             size (keyword (or (:size msg) "small"))
             orientation (keyword (or (:orientation msg) "standing"))
             using-captured? (boolean (:captured msg))

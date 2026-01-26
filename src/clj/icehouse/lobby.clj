@@ -105,12 +105,12 @@
                                 :game game}))))
 
 (defn handle-set-name [clients channel msg]
-  (let [room-id (get-in @clients [channel :room-id])]
+  (let [room-id (utils/get-room-id clients channel)]
     (swap! clients assoc-in [channel :name] (:name msg))
     (broadcast-players! clients room-id)))
 
 (defn handle-set-colour [clients channel msg]
-  (let [room-id (get-in @clients [channel :room-id])
+  (let [room-id (utils/get-room-id clients channel)
         new-colour (:colour msg)
         taken (get-taken-colours @clients room-id)]
     (if (contains? taken new-colour)
@@ -173,7 +173,7 @@
 
 (defn handle-set-option [clients channel msg]
   "Set a game option for the room. Any player can change options before game starts."
-  (let [room-id (get-in @clients [channel :room-id])
+  (let [room-id (utils/get-room-id clients channel)
         option-key (keyword (:key msg))
         option-value (:value msg)]
     (when (and room-id (contains? default-options option-key))

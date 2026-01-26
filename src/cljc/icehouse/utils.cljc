@@ -89,6 +89,21 @@
          (when (< seconds 10) "0") seconds)))
 
 #?(:clj
+   ;; Centralized room/game lookups for websocket handlers.
+   (defn get-room-id
+     "Return the room-id for a channel from the clients atom, or nil if none."
+     [clients channel]
+     (get-in @clients [channel :room-id])))
+
+#?(:clj
+   (defn get-game-for-channel
+     "Return {:room-id r :game g} for a channel, or nil if the channel is not in a room."
+     [clients games channel]
+     (when-let [room-id (get-room-id clients channel)]
+       {:room-id room-id
+        :game (get @games room-id)})))
+
+#?(:clj
    (defn validate-incoming-message
      "Validate incoming client message against schema"
      [message]
