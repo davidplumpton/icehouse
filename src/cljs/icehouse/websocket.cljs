@@ -41,11 +41,7 @@
 (defn- handle-game-start
   "Handle game start"
   [data]
-  (reset! state/game-state (:game data))
-  (reset! state/game-result nil)
-  (reset! state/icehoused-players #{})  ;; Clear icehoused players for new game
-  (swap! state/ui-state assoc :selected-piece {:size :small :orientation :standing :captured? false})
-  (reset! state/current-view :game))
+  (state/start-game! (:game data)))
 
 (defn- handle-piece-placed
   "Handle piece placement update.
@@ -105,19 +101,12 @@
 (defn- handle-game-list
   "Handle list of saved games"
   [data]
-  (reset! state/current-view :replay)
-  (reset! state/game-list (:games data)))
+  (state/show-game-list! (:games data)))
 
 (defn- handle-game-record
   "Handle game record for replay"
   [data]
-  (reset! state/game-list nil)
-  (reset! state/game-result nil)
-  (reset! state/current-view :replay)
-  (reset! state/replay-state {:record (:record data)
-                              :current-move 0
-                              :playing? false
-                              :speed 1}))
+  (state/start-replay! (:record data)))
 
 (defn- handle-error
   "Handle error message from server. Displays message and optionally the rule explanation.

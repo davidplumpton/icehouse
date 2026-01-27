@@ -125,6 +125,41 @@
 (defonce game-list (r/atom nil))
 
 ;; =============================================================================
+;; State Transitions
+;; =============================================================================
+;; Named transition functions that batch related atom resets together.
+;; Reagent defers rendering to the next animation frame, so all changes
+;; within a synchronous transition are rendered in a single pass.
+
+(defn start-game!
+  "Transition state for starting a new game.
+   Resets game result, icehoused players, piece selection, and switches to game view."
+  [game-data]
+  (reset! game-state game-data)
+  (reset! game-result nil)
+  (reset! icehoused-players #{})
+  (swap! ui-state assoc :selected-piece {:size :small :orientation :standing :captured? false})
+  (reset! current-view :game))
+
+(defn start-replay!
+  "Transition state for starting a game replay.
+   Clears game list and result, switches to replay view, and initializes replay state."
+  [record-data]
+  (reset! game-list nil)
+  (reset! game-result nil)
+  (reset! current-view :replay)
+  (reset! replay-state {:record record-data
+                         :current-move 0
+                         :playing? false
+                         :speed 1}))
+
+(defn show-game-list!
+  "Transition state for showing the saved game list."
+  [games]
+  (reset! current-view :replay)
+  (reset! game-list games))
+
+;; =============================================================================
 ;; Constants
 ;; =============================================================================
 
