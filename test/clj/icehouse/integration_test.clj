@@ -59,6 +59,11 @@
 (defn send-msg! [client msg]
   (.sendText (:ws client) (json/generate-string msg) true))
 
+(defn send-raw!
+  "Send raw text data (not JSON-encoded) through the WebSocket."
+  [client text]
+  (.sendText (:ws client) text true))
+
 (defn wait-for-msg [client type-or-pred timeout-ms]
   (let [predicate (if (fn? type-or-pred) type-or-pred #(= (:type %) type-or-pred))
         start (System/currentTimeMillis)]
@@ -219,3 +224,107 @@
             (is (= (:id small-attacker) (:piece-id captured-msg)))
             (is (= 5 (count (get-in captured-msg [:game :board])))) ;; 4 defenders + 1 large attacker left
             (is (= 1 (count (get-in captured-msg [:game :players pid1 :captured]))))))))))
+
+;; =============================================================================
+;; Malformed WebSocket Input Tests
+;; =============================================================================
+
+(deftest test-malformed-json
+  (testing "Server responds with error when receiving invalid JSON"
+    (let [client (connect-client)]
+      (send-raw! client "not json at all{{")
+      (let [error-msg (wait-for-msg client msg/error 2000)]
+        (is (some? error-msg) "Should receive an error message")
+        (is (= msg/error (:type error-msg)))
+        (is (re-find #"(?i)invalid json" (:message error-msg)))))))
+
+(deftest test-invalid-schema-message
+  (testing "Server responds with error for valid JSON that fails schema validation"
+    (let [client (connect-client)]
+      ;; Valid JSON but doesn't match any ClientMessage schema variant
+      (send-raw! client "{\"type\": \"place-piece\", \"x\": \"not-a-number\"}")
+      (let [error-msg (wait-for-msg client msg/error 2000)]
+        (is (some? error-msg) "Should receive an error message")
+        (is (= msg/error (:type error-msg)))
+        (is (re-find #"(?i)invalid message" (:message error-msg)))))))
+
+(deftest test-missing-type-field
+  (testing "Server responds with error when message has no type field"
+    (let [client (connect-client)]
+      (send-raw! client "{\"foo\": \"bar\"}")
+      (let [error-msg (wait-for-msg client msg/error 2000)]
+        (is (some? error-msg) "Should receive an error message")
+        (is (= msg/error (:type error-msg)))))))
+
+(deftest test-unknown-message-type
+  (testing "Server responds with error for unknown message type"
+    (let [client (connect-client)]
+      (send-msg! client {:type "nonexistent-action"})
+      ;; Schema validation catches unknown types before the condp dispatch,
+      ;; so the error is "Invalid message format" rather than "Unknown message type"
+      (let [error-msg (wait-for-msg client msg/error 2000)]
+        (is (some? error-msg) "Should receive an error message")
+        (is (= msg/error (:type error-msg)))
+        (is (re-find #"(?i)invalid message" (:message error-msg)))))))
+
+;; =============================================================================
+;; Nil Room-ID Integration Test
+;; =============================================================================
+
+(deftest test-place-piece-before-join
+  (testing "Sending a game message before joining returns an error"
+    (let [client (connect-client)]
+      ;; Don't join a room, just send a game action directly
+      (send-msg! client {:type msg/place-piece
+                         :x 100 :y 100
+                         :size "small"
+                         :orientation "standing"
+                         :angle 0
+                         :captured false})
+      (let [error-msg (wait-for-msg client msg/error 2000)]
+        (is (some? error-msg) "Should receive an error message")
+        (is (= msg/error (:type error-msg)))
+        (is (= msg/err-invalid-game (:code error-msg)))))))
+
+;; =============================================================================
+;; Concurrent Multi-Client Operations Test
+;; =============================================================================
+
+(deftest test-concurrent-piece-placement
+  (testing "Two clients placing pieces simultaneously results in consistent game state"
+    (let [c1 (connect-client)
+          c2 (connect-client)]
+      ;; Both join
+      (send-msg! c1 {:type msg/join})
+      (wait-for-msg c1 msg/joined 1000)
+      (send-msg! c2 {:type msg/join})
+      (wait-for-msg c2 msg/joined 1000)
+
+      ;; Disable placement throttle
+      (send-msg! c1 {:type msg/set-option :key "placement-throttle" :value 0})
+      (wait-for-msg c1 msg/options 1000)
+
+      ;; Start game
+      (send-msg! c1 {:type msg/ready})
+      (wait-for-msg c1 msg/game-start 2000)
+      (wait-for-msg c2 msg/game-start 2000)
+
+      ;; Both clients send piece placements at the same time (no waiting between sends)
+      (send-msg! c1 {:type msg/place-piece :x 100 :y 100 :size "small" :orientation "standing" :angle 0 :captured false})
+      (send-msg! c2 {:type msg/place-piece :x 800 :y 100 :size "small" :orientation "standing" :angle 0 :captured false})
+      (send-msg! c1 {:type msg/place-piece :x 200 :y 200 :size "medium" :orientation "standing" :angle 0 :captured false})
+      (send-msg! c2 {:type msg/place-piece :x 700 :y 200 :size "medium" :orientation "standing" :angle 0 :captured false})
+
+      ;; Wait for the board to show 4 pieces (or at least some pieces placed)
+      (let [final-msg (wait-for-msg c1
+                                     (fn [m]
+                                       (and (= (:type m) msg/piece-placed)
+                                            (>= (count (get-in m [:game :board])) 4)))
+                                     5000)]
+        (is (some? final-msg) "Should see at least 4 pieces on board after concurrent placement")
+        (when final-msg
+          (let [board (get-in final-msg [:game :board])
+                piece-ids (map :id board)]
+            ;; All piece IDs should be unique (no duplicate placements)
+            (is (= (count piece-ids) (count (distinct piece-ids)))
+                "All piece IDs should be unique after concurrent placement")))))))

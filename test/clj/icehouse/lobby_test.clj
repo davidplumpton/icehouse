@@ -168,3 +168,28 @@
         (lobby/handle-disconnect clients "ch1")
         (is (nil? (get @clients "ch1")) "Client should be removed")
         (is (empty? @broadcast-calls) "No broadcasts when client had no room")))))
+
+(deftest handle-disconnect-during-ready-check-test
+  (testing "client disconnects while another player is ready but before game starts"
+    (let [clients (atom {"ch1" {:room-id "room1" :name "Alice" :colour "#e53935" :ready true}
+                         "ch2" {:room-id "room1" :name "Bob" :colour "#fdd835" :ready false}})
+          broadcast-calls (atom [])
+          end-game-called (atom false)]
+      ;; No active game exists (still in lobby)
+      (reset! game/games {})
+      (with-redefs [icehouse.utils/send-msg! (fn [& _] nil)
+                    icehouse.utils/broadcast-room! (fn [_ room-id msg]
+                                                     (swap! broadcast-calls conj {:room-id room-id :msg msg}))
+                    icehouse.game/end-game! (fn [& _] (reset! end-game-called true))]
+        (lobby/handle-disconnect clients "ch2")
+        ;; Bob should be removed
+        (is (nil? (get @clients "ch2")) "Disconnected client should be removed")
+        ;; Alice should still be present and ready
+        (is (some? (get @clients "ch1")) "Remaining client should stay")
+        (is (:ready (get @clients "ch1")) "Remaining client's ready status should be preserved")
+        ;; Should broadcast player list update, but NOT end-game or player-disconnected
+        (let [msg-types (mapv #(get-in % [:msg :type]) @broadcast-calls)]
+          (is (some #{msg/players} msg-types) "Should broadcast players update")
+          (is (not (some #{msg/player-disconnected} msg-types))
+              "Should NOT broadcast player-disconnected when no game active"))
+        (is (not @end-game-called) "Should NOT call end-game! when no game active")))))
