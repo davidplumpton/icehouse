@@ -96,20 +96,58 @@
                 [(+ x rx) (+ y ry)]))
             local-verts))))
 
+;; ---------------------------------------------------------------------------
+;; Separating Axis Theorem (SAT) Collision Detection
+;;
+;; SAT determines whether two convex polygons overlap by searching for a
+;; "separating axis" — a line along which the projections (shadows) of the
+;; two polygons do not overlap.  If such an axis exists the polygons are
+;; disjoint; if no separating axis can be found, the polygons intersect.
+;;
+;; Key insight: for convex polygons it is sufficient to test only the axes
+;; that are perpendicular (normal) to each edge of both polygons.  For a
+;; triangle (3 edges) vs a square (4 edges) this means at most 7 axes.
+;;
+;; Algorithm steps:
+;;   1. Collect candidate axes — the outward-facing normals of every edge
+;;      of both polygons (polygon-axes).
+;;   2. For each axis, project both polygons onto it, yielding 1-D intervals
+;;      (project-polygon).
+;;   3. If any axis yields non-overlapping intervals the polygons are
+;;      separated and do not collide (projections-overlap?).
+;;   4. If all axes show overlapping intervals, the polygons intersect.
+;;
+;; In Icehouse, pieces are either squares (standing) or triangles (pointing),
+;; both of which are convex, so SAT applies directly.  Pieces may be rotated
+;; to any angle so the test must work with arbitrary orientations.
+;;
+;; Edge case: when two pieces share an edge or vertex but do not overlap
+;; (i.e. they are merely touching), strict inequality (< rather than <=) in
+;; projections-overlap? treats them as non-colliding.  This lets players
+;; place pieces right up against each other without triggering a collision.
+;; ---------------------------------------------------------------------------
+
 (defn edge-normal
-  "Get perpendicular normal vector for edge from v1 to v2.
-   Used in Separating Axis Theorem (SAT) for collision detection."
+  "Get the outward-facing unit normal for the edge from v1 to v2.
+   The normal is computed by rotating the edge direction 90° counter-clockwise
+   and normalising to unit length.  Returns [1 0] as a safe fallback for
+   degenerate zero-length edges."
   [[x1 y1] [x2 y2]]
   (let [dx (- x2 x1)
         dy (- y2 y1)
         len (sqrt (+ (* dx dx) (* dy dy)))]
     (if (zero? len)
+      ;; Degenerate edge — return an arbitrary unit vector to avoid division
+      ;; by zero.  This can only occur if two vertices are identical, which
+      ;; should not happen with valid piece geometry.
       [1 0]
       [(/ (- dy) len) (/ dx len)])))
 
 (defn polygon-axes
-  "Get all edge normals for a polygon. These are the potential separating axes
-   used in SAT collision detection."
+  "Collect the candidate separating axes for a convex polygon.
+   Each axis is the outward-facing unit normal of one edge.  The function
+   iterates over consecutive vertex pairs (wrapping around to close the
+   polygon) and returns a vector of [nx ny] unit normals."
   [vertices]
   (let [n (count vertices)]
     (mapv (fn [i]
@@ -118,21 +156,27 @@
           (range n))))
 
 (defn project-polygon
-  "Project polygon vertices onto an axis, returning the interval [min max].
-   Part of the SAT collision detection algorithm."
+  "Project all vertices of a polygon onto a single axis [ax ay] using the
+   dot product, and return the 1-D interval [min max] that the polygon
+   occupies along that axis.  Comparing the intervals of two polygons on the
+   same axis reveals whether they overlap in that direction."
   [vertices [ax ay]]
   (let [dots (map (fn [[x y]] (+ (* x ax) (* y ay))) vertices)]
     [(apply min dots) (apply max dots)]))
 
 (defn projections-overlap?
-  "Check if two 1D projections [min1 max1] and [min2 max2] overlap.
-   Uses strict inequality so pieces that are merely touching are allowed."
+  "Check if two 1-D intervals [min1 max1] and [min2 max2] overlap.
+   Uses strict inequality (< not <=) so that intervals sharing only an
+   endpoint are considered non-overlapping.  This means pieces that merely
+   touch edges are allowed — only genuine area overlap counts as collision."
   [[min1 max1] [min2 max2]]
   (and (< min1 max2) (< min2 max1)))
 
 (defn polygons-intersect?
-  "Check if two convex polygons intersect using the Separating Axis Theorem (SAT).
-   Returns true if the polygons overlap."
+  "Test whether two convex polygons intersect using SAT.
+   Collects candidate separating axes from both polygons and checks every
+   axis for projection overlap.  Returns true only when no separating axis
+   exists (i.e. projections overlap on every tested axis)."
   [verts1 verts2]
   (let [axes (concat (polygon-axes verts1) (polygon-axes verts2))]
     (every? (fn [axis]
@@ -142,8 +186,9 @@
             axes)))
 
 (defn pieces-intersect?
-  "Check if two pieces intersect. Works for both standing (squares) and 
-   pointing (triangles) pieces."
+  "Check if two game pieces overlap.  Converts each piece to its world-space
+   polygon (square for standing, triangle for pointing) via piece-vertices,
+   then delegates to SAT-based polygons-intersect?."
   [piece1 piece2]
   (polygons-intersect?
    (piece-vertices piece1)
