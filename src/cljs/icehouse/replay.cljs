@@ -128,8 +128,7 @@
 (defn close-replay!
   "Close the replay view"
   []
-  (reset! state/replay-state nil)
-  (reset! state/current-view :lobby))
+  (state/leave-replay-to-lobby!))
 
 ;; =============================================================================
 ;; Replay Canvas Component
@@ -237,8 +236,7 @@
 (defn close-game-list!
   "Close the game list and return to lobby"
   []
-  (reset! state/game-list nil)
-  (reset! state/current-view :lobby))
+  (state/leave-replay-to-lobby!))
 
 (defn game-list-panel
   "Panel showing list of saved games"

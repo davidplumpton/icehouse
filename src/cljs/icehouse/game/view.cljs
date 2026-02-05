@@ -399,10 +399,7 @@
              :color "#fff"
              :border "none"
              :border-radius "4px"}
-     :on-click #(do
-                  (reset! state/game-result nil)
-                  (reset! state/game-state nil)
-                  (reset! state/current-view :lobby))}
+     :on-click state/leave-game-to-lobby!}
     "Back to Lobby"]
    [:button
     {:style {:padding "0.5rem 1rem"

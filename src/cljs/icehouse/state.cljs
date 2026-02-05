@@ -159,6 +159,20 @@
   (reset! current-view :replay)
   (reset! game-list games))
 
+(defn leave-game-to-lobby!
+  "Transition state for leaving an active/completed game and returning to lobby."
+  []
+  (reset! game-result nil)
+  (reset! game-state nil)
+  (reset! current-view :lobby))
+
+(defn leave-replay-to-lobby!
+  "Transition state for leaving replay/list views and returning to lobby."
+  []
+  (reset! replay-state nil)
+  (reset! game-list nil)
+  (reset! current-view :lobby))
+
 ;; =============================================================================
 ;; Constants
 ;; =============================================================================
