@@ -10,7 +10,7 @@
 [6] **Server Entry Point** - `server.clj` defines Ring/Compojure routes (`/`, `/ws`), starts http-kit on port 3000, and exposes reset helpers for test/dev state cleanup [2][7][18].
 [7] **WebSocket Router (Backend)** - `src/clj/icehouse/websocket.clj` parses JSON, validates `ClientMessage`, dispatches by message type, and emits structured errors for invalid/unknown inputs [2][14][16].
 [8] **Lobby Management** - `src/clj/icehouse/lobby.clj` tracks room membership, names/colours/ready flags, room options, and game start coordination plus disconnect handling [2][17][18].
-[9] **Game Module Facade** - `src/clj/icehouse/game.clj` owns `games` atom and re-exports functions from split modules (`game-state`, `game-rules`, `game-targeting`, `game-handlers`) [2][19][20][21][22].
+[9] **Game Module Facade** - `src/clj/icehouse/game.clj` owns `games` atom and re-exports functions from split modules (`game-state`, `game-rules`, `game-targeting`, `game-handlers`, `game/*` helpers for validators/mutations/query/replay) [2][19][20][21][22].
 [10] **Frontend Entry/App Shell** - `core.cljs` initializes WebSocket connection, renders connection status, and chooses `lobby-view`, `game-view`, or `replay-view` from `current-view` and replay atoms [3][11][12].
 [11] **Client State Model** - `src/cljs/icehouse/state.cljs` defines Reagent atoms for player/session/game/UI/replay and named transitions (`start-game!`, `start-replay!`, `show-game-list!`) [3][10][12].
 [12] **Frontend Network Adapter** - `src/cljs/icehouse/websocket.cljs` validates incoming/outgoing schema messages, routes server message types to state mutations, and reconnects automatically [3][7][11][14].
@@ -21,7 +21,7 @@
 [17] **Lobby Options and Defaults** - Room options include `:icehouse-rule`, `:timer-enabled`, `:timer-duration`, and `:placement-throttle`; options broadcast to all room members before and during game setup [8][11][12].
 [18] **Start Conditions and Disconnect Semantics** - Ready-state checks trigger `game/start-game!`; disconnects remove player, notify room, and end active game to avoid stuck sessions [6][8][9][16].
 [19] **Game State Construction** - `game-state.clj` defines board dimensions, initial stash counts, timers, player ID derivation, and game creation/validation helpers [9][14][20][22].
-[20] **Placement/Capture Validation** - `game-handlers.clj` composes placement and capture checks (bounds, overlap, first-two-defensive, line-of-sight, range, icing/capture limits) and returns structured rule errors [9][15][21][22].
+[20] **Placement/Capture Validation** - `src/clj/icehouse/game/validators.clj` composes placement and capture checks (bounds, overlap, first-two-defensive, line-of-sight, range, icing/capture limits) and returns structured rule errors; `game-handlers.clj` orchestrates websocket flow [9][15][21][22].
 [21] **Targeting Algorithms** - `game-targeting.clj` computes potential targets, closest valid targets, in-range checks, and blocked line-of-sight used by both validation and auto-target assignment [9][20][22].
 [22] **Game Lifecycle and End Conditions** - `game-rules.clj` and handlers compute icehouse status, scoring, finish conditions (all placed, all finished, timer/disconnect), and final record payloads [9][15][20][24].
 [23] **Canvas Game UI** - `src/cljs/icehouse/game.cljs` and `src/cljs/icehouse/game/*` own board rendering, hover/drag interactions, placement previews, capture visuals, and keyboard-driven controls [3][11][15].
@@ -31,5 +31,5 @@
 [27] **Test Coverage Map** - Backend tests cover game handlers, lobby, websocket, storage, schema, and integrations; frontend tests cover state/websocket/game/geometry/utils behavior [14][20][23][25].
 [28] **Build and Run Commands** - Dev loop: `clojure -M:run` (backend) + `npx shadow-cljs watch app` (frontend); tests via `make test` or `clojure -M:test`; production jar via `make uberjar` [1][2][3].
 [29] **Agent Guardrails** - Prefer `bd ready` at session start, update issue status as work progresses, run quality gates for code changes, and commit with `jj commit -m` after syncing issues [5][27][28].
-[30] **Known Hotspots** - Current hotspots include lobby start-condition behavior (dev-mode minimum players), broad schema error payload verbosity in logs, and ongoing module split follow-up around game handlers [8][9][20][29][31].
+[30] **Known Hotspots** - Current hotspots include lobby start-condition behavior (dev-mode minimum players) and broad schema error payload verbosity in logs [8][9][20][29][31].
 [31] **Backend Logging** - `src/clj/icehouse/logging.clj` configures Timbre with `ICEHOUSE_LOG_LEVEL`; backend namespaces now log with structured levels (`info/warn/error`) instead of raw `println` [2][6][7][9][25].
