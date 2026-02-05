@@ -1,13 +1,14 @@
 (ns icehouse.server
   (:gen-class)
   (:require [org.httpkit.server :as http]
-            [ring.middleware.defaults :refer [wrap-defaults site-defaults]]
-            [ring.middleware.resource :refer [wrap-resource]]
-            [ring.middleware.content-type :refer [wrap-content-type]]
-            [ring.util.response :as response]
-            [compojure.core :refer [defroutes GET]]
-            [compojure.route :as route]
-            [icehouse.websocket :as ws]))
+             [ring.middleware.defaults :refer [wrap-defaults site-defaults]]
+             [ring.middleware.resource :refer [wrap-resource]]
+             [ring.middleware.content-type :refer [wrap-content-type]]
+             [ring.util.response :as response]
+             [compojure.core :refer [defroutes GET]]
+             [compojure.route :as route]
+             [icehouse.lobby :as lobby]
+             [icehouse.websocket :as ws]))
 
 (defroutes routes
   (GET "/ws" req (ws/handler req))
@@ -35,7 +36,8 @@
 
 (defn reset-all! []
   (reset! ws/clients {})
-  (reset! icehouse.game/games {}))
+  (reset! icehouse.game/games {})
+  (lobby/reset-room-options!))
 
 (defn -main [& args]
   (let [port (Integer/parseInt (or (first args) "3000"))]

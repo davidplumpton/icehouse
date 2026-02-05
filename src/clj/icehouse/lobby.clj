@@ -9,6 +9,11 @@
 ;; Game options stored per room
 (defonce room-options (atom {}))
 
+(defn reset-room-options!
+  "Clear all persisted room options. Used by server/test reset paths to avoid state leakage."
+  []
+  (reset! room-options {}))
+
 (def default-options
   {:icehouse-rule true        ;; Whether icehouse rule is enforced
    :timer-enabled true        ;; Whether game has a time limit
