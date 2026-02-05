@@ -6,6 +6,7 @@
             [malli.core :as m]))
 
 (def ^:private edn-extension ".edn")
+(def ^:private max-game-record-bytes (* 2 1024 1024))
 
 (def games-dir "data/games")
 
@@ -46,13 +47,26 @@
   "Load a game record from disk by game-id. Returns nil if not found or invalid."
   [game-id]
   (when-let [path (game-record-path game-id)]
-    (when (.exists (io/file path))
-      (let [record (edn/read-string {:readers {}} (slurp path))]
-        (if (m/validate schema/GameRecord record)
-          record
+    (let [file (io/file path)]
+      (when (.exists file)
+        (cond
+          (> (.length file) max-game-record-bytes)
           (do
-            (println "ERROR: Loaded invalid game record from" path ":" (m/explain schema/GameRecord record))
-            nil))))))
+            (println "ERROR: Refusing to load oversized game record from" path
+                     "size=" (.length file) "limit=" max-game-record-bytes)
+            nil)
+
+          :else
+          (try
+            (let [record (edn/read-string {:readers {}} (slurp file))]
+              (if (m/validate schema/GameRecord record)
+                record
+                (do
+                  (println "ERROR: Loaded invalid game record from" path ":" (m/explain schema/GameRecord record))
+                  nil)))
+            (catch RuntimeException e
+              (println "ERROR: Failed to parse game record from" path ":" (.getMessage e))
+              nil)))))))
 
 (defn- extract-game-id
   "Extract game-id from an EDN filename"

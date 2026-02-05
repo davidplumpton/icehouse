@@ -58,6 +58,23 @@
   (testing "load-game-record returns nil for nonexistent game"
     (is (nil? (storage/load-game-record "12345678-1234-1234-1234-123456789012")))))
 
+(deftest load-oversized-game-record-test
+  (testing "load-game-record refuses oversized files"
+    (let [game-id "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
+          path (storage/game-record-path game-id)]
+      (storage/ensure-games-dir!)
+      ;; storage/max-game-record-bytes is 2 MiB; write a larger file.
+      (spit path (apply str (repeat (* 3 1024 1024) "x")))
+      (is (nil? (storage/load-game-record game-id))))))
+
+(deftest load-invalid-edn-game-record-test
+  (testing "load-game-record returns nil (not exception) for invalid EDN"
+    (let [game-id "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"
+          path (storage/game-record-path game-id)]
+      (storage/ensure-games-dir!)
+      (spit path "{:not-valid-edn")
+      (is (nil? (storage/load-game-record game-id))))))
+
 (deftest invalid-game-id-test
   (testing "valid-game-id? accepts valid UUIDs"
     (is (storage/valid-game-id? "12345678-1234-1234-1234-123456789012"))
