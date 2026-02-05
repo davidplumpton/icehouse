@@ -7,6 +7,8 @@
              [ring.util.response :as response]
              [compojure.core :refer [defroutes GET]]
              [compojure.route :as route]
+             [taoensso.timbre :as log]
+             [icehouse.logging :as logging]
              [icehouse.lobby :as lobby]
              [icehouse.websocket :as ws]))
 
@@ -26,7 +28,8 @@
 (defonce server (atom nil))
 
 (defn start! [port]
-  (println (str "Starting server on port " port))
+  (logging/init!)
+  (log/info "Starting server" {:port port})
   (reset! server (http/run-server app {:port port})))
 
 (defn stop! []

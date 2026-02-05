@@ -3,6 +3,7 @@
     [icehouse.schema :as schema]
     #?(:clj [cheshire.core :as json])
     #?(:clj [org.httpkit.server :as http])
+    #?(:clj [taoensso.timbre :as log])
     #?(:clj [malli.core :as m])))
 
 (defn normalize-player-id
@@ -110,8 +111,9 @@
      (if (m/validate schema/ClientMessage message)
        message
        (do
-         (println "Invalid client message:" message)
-         (println "Validation errors:" (m/explain schema/ClientMessage message))
+         (log/warn "Invalid client message"
+                   {:message message
+                    :explanation (m/explain schema/ClientMessage message)})
          nil))))
 
 #?(:clj
@@ -121,8 +123,9 @@
      (if (m/validate schema/ServerMessage msg)
        msg
        (let [explanation (m/explain schema/ServerMessage msg)]
-         (println "Invalid outgoing message:" (pr-str msg))
-         (println "Validation errors:" (pr-str explanation))
+         (log/error "Invalid outgoing message"
+                    {:message msg
+                     :explanation explanation})
          nil))))
 
 #?(:clj
@@ -132,7 +135,7 @@
      (if (validate-outgoing-message msg)
        (http/send! channel (json/generate-string msg))
        (do
-         (println "ERROR: Refusing to send invalid outgoing message:" msg)
+         (log/error "Refusing to send invalid outgoing message" {:message msg})
          nil))))
 
 #?(:clj

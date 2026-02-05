@@ -3,7 +3,7 @@
 > **For AI Agents:** This file is the project knowledge index. Start with overview nodes [1-5], then follow references [N] to the subsystem you are changing. Keep node IDs stable, update stale nodes in the same commit as code changes, and add new nodes only when genuinely new concepts appear.
 
 [1] **Project Snapshot** - Icehouse is a real-time multiplayer browser game (Looney Pyramids) with a Clojure backend, ClojureScript frontend, WebSocket transport, canvas rendering, and EDN replay storage [2][3][4][5].
-[2] **Backend Surface** - `src/clj/icehouse/server.clj` serves static assets and `/ws`, while gameplay services live in lobby/game/websocket/storage namespaces [1][6][7][8][9].
+[2] **Backend Surface** - `src/clj/icehouse/server.clj` serves static assets and `/ws`, while gameplay services live in lobby/game/websocket/storage namespaces and shared logging config [1][6][7][8][9][31].
 [3] **Frontend Surface** - `src/cljs/icehouse/core.cljs` mounts Reagent UI, connects WebSocket, and switches between lobby/game/replay views based on shared state atoms [1][10][11][12].
 [4] **Shared Domain Layer** - `src/cljc/icehouse/*` holds protocol constants, message IDs, geometry, game logic, schemas, and utility helpers consumed by both backend and frontend [1][13][14][15].
 [5] **Operational Workflow** - Project workflow uses Beads (`bd`) for issue tracking and Jujutsu (`jj`) for commits; sync issues before commit and keep one issue per commit [1][28][29].
@@ -31,4 +31,5 @@
 [27] **Test Coverage Map** - Backend tests cover game handlers, lobby, websocket, storage, schema, and integrations; frontend tests cover state/websocket/game/geometry/utils behavior [14][20][23][25].
 [28] **Build and Run Commands** - Dev loop: `clojure -M:run` (backend) + `npx shadow-cljs watch app` (frontend); tests via `make test` or `clojure -M:test`; production jar via `make uberjar` [1][2][3].
 [29] **Agent Guardrails** - Prefer `bd ready` at session start, update issue status as work progresses, run quality gates for code changes, and commit with `jj commit -m` after syncing issues [5][27][28].
-[30] **Known Hotspots** - Current hotspots include lobby start-condition behavior (dev-mode minimum players), legacy `println` logging in backend paths, and ongoing module split follow-up around game handlers [8][9][20][29].
+[30] **Known Hotspots** - Current hotspots include lobby start-condition behavior (dev-mode minimum players), broad schema error payload verbosity in logs, and ongoing module split follow-up around game handlers [8][9][20][29][31].
+[31] **Backend Logging** - `src/clj/icehouse/logging.clj` configures Timbre with `ICEHOUSE_LOG_LEVEL`; backend namespaces now log with structured levels (`info/warn/error`) instead of raw `println` [2][6][7][9][25].

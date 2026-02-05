@@ -1,6 +1,7 @@
 (ns icehouse.websocket
   (:require [org.httpkit.server :as http]
              [cheshire.core :as json]
+             [taoensso.timbre :as log]
              [icehouse.lobby :as lobby]
              [icehouse.game :as game]
              [icehouse.messages :as msg]
@@ -16,7 +17,7 @@
   (let [msg-type (:type message)]
     (if-not msg-type
       (do
-        (println "Received message without type:" message)
+        (log/warn "Received message without type" {:message message})
         (utils/send-msg! channel {:type msg/error :message "Message missing 'type' field"}))
       (condp = msg-type
         ;; Lobby messages
@@ -46,18 +47,18 @@
           validated-message (utils/validate-incoming-message message)]
       (if-not validated-message
         (let [explanation (schema/explain schema/ClientMessage message)]
-          (println "Invalid message, discarding:" message)
+          (log/warn "Invalid message, discarding"
+                    {:message message
+                     :explanation explanation})
           (utils/send-msg! channel {:type msg/error 
                                     :message (str "Invalid message format: " 
                                                  (pr-str explanation))}))
         (dispatch-message! channel message)))
     (catch com.fasterxml.jackson.core.JsonParseException e
-      (println "Failed to parse WebSocket message:" (.getMessage e))
-      (println "Raw data:" data)
+      (log/warn e "Failed to parse WebSocket message" {:raw-data data})
       (utils/send-msg! channel {:type msg/error :message "Invalid JSON"}))
     (catch clojure.lang.ExceptionInfo e
-      (println "Error handling WebSocket message:" (.getMessage e))
-      (println "Raw data:" data)
+      (log/error e "Error handling WebSocket message" {:raw-data data})
       (utils/send-msg! channel {:type msg/error :message "Internal server error"}))))
 
 (defn handler [req]

@@ -2,6 +2,7 @@
   "WebSocket message handlers and validation functions.
    Contains all handler functions for game actions and move validation."
   (:require [clojure.set]
+            [taoensso.timbre :as log]
             [icehouse.messages :as msg]
             [icehouse.utils :as utils]
             [icehouse.storage :as storage]
@@ -268,7 +269,7 @@
                                             (update-in g [:players player-id :pieces (:size piece)] dec))))]
                        (if-let [error (state/validate-game-state new-game)]
                          (do
-                           (println "ERROR: Invalid game state after placement:" error)
+                           (log/error "Invalid game state after placement" {:error error})
                            (reset! result {:success false
                                            :error (make-error msg/err-internal-state
                                                               "Failed to update game state after placement"
@@ -299,7 +300,7 @@
                                                 conj {:size piece-size :colour original-colour}))]
                        (if-let [err (state/validate-game-state new-g)]
                          (do
-                           (println "ERROR: Invalid game state after capture:" err)
+                           (log/error "Invalid game state after capture" {:error err})
                            (reset! result {:success false
                                            :error (make-error msg/err-internal-state
                                                               "Failed to update game state after capture"
@@ -331,7 +332,7 @@
                          (let [new-g (update g :finished (fnil conj []) player-id)]
                            (if-let [err (state/validate-game-state new-g)]
                              (do
-                               (println "ERROR: Invalid game state after finish:" err)
+                               (log/error "Invalid game state after finish" {:error err})
                                (reset! result {:success false
                                                :error (make-error msg/err-internal-state
                                                                   "Failed to update game state"
@@ -520,7 +521,7 @@
    (let [new-game (state/create-game room-id players options)]
      (if-let [error (state/validate-game-state new-game)]
        (do
-         (println "ERROR: Failed to start game due to invalid initial state:" error)
+         (log/error "Failed to start game due to invalid initial state" {:error error})
          {:success false
           :error (make-error msg/err-internal-state
                              "Failed to create game"

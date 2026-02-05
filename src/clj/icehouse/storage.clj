@@ -2,6 +2,7 @@
   (:require [clojure.edn :as edn]
             [clojure.java.io :as io]
             [clojure.string :as str]
+            [taoensso.timbre :as log]
             [icehouse.schema :as schema]
             [malli.core :as m]))
 
@@ -36,7 +37,8 @@
   [record]
   (if-not (m/validate schema/GameRecord record)
     (do
-      (println "ERROR: Refusing to save invalid game record:" (m/explain schema/GameRecord record))
+      (log/error "Refusing to save invalid game record"
+                 {:explanation (m/explain schema/GameRecord record)})
       nil)
     (when-let [path (game-record-path (:game-id record))]
       (ensure-games-dir!)
@@ -52,8 +54,10 @@
         (cond
           (> (.length file) max-game-record-bytes)
           (do
-            (println "ERROR: Refusing to load oversized game record from" path
-                     "size=" (.length file) "limit=" max-game-record-bytes)
+            (log/error "Refusing to load oversized game record"
+                       {:path path
+                        :size-bytes (.length file)
+                        :max-bytes max-game-record-bytes})
             nil)
 
           :else
@@ -62,10 +66,12 @@
               (if (m/validate schema/GameRecord record)
                 record
                 (do
-                  (println "ERROR: Loaded invalid game record from" path ":" (m/explain schema/GameRecord record))
+                  (log/error "Loaded invalid game record"
+                             {:path path
+                              :explanation (m/explain schema/GameRecord record)})
                   nil)))
             (catch RuntimeException e
-              (println "ERROR: Failed to parse game record from" path ":" (.getMessage e))
+              (log/error e "Failed to parse game record" {:path path})
               nil)))))))
 
 (defn- extract-game-id
