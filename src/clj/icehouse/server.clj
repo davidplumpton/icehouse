@@ -10,6 +10,7 @@
              [taoensso.timbre :as log]
              [icehouse.logging :as logging]
              [icehouse.lobby :as lobby]
+             [icehouse.utils :as utils]
              [icehouse.websocket :as ws]))
 
 (defroutes routes
@@ -40,7 +41,8 @@
 (defn reset-all! []
   (reset! ws/clients {})
   (reset! icehouse.game/games {})
-  (lobby/reset-room-options!))
+  (lobby/reset-room-options!)
+  (utils/reset-room-channels!))
 
 (defn -main [& args]
   (let [port (Integer/parseInt (or (first args) "3000"))]

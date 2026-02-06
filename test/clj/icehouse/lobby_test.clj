@@ -1,9 +1,16 @@
 (ns icehouse.lobby-test
-  (:require [clojure.test :refer [deftest is testing]]
+  (:require [clojure.test :refer [deftest is testing use-fixtures]]
             [icehouse.lobby :as lobby]
             [icehouse.game :as game]
             [icehouse.utils :as utils]
             [icehouse.messages :as msg]))
+
+(defn reset-room-channels-fixture [f]
+  (utils/reset-room-channels!)
+  (try (f)
+    (finally (utils/reset-room-channels!))))
+
+(use-fixtures :each reset-room-channels-fixture)
 
 (deftest unique-colour-test
   (let [clients (atom {"ch1" {:room-id "room1" :name "Alice" :colour "#e53935"}
@@ -193,3 +200,49 @@
           (is (not (some #{msg/player-disconnected} msg-types))
               "Should NOT broadcast player-disconnected when no game active"))
         (is (not @end-game-called) "Should NOT call end-game! when no game active")))))
+
+(deftest room-channels-index-test
+  (testing "add-channel-to-room! populates the index"
+    (utils/add-channel-to-room! "room1" "ch1")
+    (utils/add-channel-to-room! "room1" "ch2")
+    (utils/add-channel-to-room! "room2" "ch3")
+    (is (= #{"ch1" "ch2"} (get @utils/room-channels "room1")))
+    (is (= #{"ch3"} (get @utils/room-channels "room2"))))
+
+  (testing "remove-channel-from-room! updates the index"
+    (utils/remove-channel-from-room! "room1" "ch1")
+    (is (= #{"ch2"} (get @utils/room-channels "room1"))))
+
+  (testing "removing last channel from a room cleans up the entry"
+    (utils/remove-channel-from-room! "room1" "ch2")
+    (is (nil? (get @utils/room-channels "room1"))
+        "Empty rooms should be removed from the index"))
+
+  (testing "reset-room-channels! clears everything"
+    (utils/add-channel-to-room! "room1" "ch1")
+    (utils/reset-room-channels!)
+    (is (= {} @utils/room-channels))))
+
+(deftest handle-join-updates-room-index-test
+  (testing "handle-join adds channel to room-channels index"
+    (let [clients (atom {"ch1" {:room-id nil :name nil :colour nil :ready false :player-id "p1"}})]
+      (with-redefs [icehouse.utils/send-msg! (fn [& _] nil)
+                    icehouse.utils/broadcast-room! (fn [& _] nil)]
+        (lobby/handle-join clients "ch1" {:type msg/join})
+        (is (contains? (get @utils/room-channels "default") "ch1")
+            "Channel should be in the room-channels index after join")))))
+
+(deftest handle-disconnect-updates-room-index-test
+  (testing "handle-disconnect removes channel from room-channels index"
+    (let [clients (atom {"ch1" {:room-id "room1" :name "Alice" :colour "#e53935" :ready false :player-id "p1"}
+                         "ch2" {:room-id "room1" :name "Bob" :colour "#fdd835" :ready false :player-id "p2"}})]
+      ;; Populate the index to match the clients state
+      (utils/add-channel-to-room! "room1" "ch1")
+      (utils/add-channel-to-room! "room1" "ch2")
+      (with-redefs [icehouse.utils/send-msg! (fn [& _] nil)
+                    icehouse.utils/broadcast-room! (fn [& _] nil)]
+        (lobby/handle-disconnect clients "ch1")
+        (is (not (contains? (get @utils/room-channels "room1") "ch1"))
+            "Disconnected channel should be removed from index")
+        (is (contains? (get @utils/room-channels "room1") "ch2")
+            "Other channels should remain in index")))))

@@ -89,6 +89,42 @@
          ":"
          (when (< seconds 10) "0") seconds)))
 
+;; =============================================================================
+;; Room-Channel Index (CLJ only)
+;; =============================================================================
+
+#?(:clj
+   ;; Secondary index mapping room-id to the set of channels in that room.
+   ;; Maintained alongside the clients atom for O(1) room member lookups.
+   (defonce room-channels (atom {})))
+
+#?(:clj
+   (defn add-channel-to-room!
+     "Add a channel to the room-channels index for a given room."
+     [room-id channel]
+     (swap! room-channels update room-id (fnil conj #{}) channel)))
+
+#?(:clj
+   (defn remove-channel-from-room!
+     "Remove a channel from the room-channels index for a given room."
+     [room-id channel]
+     (swap! room-channels
+            (fn [m]
+              (let [updated (disj (get m room-id #{}) channel)]
+                (if (empty? updated)
+                  (dissoc m room-id)
+                  (assoc m room-id updated)))))))
+
+#?(:clj
+   (defn reset-room-channels!
+     "Clear the room-channels index. Used by server/test reset paths."
+     []
+     (reset! room-channels {})))
+
+;; =============================================================================
+;; Room/Game Lookups (CLJ only)
+;; =============================================================================
+
 #?(:clj
    ;; Centralized room/game lookups for websocket handlers.
    (defn get-room-id
@@ -140,8 +176,8 @@
 
 #?(:clj
    (defn broadcast-room!
-     "Broadcast a JSON message to all clients in a room"
-     [clients room-id msg]
-     (doseq [[ch client] @clients]
-       (when (= (:room-id client) room-id)
-         (send-msg! ch msg)))))
+     "Broadcast a JSON message to all channels in a room.
+      Uses the room-channels index for O(1) room member lookup."
+     [_clients room-id msg]
+     (doseq [ch (get @room-channels room-id #{})]
+       (send-msg! ch msg))))

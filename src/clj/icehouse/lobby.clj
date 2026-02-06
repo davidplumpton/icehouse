@@ -95,6 +95,7 @@
                                       :name default-name
                                       :colour default-colour}))))
         new-client (get @clients channel)]
+    (utils/add-channel-to-room! room-id channel)
     (utils/send-msg! channel {:type msg/joined
                               :room-id room-id
                               :player-id (:player-id (get @clients channel))
@@ -167,6 +168,7 @@
         player-id (:player-id client-data)]
     (swap! clients dissoc channel)
     (when room-id
+      (utils/remove-channel-from-room! room-id channel)
       (broadcast-players! clients room-id)
       ;; If an active game exists for this room, notify remaining players and end it
       (when (get @game/games room-id)
