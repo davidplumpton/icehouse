@@ -9,20 +9,20 @@ bd ready              # Find available work
 bd show <id>          # View issue details
 bd update <id> --status in_progress  # Claim work
 bd close <id>         # Complete work
-bd sync               # Sync with git
+bd sync               # Sync issues with version control
 ```
 
 ## Landing the Plane (Session Completion)
 
 **MANDATORY WORKFLOW:**
 
-1. **Create tests** - If appropriate
-2. **Only work on one issue at a time**
-2. **File issues for remaining work** - Create issues for anything that needs follow-up
-3. **Run quality gates** (if code changed) - Tests, linters, builds
-4. **Commit to version control, and only commit one issue at time**
-5. **Update issue status** - Close finished work, update in-progress items
-6. **Hand off** - Provide context for next session
+1. **Only work on one issue at a time**
+2. **Create tests** - If appropriate
+3. **File issues for remaining work** - Create issues for anything that needs follow-up
+4. **Run quality gates** (if code changed) - Tests, linters, builds
+5. **Commit to version control, and only commit one issue at a time**
+6. **Update issue status** - Close finished work, update in-progress items
+7. **Hand off** - Provide context for next session
 
 ## Tech stack
 - Clojurescript UI

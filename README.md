@@ -29,7 +29,7 @@ then packages everything into the JAR.
 - Real-time multiplayer via WebSockets
 - Browser-based with HTML5 Canvas rendering
 - Lobby system with player names and colours
-- 3-4 player support
+- 1-4 player support (designed for 3-4; dev mode allows solo/duo play)
 - Classic Icehouse rules (standing = defense, pointing = attack)
 
 ## Prerequisites
@@ -48,11 +48,11 @@ bd onboard            # Get started
 bd ready              # Find available work
 bd update <id> --status in_progress  # Claim work
 bd close <id>         # Complete work
-bd sync               # Sync issues with git
+bd sync               # Sync issues with version control
 ```
 
 ### Version Control
-This project uses **Jujutsu (jj)**. Prefer `jj` commands over standard `git`.
+This project uses **Jujutsu (jj)** for version control. Use `jj` commands instead of `git`.
 ```bash
 jj commit -m "description"  # Record changes
 jj status                   # Check current state
