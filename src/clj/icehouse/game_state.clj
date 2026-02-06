@@ -22,9 +22,9 @@
 ;; =============================================================================
 
 (defn player-id-from-channel
-  "Extract player ID from a WebSocket channel"
-  [channel]
-  (str (hash channel)))
+  "Look up the player ID for a WebSocket channel from a clients map snapshot."
+  [clients-map channel]
+  (:player-id (get clients-map channel)))
 
 ;; =============================================================================
 ;; Game Creation

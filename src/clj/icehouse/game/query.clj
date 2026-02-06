@@ -21,7 +21,7 @@
                                 :error (make-error msg/err-invalid-game
                                                    "Not in a room"
                                                    "You must be in a game room to validate moves.")})
-      (let [player-id (state/player-id-from-channel channel)
+      (let [player-id (state/player-id-from-channel @clients channel)
             action (keyword (or (:action msg) "place"))]
         (if-not game
           (utils/send-msg! channel {:type msg/validation-result
@@ -87,7 +87,7 @@
                                 :error (make-error msg/err-invalid-game
                                                    "Not in a room"
                                                    "You must be in a game room to query legal moves.")})
-      (let [player-id (state/player-id-from-channel channel)
+      (let [player-id (state/player-id-from-channel @clients channel)
             size (keyword (or (:size msg) "small"))
             orientation (keyword (or (:orientation msg) "standing"))
             using-captured? (boolean (:captured msg))

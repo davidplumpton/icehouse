@@ -59,10 +59,10 @@
   {:post [(m/validate schema/PlayerList %)]}
   (->> clients-map
        (filter (fn [[_ c]] (= (:room-id c) room-id)))
-       (map (fn [[ch c]] {:id (game/player-id-from-channel ch)
-                          :name (:name c)
-                          :colour (:colour c)
-                          :ready (:ready c)}))))
+       (map (fn [[_ch c]] {:id (:player-id c)
+                           :name (:name c)
+                           :colour (:colour c)
+                           :ready (:ready c)}))))
 
 (defn broadcast-players! [clients room-id]
   (let [players (get-room-players @clients room-id)]
@@ -97,7 +97,7 @@
         new-client (get @clients channel)]
     (utils/send-msg! channel {:type msg/joined
                               :room-id room-id
-                              :player-id (game/player-id-from-channel channel)
+                              :player-id (:player-id (get @clients channel))
                               :name (:name new-client)
                               :colour (:colour new-client)})
     (broadcast-players! clients room-id)
@@ -164,7 +164,7 @@
   (let [client-data (get @clients channel)
         room-id (:room-id client-data)
         player-name (:name client-data)
-        player-id (game/player-id-from-channel channel)]
+        player-id (:player-id client-data)]
     (swap! clients dissoc channel)
     (when room-id
       (broadcast-players! clients room-id)

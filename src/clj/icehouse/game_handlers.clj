@@ -101,7 +101,7 @@
       (send-error! channel (make-error msg/err-invalid-game
                                        "Not in a room"
                                        "You must be in a game room to place pieces."))
-      (let [player-id (state/player-id-from-channel channel)
+      (let [player-id (state/player-id-from-channel @clients channel)
             using-captured? (boolean (:captured msg))
             prev-icehouse-players (when game
                                     (rules/calculate-icehouse-players (:board game) (get game :options {})))
@@ -131,7 +131,7 @@
       (send-error! channel (make-error msg/err-invalid-game
                                        "Not in a room"
                                        "You must be in a game room to capture pieces."))
-      (let [player-id (state/player-id-from-channel channel)
+      (let [player-id (state/player-id-from-channel @clients channel)
             piece-id (:piece-id msg)
             validation-error (when game (validate-capture game player-id piece-id))]
         (if (and game (nil? validation-error))
@@ -165,7 +165,7 @@
       (send-error! channel (make-error msg/err-invalid-game
                                        "Not in a room"
                                        "You must be in a game room to finish."))
-      (let [player-id (state/player-id-from-channel channel)
+      (let [player-id (state/player-id-from-channel @clients channel)
             current-game game]
         (if current-game
           (let [finish-result (apply-finish! games room-id player-id)]

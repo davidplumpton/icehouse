@@ -63,7 +63,8 @@
 
 (defn handler [req]
   (http/with-channel req channel
-    (swap! clients assoc channel {:room-id nil :name nil :colour nil :ready false})
+    (swap! clients assoc channel {:room-id nil :name nil :colour nil :ready false
+                                      :player-id (str (java.util.UUID/randomUUID))})
 
     (http/on-close channel
       (fn [_status]
